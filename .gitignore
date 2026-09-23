@@ -20,6 +20,7 @@ publish/
 scratchpad/
 
 # local working state (session scratch)
+.worktree
 prototypes/
 .agents/
 .playwright-mcp/
