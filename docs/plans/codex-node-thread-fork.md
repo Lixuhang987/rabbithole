@@ -88,3 +88,8 @@ were fixed and their reruns pass; Enter timing failed once and its rerun passes.
 Remaining baseline failures: prompts (removed authoring vocabulary), web-app
 notes (read/edit/read geometry), install smoke (dompurify registry ETARGET).
 No unrelated prompt, canvas-note, or dependency changes were made to hide them.
+
+Local deployment (2026-10-08): feature commit 2fcfd4b merged into main; rebuilt
+web output and restarted NGINX plus launchd bridge. All 22 served HTML/script/
+style files match web/dist; both agents are Ready. Actual subscription generation
+with codex/gpt-6-luna verifies independent fork and inherited source marker.
