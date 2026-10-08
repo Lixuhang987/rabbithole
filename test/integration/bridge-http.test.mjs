@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createProvider } from "../../src/web/provider/openai-compatible.js";
-import { DirectRabbitholeHost, createPendingHoleFromQuestion } from "../../src/web/transport/direct-host.js";
+import { DirectRabbitholeHost, createPendingHoleFromQuestion, createHoleFromMarkdown } from "../../src/web/transport/direct-host.js";
 import { createPortableProjection } from "../../src/core/portable-projection.js";
 import { toPersistedHole } from "../../src/core/schema.js";
 import { createSnapshotProjection } from "../../src/core/snapshot-projection.js";
@@ -23,6 +23,8 @@ const data = path.join(temporaryRoot, "data");
 const claudeRecord = path.join(temporaryRoot, "claude.ndjson");
 const codexRecord = path.join(temporaryRoot, "codex.ndjson");
 const codexThreadRecord = path.join(temporaryRoot, "codex-threads.ndjson");
+const codexHistory = path.join(temporaryRoot, "codex-history.json");
+const codexProtocolRecord = path.join(temporaryRoot, "codex-protocol.ndjson");
 const codexArgsRecord = path.join(temporaryRoot, "codex-args.ndjson");
 await fs.mkdir(path.join(home, ".codex"), { recursive: true });
 await fs.writeFile(path.join(home, ".codex", "auth.json"), "{}\n");
@@ -107,7 +109,7 @@ async function firstSseState(bridge) {
 
 let bridge;
 try {
-  bridge = await createBridge({
+  const createTestBridge = () => createBridge({
     port: 0,
     env: {
       ...process.env,
@@ -118,6 +120,8 @@ try {
       RABBITHOLE_BRIDGE_CODEX_BIN: FAKE_CODEX,
       FAKE_CLAUDE_RECORD: claudeRecord,
       FAKE_CODEX_RECORD: codexRecord,
+      FAKE_CODEX_HISTORY: codexHistory,
+      FAKE_CODEX_PROTOCOL_RECORD: codexProtocolRecord,
       FAKE_CODEX_THREAD_RECORD: codexThreadRecord,
       FAKE_CODEX_APP_SERVER_ARGS: codexArgsRecord,
       CLAUDE_CONFIG_DIR: path.join(temporaryRoot, "must-not-be-used"),
@@ -125,6 +129,7 @@ try {
     version: "0.4.0-test",
     stateRefreshMs: 60_000,
   });
+  bridge = await createTestBridge();
   await bridge.start();
   await bridge.refreshState();
 
@@ -358,6 +363,10 @@ try {
   await host.runRootAnswer(hole.root_id, "SEARCH current information", new AbortController());
   assert.deepEqual(searchEvents.map((event) => event.status), ["searching", "completed"], "native search lifecycle reaches the browser host");
   assert.equal(saved.length, 1);
+  const rootConversation = host.state.nodes.get(hole.root_id).extensions.codex_conversation;
+  assert.equal(rootConversation?.version, 1, "completed root articles retain their Codex conversation");
+  assert.equal(typeof rootConversation.threadId, "string");
+  assert.equal(typeof rootConversation.scopeId, "string");
   const markdown = saved[0].nodes[0].markdown;
   assert.ok(markdown.startsWith("> **Original question**\n>\n> SEARCH current information\n\n# Search answer"), "the original question precedes the answer, without Codex commentary");
   assert.match(markdown, /https:\/\/example\.com\/search-result/);
@@ -369,6 +378,8 @@ try {
   const persisted = toPersistedHole(saved[0]);
   const portable = createPortableProjection(persisted, {});
   assert.equal(portable.hole.nodes[0].markdown, markdown);
+  assert.equal(portable.hole.nodes[0].extensions.codex_conversation, undefined, "portable files exclude local conversations");
+  assert.deepEqual(persisted.nodes[0].extensions.codex_conversation, rootConversation, "export does not mutate local associations");
   assert.equal(createSnapshotProjection(persisted, persisted.view_state, {}).hole.nodes[0].markdown, markdown);
   const threadCalls = () => fs.readFile(codexThreadRecord, "utf8").then((raw) => raw.trim().split("\n").map((line) => JSON.parse(line)));
   assert.equal((await threadCalls()).at(-1).config, undefined);
@@ -383,6 +394,91 @@ try {
   assert.equal(branchNode.markdown.includes("TITLE:"), false);
   assert.equal(branchNode.markdown.includes("I will search"), false);
   assert.deepEqual(searchEvents.map((event) => event.status), ["searching", "completed", "searching", "completed"]);
+  const turnCalls = async () => (await fs.readFile(codexRecord, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+  const protocolCalls = async () => (await fs.readFile(codexProtocolRecord, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+  const waitForAnswered = async (activeHost, id) => {
+    const deadline = Date.now() + 5000;
+    while (activeHost.state.nodes.get(id)?.status !== "answered" && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(activeHost.state.nodes.get(id)?.status, "answered", `article ${id} completes`);
+    return activeHost.state.nodes.get(id);
+  };
+  const ask = async (activeHost, id, parent, question = "Explain this", selected = "") => {
+    assert.equal((await activeHost.handleBrowserEvent({ type: "branch_request", node_id: id, parent_id: parent, question, selected_text: selected, position: { x: 0, y: 0 } })).ok, true);
+    return waitForAnswered(activeHost, id);
+  };
+  const branchConversation = branchNode.extensions.codex_conversation;
+  assert.notEqual(branchConversation.threadId, rootConversation.threadId);
+  assert.equal((await protocolCalls()).slice().reverse().find((call) => call.method === "thread/fork").params.threadId, rootConversation.threadId);
+  const incremental = (await turnCalls()).at(-1);
+  assert.equal(incremental.input[0].text.includes("Parent document markdown:"), false);
+  assert.equal(incremental.input[0].text.includes("Original canvas question:"), false);
+  assert.match(JSON.stringify(incremental.inheritedHistory), /SEARCH current information/);
+  const sibling = await ask(host, "sibling", hole.root_id, "Independent sibling");
+  const siblingHistory = JSON.stringify((await turnCalls()).at(-1).inheritedHistory);
+  assert.match(siblingHistory, /SEARCH current information/);
+  assert.equal(siblingHistory.includes("SEARCH branch"), false, "siblings do not inherit one another's Ask");
+  assert.notEqual(sibling.extensions.codex_conversation.threadId, branchConversation.threadId);
+  await ask(host, "descendant", branchNode.id, "Explain the child's answer");
+  assert.match(JSON.stringify((await turnCalls()).at(-1).inheritedHistory), /SEARCH branch/);
+  assert.equal((await protocolCalls()).slice().reverse().find((call) => call.method === "thread/fork").params.threadId, branchConversation.threadId);
+  const reopen = new DirectRabbitholeHost({ hole: saved.at(-1), provider, store: { saveHole: async () => {} } });
+  await ask(reopen, "reopened", branchNode.id, "Ask after reopening");
+  assert.equal((await protocolCalls()).slice().reverse().find((call) => call.method === "thread/fork").params.threadId, branchConversation.threadId);
+  await reopen.dispose();
+
+  const importedHole = createHoleFromMarkdown({ markdown: "# Imported article\n\nUnique imported parent context." });
+  const importedSaved = [];
+  const importedHost = new DirectRabbitholeHost({ hole: importedHole, provider, store: { saveHole: async (value) => importedSaved.push(structuredClone(value)) } });
+  const turnsBeforeImport = (await turnCalls()).length;
+  const injectionsBefore = (await protocolCalls()).filter((call) => call.method === "thread/inject_items").length;
+  await Promise.all([ask(importedHost, "import-first", importedHole.root_id, "First imported Ask"), ask(importedHost, "import-second", importedHole.root_id, "Second imported Ask")]);
+  assert.equal((await turnCalls()).length - turnsBeforeImport, 2, "baseline injection makes no extra model call");
+  assert.equal((await protocolCalls()).filter((call) => call.method === "thread/inject_items").length - injectionsBefore, 1, "concurrent first Asks share one baseline");
+  const baseline = importedHost.state.nodes.get(importedHole.root_id).extensions.codex_conversation;
+  const importedForks = (await protocolCalls()).filter((call) => call.method === "thread/fork" && call.params.threadId === baseline.threadId);
+  assert.equal(importedForks.length, 2);
+  const importedHistory = JSON.stringify((await turnCalls()).at(-1).inheritedHistory);
+  assert.match(importedHistory, /Unique imported parent context/);
+  assert.equal(importedHistory.includes("First imported Ask"), false);
+  assert.equal(importedHistory.includes("Second imported Ask"), false);
+  const stale = { ...baseline, threadId: "missing-history" };
+  importedHost.engine.patchExtension(importedHole.root_id, "codex_conversation", stale);
+  importedHost.state = importedHost.engine.state;
+  const beforeRecovery = (await turnCalls()).length;
+  await ask(importedHost, "recovered", importedHole.root_id, "Ask with missing history");
+  assert.equal((await turnCalls()).length - beforeRecovery, 1, "missing history rebuilds before any failed model turn");
+  const recoveredBaseline = importedHost.state.nodes.get(importedHole.root_id).extensions.codex_conversation;
+  assert.notEqual(recoveredBaseline.threadId, stale.threadId);
+  assert.match(JSON.stringify((await turnCalls()).at(-1).inheritedHistory), /Unique imported parent context/);
+  importedHost.engine.patchExtension(importedHole.root_id, "codex_conversation", { ...recoveredBaseline, scopeId: "other-history-store" });
+  importedHost.state = importedHost.engine.state;
+  await ask(importedHost, "rescope", importedHole.root_id, "Ask on another history store");
+  assert.equal(importedHost.state.nodes.get(importedHole.root_id).extensions.codex_conversation.scopeId, rootConversation.scopeId);
+  const failures = [];
+  importedHost.onEvent = (event) => { if (event.type === "node_error") failures.push(event); };
+  await importedHost.handleBrowserEvent({ type: "branch_request", node_id: "failed-attempt", parent_id: importedHole.root_id, question: "SEARCH FAIL ONCE", position: { x: 0, y: 0 } });
+  const failedDeadline = Date.now() + 5000;
+  while (!failures.length && Date.now() < failedDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(failures.at(-1)?.code, "web_search_failed");
+  assert.equal(importedHost.state.nodes.get("failed-attempt").extensions.codex_conversation, undefined);
+  const failedThread = (await turnCalls()).at(-1).threadId;
+  assert.equal(importedHost.handleRetry({ node_id: "failed-attempt" }).ok, true);
+  const retried = await waitForAnswered(importedHost, "failed-attempt");
+  assert.notEqual(retried.extensions.codex_conversation.threadId, failedThread);
+  assert.equal(JSON.stringify((await turnCalls()).at(-1).inheritedHistory).includes("SEARCH FAIL ONCE"), false, "retry inherits source, not failed output");
+
+  const beforeCancel = (await turnCalls()).length;
+  await importedHost.handleBrowserEvent({ type: "branch_request", node_id: "cancelled", parent_id: importedHole.root_id, question: "SLOW cancelled Ask", position: { x: 0, y: 0 } });
+  const cancelDeadline = Date.now() + 5000;
+  while ((await turnCalls()).length === beforeCancel && Date.now() < cancelDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
+  const cancelledThread = (await turnCalls()).at(-1).threadId;
+  assert.equal((await importedHost.handleBrowserEvent({ type: "delete_node", node_id: "cancelled" })).ok, true);
+  await ask(importedHost, "after-cancel", importedHole.root_id, "Ask after cancellation");
+  assert.equal(importedHost.state.nodes.has("cancelled"), false);
+  assert.equal(JSON.stringify((await turnCalls()).at(-1).inheritedHistory).includes("SLOW cancelled Ask"), false);
+  assert.ok((await protocolCalls()).some((call) => call.method === "turn/interrupt" && call.params.threadId === cancelledThread));
+  await importedHost.dispose();
+
   const off = createProvider({ preset: "subscriptions", base_url: `${bridge.url}/v1`, model: "codex/gpt-fake", web_search: "off" }, bridge.token);
   for await (const _event of off.authorExplainer({ question: "No search" })) {}
   assert.equal((await threadCalls()).at(-1).config, undefined);
@@ -427,6 +523,19 @@ try {
   assert.equal(afterRestart.status, 200);
   assert.equal(afterRestart.json.choices[0].message.content, "OK");
   await assert.rejects(fs.access(path.join(data, "codex-models.json")));
+  await bridge.close();
+  bridge = await createTestBridge();
+  await bridge.start();
+  await bridge.refreshState();
+  const restartedProvider = createProvider({ preset: "subscriptions", base_url: `${bridge.url}/v1`, model: "codex/gpt-second", reasoning: "medium" }, bridge.token);
+  const restartedHost = new DirectRabbitholeHost({ hole: saved.at(-1), provider: restartedProvider, store: { saveHole: async () => {} } });
+  const restartedArticle = await ask(restartedHost, "restart-child", branchNode.id, "Ask after bridge restart");
+  assert.equal(restartedArticle.extensions.codex_conversation.scopeId, rootConversation.scopeId);
+  assert.equal((await turnCalls()).at(-1).model, "gpt-second", "new forks honor current model settings");
+  assert.equal((await turnCalls()).at(-1).effort, "medium");
+  assert.equal((await protocolCalls()).slice().reverse().find((call) => call.method === "thread/fork").params.threadId, branchConversation.threadId);
+  assert.match(JSON.stringify((await turnCalls()).at(-1).inheritedHistory), /SEARCH branch/);
+  await restartedHost.dispose();
 } finally {
   await bridge?.close();
   await fs.rm(temporaryRoot, { recursive: true, force: true });

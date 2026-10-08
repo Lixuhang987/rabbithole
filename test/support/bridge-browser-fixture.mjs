@@ -11,6 +11,7 @@ export async function installBridgeFetchStub(context) {
     const requests = [];
     const chatQueue = [];
     const restartQueue = [];
+    let conversationCounter = 0;
     let denyNextConnection = false;
     let online = true;
     let pingUp = false;
@@ -101,6 +102,19 @@ export async function installBridgeFetchStub(context) {
       if (url === chatUrl) {
         const body = JSON.parse(typeof options.body === "string" ? options.body : "{}");
         requests.push({ kind: "chat", authorization: authorization(options), body });
+        const conversation = body.rabbithole_conversation ? {
+          nodeId: body.rabbithole_conversation.nodeId,
+          conversation: { version: 1, threadId: `browser-thread-${++conversationCounter}`, scopeId: "browser-scope" },
+        } : null;
+        if (body.rabbithole_conversation?.operation === "baseline") {
+          return new Response(JSON.stringify({ rabbithole_conversation: conversation }), {
+            status: 200, headers: { "Content-Type": "application/json" },
+          });
+        }
+        const completion = [
+          ...(conversation ? [{ object: "rabbithole.conversation", ...conversation }] : []),
+          { choices: [{ delta: {}, finish_reason: "stop" }] },
+        ].map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") + "data: [DONE]\n\n";
         const item = chatQueue.shift() || { text: "Subscription response." };
         if (item.beforeState) {
           push(item.beforeState);
@@ -119,13 +133,13 @@ export async function installBridgeFetchStub(context) {
             finishSearch = () => {
               send({ object: "rabbithole.search", type: "search", id: "ui-search", status: "completed", action: "search" });
               send({ choices: [{ delta: { content: item.text } }] });
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.enqueue(encoder.encode(completion));
               controller.close();
               finishSearch = null;
             };
           } }), { status: 200, headers: { "Content-Type": "text/event-stream" } });
         }
-        const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: item.text } }] })}\n\ndata: [DONE]\n\n`;
+        const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: item.text } }] })}\n\n${completion}`;
         return new Response(sse, { status: 200, headers: { "Content-Type": "text/event-stream" } });
       }
       return realFetch(input, options);

@@ -6,8 +6,9 @@ import path from "node:path";
 import { FsStore } from "../../src/node/fs-store.js";
 import { extractNodeAssetRefs } from "../../src/core/assets.js";
 import { createSnapshotProjection } from "../../src/core/snapshot-projection.js";
+import { snapshotProjectionToFrozenHydration } from "../../src/core/snapshot-projection.js";
 import { buildSnapshotHtml, snapshotProjectionUsesMermaid } from "../../src/core/snapshot-html.js";
-import { binaryToBase64 } from "../../src/core/portable-projection.js";
+import { createPortableProjection, binaryToBase64 } from "../../src/core/portable-projection.js";
 import { buildRabbitholeExport, importRabbitholeFile, importSnapshotFile } from "../../src/web/portable.js";
 
 const corpusDir = new URL("../fixtures/corpus/", import.meta.url);
@@ -94,7 +95,18 @@ console.log(`ok artifact round trip: all ${fixtureNames.length} corpus fixtures 
 {
   const source = JSON.parse(await fs.readFile(new URL("01-empty-root.rabbithole", corpusDir), "utf8"));
   const bag = { future_primitive: { attempts: [0, null, "雪", { correct: false }] } };
-  source.hole.nodes[0].extensions = bag;
+  const conversation = { version: 1, threadId: "local-thread", scopeId: "local-history" };
+  source.hole.nodes[0].extensions = { ...bag, codex_conversation: conversation };
+  const local = structuredClone(source.hole);
+  const directExport = createPortableProjection(local, source.assets);
+  assert.deepEqual(directExport.hole.nodes[0].extensions, bag, "portable projection strips local conversation references only");
+  assert.deepEqual(local.nodes[0].extensions.codex_conversation, conversation, "projection leaves local state intact");
+  assert.deepEqual(snapshotProjectionToFrozenHydration(source).nodes[0].extensions, bag, "frozen hydration strips local references even from raw old snapshots");
+  const localStore = await storeAt("conversation-local");
+  await localStore.store.saveHole(local);
+  assert.deepEqual((await localStore.store.loadHole(local.hole_id)).nodes[0].extensions.codex_conversation, conversation, "local persistence retains history association");
+  const localSnapshot = await exporterSnapshot(localStore.store, await localStore.store.loadHole(local.hole_id));
+  assert.equal(localSnapshot.html.includes("local-thread"), false, "shared HTML has no local conversation reference");
   const portableStore = await storeAt("extensions-portable");
   const imported = await importRabbitholeFile(portableStore.store, JSON.stringify(source));
   const exported = await buildRabbitholeExport(portableStore.store, imported.hole_id);

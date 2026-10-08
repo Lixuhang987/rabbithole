@@ -47,6 +47,17 @@ const stub = http.createServer((req, res) => {
           return;
         }
         providerRequests.push(body);
+        if (JSON.stringify(body.input).includes("FORK-CHECK")) {
+          const item = { type: "message", id: "msg-fork", role: "assistant", content: [{ type: "output_text", text: "Fork verified." }] };
+          res.writeHead(200, { "Content-Type": "text/event-stream" });
+          for (const event of [
+            { type: "response.created", response: { id: "resp-fork" } },
+            { type: "response.output_item.done", item },
+            { type: "response.completed", response: { id: "resp-fork", status: "completed", output: [] } },
+          ]) res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+          res.end();
+          return;
+        }
         if (body.tools?.some((tool) => tool.type === "namespace" && tool.name === "web")) {
           const n = ++searchResponses;
           const item = n === 1
@@ -184,6 +195,42 @@ try {
   process.stdout.write("native search: alpha/search roundtrip, source citations, isolated tools=web\n");
 
 
+  const beforeBaseline = providerRequests.length;
+  const baseline = await appServer.turn({
+    model: "rabbithole-isolation-model", messages: [{ role: "user", content: "IMPORTED-ARTICLE: persistent baseline." }],
+    reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {},
+    conversation: { version: 1, operation: "baseline", nodeId: "imported" },
+  });
+  assert.equal(providerRequests.length, beforeBaseline, "baseline injection does not invoke the model");
+  assert.ok(baseline.conversation?.threadId);
+  appServer.close();
+  await fs.writeFile(configPath, 'web_search = "disabled"\n' + providerConfig + isolationFixture);
+  appServer = new CodexAppServer({ executable, env, cwd, version: "0.4.0-test" });
+  await appServer.ensureStarted();
+  const child = await appServer.turn({
+    model: "rabbithole-isolation-model", messages: [{ role: "user", content: "FORK-CHECK: first child." }],
+    reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {},
+    conversation: { version: 1, operation: "fork", nodeId: "child", source: baseline.conversation },
+  });
+  assert.equal(child.text, "Fork verified.");
+  assert.notEqual(child.conversation.threadId, baseline.conversation.threadId);
+  assert.match(JSON.stringify(providerRequests.at(-1).input), /IMPORTED-ARTICLE/);
+  assert.deepEqual(providerRequests.at(-1).tools, [], "fork uses current search-off configuration");
+  appServer.close();
+  await fs.writeFile(configPath, 'web_search = "live"\n' + providerConfig + isolationFixture + '\n[features]\nstandalone_web_search = true\n');
+  appServer = new CodexAppServer({ executable, env, cwd, version: "0.4.0-test" });
+  await appServer.ensureStarted();
+  const descendant = await appServer.turn({
+    model: "rabbithole-isolation-model", messages: [{ role: "user", content: "FORK-CHECK: descendant." }],
+    reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {},
+    conversation: { version: 1, operation: "fork", nodeId: "descendant", source: child.conversation },
+  });
+  assert.equal(descendant.conversation.scopeId, baseline.conversation.scopeId);
+  assert.match(JSON.stringify(providerRequests.at(-1).input), /first child/);
+  assert.match(JSON.stringify(providerRequests.at(-1).input), /Fork verified/);
+  assert.deepEqual(providerRequests.at(-1).tools.map((tool) => tool.name), ["web"], "descendant uses current search-on configuration");
+  process.stdout.write("persistent baseline: no model call; restart fork: inherited article and child answer\n");
+
   const started = process.hrtime.bigint();
   const mcp = await execFileAsync(executable, ["mcp", ...codexIsolationArgs(), "-c", 'mcp_servers={"user_server"={enabled=false}}', "list", "--json"], {
     cwd,
@@ -206,7 +253,7 @@ try {
 } finally {
   appServer.close();
   await new Promise((resolve) => stub.close(resolve));
-  await fs.rm(temporaryRoot, { recursive: true, force: true });
+  await fs.rm(temporaryRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
 
 process.stdout.write("codex isolation ok\n");

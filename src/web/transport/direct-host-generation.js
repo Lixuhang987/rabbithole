@@ -1,3 +1,5 @@
+import { CODEX_CONVERSATION, normalizeCodexConversation } from "../../core/conversation.js";
+import { prepareNodeConversation } from "./direct-host-conversations.js";
 import { MAX_ASK_ATTACHMENTS } from "../../core/attachments.js";
 import { validateImageAssetName } from "../../core/assets.js";
 import { collectRelevantNotes, isNoteNode } from "../../core/hole/ask.js";
@@ -124,7 +126,7 @@ export class DirectHostGeneration extends DirectHostPdf {
     const provider = this.provider;
     const run = this.createRun({ ...node, markdown: "" }, node.title || "Untitled");
     const questionMarkdown = rootQuestionMarkdown(question);
-    const generation = provider.authorExplainer({ question }, controller.signal);
+    const generation = provider.authorExplainer({ question, nodeId }, controller.signal);
     for await (const docEvent of generationDocEvents(generation, run, {
       nodeId,
       progressFields: { base_url: node.base_url, base_url_source: node.base_url_source },
@@ -156,6 +158,7 @@ export class DirectHostGeneration extends DirectHostPdf {
     const finalNode = this.state.nodes.get(nodeId);
     this.abortByNode.delete(nodeId);
     this.emit(buildNodeAnsweredEvent(finalNode, { parent_id: null }));
+    this.emitConversation(finalNode);
     await this.flushSave();
     await this.onRootAnswered?.(finalNode);
   }
@@ -176,50 +179,48 @@ export class DirectHostGeneration extends DirectHostPdf {
     if (!withoutAttachment) await this.attachBranchImage(node, context);
     const fallbackTitle = fallbackTitleForNode(node);
     context.fallbackTitle = fallbackTitle;
-    // Each attempt, including a retry, gets a fresh run id. The reducer can
-    // therefore reject late progress from the superseded attempt.
-    const run = this.createRun(node, fallbackTitle);
-    // Capture the provider at attempt start: provider changes affect only later
-    // generations; this in-flight iterator finishes on the old provider.
-    let generation = provider.answerBranch(context, controller.signal);
-    const events = generationDocEvents(generation, run, {
-      nodeId,
-      progressFields: { base_url: node.base_url, base_url_source: node.base_url_source },
-      answeredFields: () => branchAnsweredFields(this.state.nodes.get(nodeId)),
-    });
-    try {
-      for await (const docEvent of events) {
-        if (controller.signal.aborted || !this.isLivePending(nodeId)) return;
-        this.dispatch(docEvent);
-        if (docEvent.type === "node_progress") {
-          const current = this.state.nodes.get(nodeId);
-          this.emit({ ...docEvent, markdown: current.markdown });
-          this.scheduleSave();
+    let rebuild = false;
+    let recovered = false;
+    let droppedImages = false;
+    let droppedPastedImages = false;
+    for (;;) {
+      context.conversation = await prepareNodeConversation(this, provider, context, controller.signal, { reset: rebuild });
+      if (controller.signal.aborted || this.disposed || !this.isLivePending(nodeId)) return;
+      const run = this.createRun(this.state.nodes.get(nodeId), fallbackTitle);
+      try {
+        const generation = provider.answerBranch(context, controller.signal);
+        for await (const docEvent of generationDocEvents(generation, run, {
+          nodeId,
+          progressFields: { base_url: node.base_url, base_url_source: node.base_url_source },
+          answeredFields: () => branchAnsweredFields(this.state.nodes.get(nodeId)),
+        })) {
+          if (controller.signal.aborted || this.disposed || !this.isLivePending(nodeId)) return;
+          this.dispatch(docEvent);
+          if (docEvent.type === "node_progress") {
+            this.emit({ ...docEvent, markdown: this.state.nodes.get(nodeId).markdown });
+            this.scheduleSave();
+          }
         }
-      }
-    } catch (error) {
-      if ((!context.attachment && !context.attachments?.length) || controller.signal.aborted) throw error;
-      if (["model_no_images", "web_search_failed"].includes(normalizeProviderError(error).code)) throw error;
-      const hadPastedImages = !!context.attachments?.some((attachment) => attachment?.source === "pasted_image");
-      delete context.attachment;
-      delete context.attachments;
-      this.dispatchProgress(nodeId, "", { emit: true });
-      const retryRun = this.createRun(this.state.nodes.get(nodeId), fallbackTitle);
-      generation = provider.answerBranch(context, controller.signal);
-      for await (const docEvent of generationDocEvents(generation, retryRun, {
-        nodeId,
-        progressFields: { base_url: node.base_url, base_url_source: node.base_url_source },
-        answeredFields: () => branchAnsweredFields(this.state.nodes.get(nodeId)),
-      })) {
-        if (controller.signal.aborted || !this.isLivePending(nodeId)) return;
-        this.dispatch(docEvent);
-        if (docEvent.type === "node_progress") {
-          const current = this.state.nodes.get(nodeId);
-          this.emit({ ...docEvent, markdown: current.markdown });
-          this.scheduleSave();
+        break;
+      } catch (error) {
+        if (controller.signal.aborted) throw error;
+        const code = normalizeProviderError(error).code;
+        if (provider.codexConversations && code === "conversation_unavailable" && !recovered) {
+          recovered = true;
+          rebuild = true;
+          this.dispatchProgress(nodeId, "", { emit: true });
+          continue;
         }
+        if (droppedImages || (!context.attachment && !context.attachments?.length)
+          || ["model_no_images", "web_search_failed", "conversation_unavailable", "conversation_invalid", "conversation_incomplete"].includes(code)) throw error;
+        droppedImages = true;
+        droppedPastedImages = !!context.attachments?.some((attachment) => attachment?.source === "pasted_image");
+        delete context.attachment;
+        delete context.attachments;
+        rebuild = false;
+        this.dispatchProgress(nodeId, "", { emit: true });
+
       }
-      if (hadPastedImages) this.onToast?.({ message: "Answered without the pasted image(s) — the request was too large for this model." });
     }
 
     // Branches deliberately accept an empty provider stream: completion uses
@@ -227,8 +228,15 @@ export class DirectHostGeneration extends DirectHostPdf {
     const finalNode = this.state.nodes.get(nodeId);
     this.abortByNode.delete(nodeId);
     this.noteConversions.delete(nodeId);
+    if (droppedPastedImages) this.onToast?.({ message: "Answered without the pasted image(s) — the request was too large for this model." });
     this.emit(buildNodeAnsweredEvent(finalNode));
+    this.emitConversation(finalNode);
     await this.flushSave();
+  }
+
+  emitConversation(node) {
+    const conversation = normalizeCodexConversation(node?.extensions?.[CODEX_CONVERSATION]);
+    if (conversation) this.emit({ type: "node_extensions_patch", node_id: node.id, namespace: CODEX_CONVERSATION, value: conversation });
   }
 
   async attachBranchImage(node, context) {
@@ -279,7 +287,7 @@ export class DirectHostGeneration extends DirectHostPdf {
     this.abortByNode.get(nodeId)?.abort();
     this.abortByNode.set(nodeId, controller);
     const run = this.createRun({ ...node, markdown: "" }, node.title || "Untitled");
-    const generation = this.provider.authorDocument(source, controller.signal);
+    const generation = this.provider.authorDocument(source, controller.signal, { nodeId });
     try {
       for await (const docEvent of generationDocEvents(generation, run, {
         nodeId,
@@ -311,7 +319,7 @@ export class DirectHostGeneration extends DirectHostPdf {
   }
 
   handleAnswerError(nodeId, err, signal) {
-    this.abortByNode.delete(nodeId);
+    if (this.abortByNode.get(nodeId)?.signal === signal) this.abortByNode.delete(nodeId);
     if (signal?.aborted) return;
     const node = this.state.nodes.get(nodeId);
     if (!node || node.status !== "pending") return;
@@ -328,7 +336,7 @@ export class DirectHostGeneration extends DirectHostPdf {
     }
     if (isAuthError(normalized)) {
       this.onAuthRequired?.({ node, error: normalized, retry: () => this.handleRetry({ node_id: nodeId }) });
-    } else if (["network", "agent_signed_out", "agent_missing", "model_unknown", "model_no_images", "payload_too_large", "turn_failed", "web_search_failed"].includes(normalized.code)) {
+    } else if (["network", "agent_signed_out", "agent_missing", "model_unknown", "model_no_images", "payload_too_large", "turn_failed", "web_search_failed", "conversation_unavailable", "conversation_invalid", "conversation_incomplete"].includes(normalized.code)) {
       this.onProviderFailure?.({
         node,
         error: normalized,
@@ -383,6 +391,7 @@ export class DirectHostGeneration extends DirectHostPdf {
       markdown: entry.markdown,
     }));
     return {
+      node_id: node.id,
       root_title: root?.title || this.state.title || "Untitled",
       root_question: rootQuestionForNode(root),
       parent_id: parent?.id || null,

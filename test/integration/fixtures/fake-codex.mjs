@@ -21,7 +21,17 @@ let turnCounter = 0;
 let active = 0;
 let maxActive = 0;
 const turns = new Map();
-const threads = new Map();
+const failedOnce = new Set();
+const historyFile = process.env.FAKE_CODEX_HISTORY;
+const stored = historyFile && fs.existsSync(historyFile) ? JSON.parse(fs.readFileSync(historyFile, "utf8")) : {};
+threadCounter = stored.counter || 0;
+const threads = new Map(stored.threads || []);
+function saveHistory() {
+  if (historyFile) fs.writeFileSync(historyFile, JSON.stringify({ counter: threadCounter, threads: [...threads].filter(([, thread]) => thread.ephemeral === false) }));
+}
+function recordProtocol(method, params, threadId) {
+  if (process.env.FAKE_CODEX_PROTOCOL_RECORD) fs.appendFileSync(process.env.FAKE_CODEX_PROTOCOL_RECORD, JSON.stringify({ method, params, threadId }) + "\n");
+}
 
 function emit(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
@@ -52,6 +62,8 @@ function complete(threadId, turnId) {
     } } });
   }
   const text = turn.answer || "OK";
+  threads.get(threadId)?.history.push({ type: "message", role: "assistant", content: [{ type: "output_text", text }] });
+  saveHistory();
   const split = text.includes("cite") ? text.indexOf("cite") + 3 : 1;
   emit({
     method: "item/agentMessage/delta",
@@ -149,14 +161,37 @@ process.stdin.on("data", (chunk) => {
       });
     } else if (method === "thread/start") {
       const threadId = `thread-${++threadCounter}`;
-      threads.set(threadId, params);
+      threads.set(threadId, { ...params, history: [] });
+      saveHistory();
+      recordProtocol(method, params, threadId);
       if (process.env.FAKE_CODEX_THREAD_RECORD) fs.appendFileSync(process.env.FAKE_CODEX_THREAD_RECORD, `${JSON.stringify(params)}\n`);
-      emit({ id, result: { thread: { id: threadId, ephemeral: true } } });
+      emit({ id, result: { thread: { id: threadId, ephemeral: params.ephemeral } } });
+    } else if (method === "thread/inject_items") {
+      threads.get(params.threadId).history.push(...structuredClone(params.items));
+      saveHistory();
+      recordProtocol(method, params, params.threadId);
+      emit({ id, result: {} });
+    } else if (method === "thread/fork") {
+      const source = threads.get(params.threadId);
+      if (!source || source.ephemeral !== false) {
+        emit({ id, error: { code: -32600, message: "no rollout found for thread id " + params.threadId } });
+        continue;
+      }
+      const threadId = `thread-${++threadCounter}`;
+      threads.set(threadId, { ...source, ...params, history: structuredClone(source.history) });
+      saveHistory();
+      recordProtocol(method, params, threadId);
+      emit({ id, result: { thread: { id: threadId, ephemeral: params.ephemeral } } });
+    } else if (method === "thread/unsubscribe") {
+      recordProtocol(method, params, params.threadId);
+      emit({ id, result: { status: "unsubscribed" } });
     } else if (method === "turn/start") {
       const turnId = `turn-${++turnCounter}`;
       if (process.env.FAKE_CODEX_RECORD) {
-        fs.appendFileSync(process.env.FAKE_CODEX_RECORD, `${JSON.stringify(params)}\n`);
+        fs.appendFileSync(process.env.FAKE_CODEX_RECORD, `${JSON.stringify({ ...params, inheritedHistory: structuredClone(threads.get(params.threadId)?.history || []) })}\n`);
       }
+      threads.get(params.threadId)?.history.push({ type: "message", role: "user", content: params.input });
+      saveHistory();
       emit({ id, result: { turn: { id: turnId, status: "inProgress" } } });
       emit({
         method: "turn/started",
@@ -184,8 +219,10 @@ process.stdin.on("data", (chunk) => {
       const timer = text.includes("SLOW")
         ? null
         : setTimeout(() => complete(params.threadId, turnId), 20);
-      turns.set(turnId, { threadId: params.threadId, timer, search, answer, failSearch: text.includes("SEARCH FAIL") });
+      turns.set(turnId, { threadId: params.threadId, timer, search, answer, failSearch: text.includes("SEARCH FAIL") && (!text.includes("FAIL ONCE") || !failedOnce.has(text)) });
+      failedOnce.add(text);
     } else if (method === "turn/interrupt") {
+      recordProtocol(method, params, params.threadId);
       const turn = turns.get(params.turnId);
       if (turn) {
         if (turn.timer) clearTimeout(turn.timer);

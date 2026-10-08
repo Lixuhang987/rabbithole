@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 import { abortError, BridgeError } from "../errors.js";
 import { buildCodexInput } from "../messages.js";
@@ -169,6 +170,7 @@ export class CodexAppServer {
     this.executeMode = null;
     this.modeList = null;
     this.closed = false;
+    this.historyScopePromise = null;
   }
 
   async ensureStarted() {
@@ -248,7 +250,11 @@ export class CodexAppServer {
       clearTimeout(pending.timer);
       if (message.error) {
         this.lastProtocolError = message.error;
-        pending.reject(turnError(message.error));
+        const missingHistory = pending.method === "thread/fork"
+          && /no rollout found|thread.*(?:not found|does not exist|archived)|(?:not found|archived).*thread|no persisted history/i.test(message.error.message || "");
+        pending.reject(missingHistory
+          ? new BridgeError("The article's Codex history is unavailable. Rebuild its context and try again.", "conversation_unavailable", 409)
+          : turnError(message.error));
       }
       else pending.resolve(message.result);
       return;
@@ -263,7 +269,7 @@ export class CodexAppServer {
       turn.turnId = event.turnId || turn.turnId;
       if (!turn.started) {
         turn.started = true;
-        turn.resolveStarted();
+        turn.resolveStarted?.();
       }
       if (turn.aborted) void this.interrupt(turn);
     } else if (event.type === "message_started") {
@@ -360,7 +366,7 @@ export class CodexAppServer {
         ));
         terminateChild(this.child);
       }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, method });
       this.child.stdin.write(`${JSON.stringify({ method, id, params })}\n`, (error) => {
         if (!error) return;
         clearTimeout(timer);
@@ -429,6 +435,27 @@ export class CodexAppServer {
     };
   }
 
+  async historyScope() {
+    if (!this.historyScopePromise) this.historyScopePromise = (async () => {
+      const home = this.env.CODEX_HOME || path.join(this.env.HOME || os.homedir(), ".codex");
+      await fs.mkdir(home, { recursive: true, mode: 0o700 });
+      const filename = path.join(home, "rabbithole-history-scope");
+      try { await fs.writeFile(filename, randomUUID() + "\n", { flag: "wx", mode: 0o600 }); }
+      catch (error) { if (error.code !== "EEXIST") throw error; }
+      const scopeId = (await fs.readFile(filename, "utf8")).trim();
+      if (!/^[a-zA-Z0-9_-]{1,128}$/.test(scopeId)) throw new BridgeError("Codex history scope is invalid.", "turn_failed", 500);
+      return scopeId;
+    })().catch((error) => { this.historyScopePromise = null; throw error; });
+    return this.historyScopePromise;
+  }
+
+  async releaseThread(threadId) {
+    // Unsubscribe releases the live runtime after its idle period, preserving history.
+    if (threadId && this.child && !this.closed) {
+      await this.request("thread/unsubscribe", { threadId }).catch(() => {});
+    }
+  }
+
   async turn({
     model,
     messages,
@@ -436,6 +463,7 @@ export class CodexAppServer {
     signal,
     onDelta,
     onSearch = () => {},
+    conversation = null,
   }) {
     const codexInput = buildCodexInput(messages);
     if (codexInput.imagePartCount !== codexInput.imageCount) {
@@ -448,33 +476,51 @@ export class CodexAppServer {
 
     const requestCwd = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-codex-turn-"));
     await fs.chmod(requestCwd, 0o700);
+    let threadId;
     try {
-      const threadResult = await this.request("thread/start", {
+      const scopeId = conversation ? await this.historyScope() : null;
+      if (conversation?.operation === "fork" && conversation.source.scopeId !== scopeId) {
+        throw new BridgeError("The article belongs to another Codex history store.", "conversation_unavailable", 409);
+      }
+      if (signal?.aborted) throw abortError(signal);
+      const fork = conversation?.operation === "fork";
+      const threadResult = await this.request(fork ? "thread/fork" : "thread/start", {
+        ...(fork ? { threadId: conversation.source.threadId, excludeTurns: true } : { environments: [], dynamicTools: [], selectedCapabilityRoots: [] }),
         model,
         cwd: requestCwd,
         approvalPolicy: "never",
         sandbox: "read-only",
-        ephemeral: true,
+        ephemeral: !conversation,
         developerInstructions: codexInput.systemPrompt,
-        environments: [],
-        dynamicTools: [],
-        selectedCapabilityRoots: [],
       });
-      const threadId = threadResult?.thread?.id;
+      threadId = threadResult?.thread?.id;
       if (!threadId) {
         throw new BridgeError("Codex could not start the response.", "turn_failed", 500);
       }
       if (signal?.aborted) throw abortError(signal);
+      const reference = conversation ? { version: 1, threadId, scopeId } : null;
+      if (conversation?.operation === "baseline") {
+        await this.request("thread/inject_items", {
+          threadId,
+          items: [{ type: "message", role: "user", content: codexInput.input.map((part) => part.type === "text"
+            ? { type: "input_text", text: part.text }
+            : { type: "input_image", image_url: part.url, detail: part.detail }) }],
+        });
+        if (signal?.aborted) throw abortError(signal);
+        return { text: "", conversation: reference, finishReason: "stop" };
+      }
 
       let resolveTurn;
       let rejectTurn;
-      let resolveStarted;
+      let resolveStarted = () => {};
       const completion = new Promise((resolve, reject) => {
         resolveTurn = resolve;
         rejectTurn = reject;
       });
+      // Abort/crash can reject before turn/start responds; keep rejection observed.
+      void completion.catch(() => {});
       const startedPromise = new Promise((resolve) => {
-        resolveStarted = resolve;
+        resolveStarted = () => resolve(undefined);
       });
       const turn = {
         threadId,
@@ -530,14 +576,18 @@ export class CodexAppServer {
           }),
         });
         turn.turnId = response?.turn?.id || turn.turnId;
+        turn.resolveStarted?.();
         if (turn.aborted) void this.interrupt(turn);
-        return await completion;
+        const result = await completion;
+        return { ...result, ...(reference ? { conversation: reference } : {}) };
       } finally {
+        turn.resolveStarted?.();
         clearTurnDeadline();
         signal?.removeEventListener("abort", onAbort);
         if (!turn.aborted) this.turns.delete(threadId);
       }
     } finally {
+      await this.releaseThread(threadId);
       await fs.rm(requestCwd, { recursive: true, force: true });
     }
   }
@@ -628,10 +678,10 @@ export class CodexBackend {
   // The route (server.js handleChat) validates model, image capability, and
   // reasoning effort against the live catalog it fetches from this backend
   // immediately before calling generate — no re-validation here.
-  async generate({ model, messages, reasoningEffort, signal, onDelta = () => {}, onSearch = () => {} }) {
+  async generate({ model, messages, reasoningEffort, signal, onDelta = () => {}, onSearch = () => {}, conversation = null }) {
     if (signal?.aborted) throw abortError(signal);
     await this.appServer.ensureStarted();
-    return this.appServer.turn({ model, messages, reasoningEffort, signal, onDelta, onSearch });
+    return this.appServer.turn({ model, messages, reasoningEffort, signal, onDelta, onSearch, conversation });
   }
 
   close() {

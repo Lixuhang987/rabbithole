@@ -7,9 +7,9 @@ This is a usage inventory, not a promise that every variable is public configura
 | Variable | Read by |
 | --- | --- |
 | `CLAUDE_CONFIG_DIR` | `scripts/install-journey-check.mjs` |
-| `CODEX_HOME` | `scripts/install-journey-check.mjs` |
+| `CODEX_HOME` | `scripts/install-journey-check.mjs`, `src/node/bridge/agents/codex.js` |
 | `FORCE_COLOR` | `scripts/install-journey-check.mjs` |
-| `HOME` | `src/node/bridge/token.js` |
+| `HOME` | `src/node/bridge/agents/codex.js`, `src/node/bridge/token.js` |
 | `PATH` | `scripts/install-journey-check.mjs`, `src/node/bridge/agents/isolation.js` |
 | `RABBITHOLE_BRIDGE_CLAUDE_BIN` | `scripts/install-journey-check.mjs`, `src/node/bridge/agents/claude.js` |
 | `RABBITHOLE_BRIDGE_CODEX_BIN` | `scripts/install-journey-check.mjs`, `src/node/bridge/agents/codex.js` |

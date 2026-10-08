@@ -1,3 +1,4 @@
+import { normalizeCodexConversation } from "../../core/conversation.js";
 import { projectNode } from "../../core/hole/node.js";
 import { Run } from "../../core/hole/run.js";
 import { randomId } from "../../core/utils.js";
@@ -26,7 +27,13 @@ export function blobToDataUrl(blob) {
 
 /** Narrow, browser-free branch wiring: GenerationEvent -> Run -> DocEvent. */
 export async function* generationDocEvents(generation, run, { nodeId, progressFields = {}, answeredFields = {}, beforeComplete = null, complete = null }) {
+  let conversation = null;
   for await (const event of generation) {
+    if (event.type === "conversation") {
+      conversation = normalizeCodexConversation(event.conversation);
+      if (!conversation || event.nodeId !== nodeId) throw new Error("Invalid conversation completion.");
+      continue;
+    }
     if (event.type === "search") {
       yield { type: "node_search_status", node_id: nodeId, call_id: event.id, status: event.status, action: event.action, run: { id: run.id } };
       continue;
@@ -37,7 +44,8 @@ export async function* generationDocEvents(generation, run, { nodeId, progressFi
   beforeComplete?.(run);
   const fields = typeof answeredFields === "function" ? answeredFields() : answeredFields;
   const context = { nodeId, answeredFields: fields };
-  yield complete ? complete(run, context) : run.complete(context);
+  const answered = complete ? complete(run, context) : run.complete(context);
+  yield { ...answered, ...(conversation ? { codex_conversation: conversation } : {}) };
 }
 
 export function rootAnsweredFields(node) {

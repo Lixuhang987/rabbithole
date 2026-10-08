@@ -1,4 +1,5 @@
 import { maybeUpgradeBaseUrlFromFrontmatter, normalizeStoredBaseUrlFields } from "../base-url.js";
+import { CODEX_CONVERSATION, normalizeCodexConversation } from "../conversation.js";
 import { normalizeBlockIds } from "../blocks.js";
 import { cloneJson } from "../schema.js";
 import {
@@ -323,6 +324,8 @@ function reduceNodeAnswered(state, event, options) {
   if (Object.prototype.hasOwnProperty.call(current, "extensions")) {
     next.extensions = stripNodeAttention(current.extensions);
   }
+  const conversation = normalizeCodexConversation(event.codex_conversation);
+  if (conversation) next.extensions = { ...next.extensions, [CODEX_CONVERSATION]: conversation };
   next.font_scale = /** @type {number} */ (event.font_scale ?? current.font_scale ?? 1);
   const base = normalizeStoredBaseUrlFields(next);
   next.base_url = base.base_url;

@@ -1,3 +1,4 @@
+import { withoutLocalConversations } from "./conversation.js";
 import { getAssetContentType } from "./assets.js";
 import { createPortableProjection } from "./portable-projection.js";
 
@@ -32,7 +33,7 @@ export function createSnapshotProjection(hole, viewState, assets) {
 
 /** @param {PortableArtifact} projection */
 export function snapshotProjectionToFrozenHydration(projection) {
-  const hole = projection.hole;
+  const hole = withoutLocalConversations(projection.hole);
   /** @type {Record<string, string>} */
   const assetData = {};
   for (const [name, encoded] of Object.entries(projection.assets)) {

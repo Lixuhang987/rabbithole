@@ -1,4 +1,5 @@
 import { AUTHORING_VOCABULARY_V1, normalizePromptText } from "./authoring-v1.js";
+import { parseBlockInfo } from "../blocks.js";
 import { lensLabel, truncate } from "../hole/lens.js";
 
 const ANSWERING_SYSTEM_PROMPT_V1 = [
@@ -21,9 +22,9 @@ const DEFAULT_TOKEN_BUDGET = 12000;
 
 /** @typedef {Record<string, any>} AnswerContext */
 
-/** @param {AnswerContext} context @param {{ tokenBudget?: number }} [options] @returns {Array<{role: string, content: any}>} */
-export function buildAnswerMessages(context, { tokenBudget = DEFAULT_TOKEN_BUDGET } = {}) {
-  let packed = packBranchContext(context, { tokenBudget });
+/** @param {AnswerContext} context @param {{ tokenBudget?: number, incremental?: boolean }} [options] @returns {Array<{role: string, content: any}>} */
+export function buildAnswerMessages(context, { tokenBudget = DEFAULT_TOKEN_BUDGET, incremental = false } = {}) {
+  let packed = incremental ? packIncrementalAsk(context, tokenBudget) : packBranchContext(context, { tokenBudget });
   const attachments = imageAttachments(context);
   if (attachments.length) {
     if (attachments.every((attachment) => attachment.source === "pasted_image")) {
@@ -44,14 +45,58 @@ export function buildAnswerMessages(context, { tokenBudget = DEFAULT_TOKEN_BUDGE
   ];
 }
 
+
+/** Bootstrap context excludes the current Ask and its attachments. @param {AnswerContext} context */
+export function buildConversationBaselineMessages(context) {
+  return [
+    { role: "system", content: ANSWERING_SYSTEM_PROMPT_V1 },
+    { role: "user", content: packBranchContext(context, { baseline: true }) },
+  ];
+}
+
+/** @param {AnswerContext} context @param {number} tokenBudget */
+function packIncrementalAsk(context, tokenBudget) {
+  const selectedText = normalizePromptText(context.selected_text || context.selectedText || "");
+  const blockId = context.anchor?.block?.block_id || context.block_id;
+  const source = blockId ? selectedVisualSource(context.parent_markdown || "", blockId) : "";
+  return trimToBudget([
+    "Continue from the source article in the inherited conversation. Answer only this new Ask.",
+    `Lens: ${context.lens || "none"}`,
+    "Preset instruction:", context.instruction || "(none)",
+    "Human selection:", selectedText || "(whole-article follow-up)",
+    ...(blockId ? [`Selection location: visual block ${blockId}`, ...(source ? ["Selected visual source:", source] : [])] : []),
+    "Human question:", context.question || "Explain the selected content or the source article.",
+    "Start with TITLE: on the first line, then markdown.",
+  ].join("\n"), Math.max(2000, tokenBudget) * APPROX_CHARS_PER_TOKEN);
+}
+
+/** @param {string} markdown @param {string} blockId */
+function selectedVisualSource(markdown, blockId) {
+  const lines = markdown.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const open = /^( {0,3})(`{3,}|~{3,})(.*)$/.exec(lines[i] || "");
+    if (!open) continue;
+    const marker = open[2] || "";
+    const start = i;
+    const selected = parseBlockInfo(open[3]).id === blockId;
+    while (++i < lines.length) {
+      const close = /^( {0,3})(`{3,}|~{3,})\s*$/.exec(lines[i] || "");
+      const closeMarker = close?.[2] || "";
+      if (close && closeMarker[0] === marker[0] && closeMarker.length >= marker.length) break;
+    }
+    if (selected) return lines.slice(start, i + 1).join("\n");
+  }
+  return "";
+}
+
 /** @param {AnswerContext} context @returns {Record<string, any>[]} */
 function imageAttachments(context) {
   const source = Array.isArray(context?.attachments) ? context.attachments : [context?.attachment];
   return source.filter((attachment) => attachment?.kind === "image" && attachment.data_url);
 }
 
-/** @param {AnswerContext} context @param {{ tokenBudget?: number }} [options] */
-function packBranchContext(context, { tokenBudget = DEFAULT_TOKEN_BUDGET } = {}) {
+/** @param {AnswerContext} context @param {{ tokenBudget?: number, baseline?: boolean }} [options] */
+function packBranchContext(context, { tokenBudget = DEFAULT_TOKEN_BUDGET, baseline = false } = {}) {
   const budget = Math.max(2000, Number(tokenBudget) || DEFAULT_TOKEN_BUDGET);
   const charBudget = budget * APPROX_CHARS_PER_TOKEN;
   const rootTitle = normalizePromptText(context?.root_title || context?.rootTitle || "Untitled");
@@ -71,6 +116,7 @@ function packBranchContext(context, { tokenBudget = DEFAULT_TOKEN_BUDGET } = {})
     `Root title: ${rootTitle}`,
     ...(rootQuestion ? ["Original canvas question:", rootQuestion, ""] : []),
     `Parent title: ${parentTitle}`,
+    ...(!baseline ? [
     `Lens: ${lensLine}`,
     "Preset instruction:",
     presetInstruction || "(none)",
@@ -83,11 +129,12 @@ function packBranchContext(context, { tokenBudget = DEFAULT_TOKEN_BUDGET } = {})
     "Human question:",
     question || (selectedText ? "(the selected content)" : "(the parent document as a whole)"),
     "",
+    ] : []),
   ].join("\n");
 
   const parentPrefix = "Parent document markdown:\n";
   const ancestorPrefix = "\n\nAncestor chain (root to parent, title + excerpt):\n";
-  const instruction = [
+  const instruction = baseline ? "" : [
     "",
     "Answer the human's question. Start with TITLE: on the first line, then markdown.",
   ].join("\n");

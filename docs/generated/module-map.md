@@ -20,6 +20,7 @@ This inventory is derived from the source tree.
 - `src/core/contracts/generation.d.ts`
 - `src/core/contracts/store.d.ts`
 - `src/core/contracts/ui.d.ts`
+- `src/core/conversation.js`
 - `src/core/engine/hole-engine.js`
 - `src/core/engine/port.js`
 - `src/core/errors.js`
@@ -71,6 +72,7 @@ This inventory is derived from the source tree.
 - `src/node/bridge/agents/isolation.js`
 - `src/node/bridge/claude.js`
 - `src/node/bridge/codex.js`
+- `src/node/bridge/conversation.js`
 - `src/node/bridge/cors.js`
 - `src/node/bridge/errors.js`
 - `src/node/bridge/events.js`
@@ -274,6 +276,7 @@ This inventory is derived from the source tree.
 - `src/web/store/idb-store.js`
 - `src/web/test-seam.js`
 - `src/web/transport/direct-host-base.js`
+- `src/web/transport/direct-host-conversations.js`
 - `src/web/transport/direct-host-generation.js`
 - `src/web/transport/direct-host-pdf.js`
 - `src/web/transport/direct-host-runtime.js`

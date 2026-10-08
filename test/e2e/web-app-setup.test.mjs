@@ -6,6 +6,7 @@ import { extractSnapshotPayload } from "../../src/core/portable-import.js";
 import { serializeForInlineScript } from "../../src/core/utils.js";
 import { MOCK_MODEL, corsHeaders, routeProvider, seedConfiguredOpenRouter } from "../support/provider-mock.mjs";
 import { installBridgeFetchStub } from "../support/bridge-browser-fixture.mjs";
+import { selectVisibleText } from "../support/visible-selection.mjs";
 import { ROOT, bootWebApp } from "../support/web-app-harness.mjs";
 const MOCK_KEY = `sk-or-v1-${"x".repeat(64)}`;
 const BAD_KEY = `sk-or-v1-${"y".repeat(64)}`;
@@ -1069,6 +1070,38 @@ async function verifySubscriptionsPanelStates() {
     await waitForCanvasText(page, "Found Example.");
     assert.equal(await page.locator('.md a[href="https://example.com/search-result"]').first().getAttribute("href"), "https://example.com/search-result");
     assert.equal(await page.locator(".shimmer-text").filter({ hasText: "Searching the web" }).count(), 0);
+    await page.waitForFunction(async () => {
+      const hole = await window.__rabbitholeTest.readStoredHole();
+      return hole?.nodes.find((node) => node.id === hole.root_id)?.extensions.codex_conversation?.threadId;
+    });
+    const codexRoot = await page.evaluate(async () => {
+      const hole = await window.__rabbitholeTest.readStoredHole();
+      return hole.nodes.find((node) => node.id === hole.root_id);
+    });
+    const rootRequest = await page.evaluate(() => window.__bridgeStub.requests.filter((request) => request.kind === "chat").at(-1));
+    assert.equal(rootRequest.body.rabbithole_conversation.operation, "create");
+    assert.equal(rootRequest.body.rabbithole_conversation.nodeId, codexRoot.id);
+    assert.equal(codexRoot.extensions.codex_conversation.scopeId, "browser-scope");
+    await page.evaluate(() => window.__bridgeStub.queueChat({ text: "TITLE: Whole follow-up\n\nWhole follow-up completed." }));
+    await page.locator(".card.root .nc-handle").evaluate((button) => button.click());
+    await page.fill(".card.root .nc-inner textarea", "Whole article question");
+    await page.locator('.card.root .nc-inner [data-commit="ask"]').click();
+    await waitForCanvasText(page, "Whole follow-up completed.");
+    await page.waitForFunction(async () => (await window.__rabbitholeTest.readStoredHole()).nodes.some((node) => node.origin?.question === "Whole article question" && node.extensions.codex_conversation));
+    const wholeRequest = await page.evaluate(() => window.__bridgeStub.requests.filter((request) => request.kind === "chat").at(-1));
+    assert.equal(wholeRequest.body.rabbithole_conversation.operation, "fork");
+    assert.deepEqual(wholeRequest.body.rabbithole_conversation.source, codexRoot.extensions.codex_conversation);
+    assert.equal(JSON.stringify(wholeRequest.body.messages).includes("Search current sources"), false, "fork sends only current Ask");
+    await page.evaluate(() => window.__bridgeStub.queueChat({ text: "TITLE: Selection follow-up\n\nSelection follow-up completed." }));
+    await selectVisibleText(page, { text: "Found", rootSelector: ".card.root .doc-content" });
+    await page.fill("#ask-text", "Selected article question");
+    await page.locator('#ask [data-commit="ask"]').click();
+    await waitForCanvasText(page, "Selection follow-up completed.");
+    await page.waitForFunction(async () => (await window.__rabbitholeTest.readStoredHole()).nodes.some((node) => node.origin?.question === "Selected article question" && node.extensions.codex_conversation));
+    const selectionRequest = await page.evaluate(() => window.__bridgeStub.requests.filter((request) => request.kind === "chat").at(-1));
+    assert.deepEqual(selectionRequest.body.rabbithole_conversation.source, codexRoot.extensions.codex_conversation, "siblings fork same source article");
+    assert.match(JSON.stringify(selectionRequest.body.messages), /Selected article question/);
+    assert.match(JSON.stringify(selectionRequest.body.messages), /Found/);
     console.log("ok web app: SSE states, transition-only repaint mutations=0, stream-close, re-pair, model_unknown retry=1");
   } finally {
     await context.close();

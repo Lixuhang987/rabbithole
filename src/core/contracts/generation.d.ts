@@ -42,7 +42,14 @@ export interface SearchGenerationEvent {
   query?: string;
 }
 
-export type GenerationEvent = TextGenerationEvent | TitleGenerationEvent | SearchGenerationEvent;
+/** A completed article association, separate from model text and tool progress. */
+export interface ConversationGenerationEvent {
+  type: "conversation";
+  nodeId: string;
+  conversation: import("../conversation.js").CodexConversation;
+}
+
+export type GenerationEvent = TextGenerationEvent | TitleGenerationEvent | SearchGenerationEvent | ConversationGenerationEvent;
 
 /**
  * Browser generation surface shared by today's OpenAI-compatible and

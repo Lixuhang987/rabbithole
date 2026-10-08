@@ -8,7 +8,7 @@ import { renderMarkdownToHtml } from "../../src/core/markdown.js";
 import { createHoleState, reduceHoleEvent } from "../../src/core/hole/reduce.js";
 import { ProviderError, normalizeProviderError } from "../../src/web/provider/errors.js";
 import { adaptBranchGeneration, adaptTextGeneration } from "../../src/web/provider/generation-events.js";
-import { OpenAICompatibleProvider, parseOpenAISseEvent, streamOpenAICompatible } from "../../src/web/provider/openai-compatible.js";
+import { OpenAICompatibleProvider, parseOpenAISseEvent, streamOpenAICompatible, streamOpenAIEvents } from "../../src/web/provider/openai-compatible.js";
 import { TitleSentinelParser } from "../../src/web/provider/title-sentinel.js";
 import { DirectRabbitholeHost, createHoleFromMarkdown, createPendingHoleFromQuestion, generationDocEvents } from "../../src/web/transport/direct-host.js";
 
@@ -75,6 +75,35 @@ try {
   })).catch((error) => error);
   assert.equal(bridgeError.code, "agent_signed_out", "bridge recovery codes survive the OpenAI-compatible adapter");
   assert.equal(bridgeError.message, "Claude Code is signed out.", "agent failures do not acquire generic provider copy");
+} finally {
+  globalThis.fetch = originalFetch;
+}
+const conversationBody = { rabbithole_conversation: { version: 1, operation: "create", nodeId: "article" } };
+const conversationEvent = { type: "conversation", nodeId: "article", conversation: { version: 1, threadId: "local-thread", scopeId: "local-scope" } };
+const conversationWire = [
+  'data: {"choices":[{"delta":{"content":"answer"}}]}',
+  `data: ${JSON.stringify({ object: "rabbithole.conversation", nodeId: conversationEvent.nodeId, conversation: conversationEvent.conversation })}`,
+  'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+  'data: [DONE]',
+].join("\r\n\r\n") + "\r\n\r\n";
+try {
+  for (let offset = 0; offset <= conversationWire.length; offset += 1) {
+    globalThis.fetch = async () => responseFromChunks(chunksOf(conversationWire, [offset]));
+    assert.deepEqual(await collect(streamOpenAIEvents({ url: "https://example.test", body: conversationBody })),
+      [{ type: "text", delta: "answer" }, conversationEvent]);
+  }
+  for (const wire of [
+    conversationWire.replace('data: [DONE]', ''),
+    conversationWire.replace('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}', ''),
+    openAiWire,
+  ]) {
+    globalThis.fetch = async () => responseFromChunks(chunksOf(wire, [12]));
+    await assert.rejects(() => collect(streamOpenAIEvents({ url: "https://example.test", body: conversationBody })),
+      (/** @type {any} */ error) => error.code === "conversation_incomplete");
+  }
+  globalThis.fetch = async () => responseFromChunks(chunksOf(conversationWire.replace('"nodeId":"article"', '"nodeId":"other"'), []));
+  await assert.rejects(() => collect(streamOpenAIEvents({ url: "https://example.test", body: conversationBody })),
+    (/** @type {any} */ error) => error.code === "conversation_invalid");
 } finally {
   globalThis.fetch = originalFetch;
 }

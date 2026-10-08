@@ -1,4 +1,5 @@
 import { validateAssetName } from "./assets.js";
+import { withoutLocalConversations } from "./conversation.js";
 import { validatePersistedHole } from "./schema.js";
 
 /** @typedef {import("./contracts/artifact.js").PersistedHole} PersistedHole */
@@ -18,7 +19,7 @@ export function createPortableProjection(hole, assets) {
   return {
     format: RABBITHOLE_FILE_FORMAT,
     format_version: RABBITHOLE_FILE_FORMAT_VERSION,
-    hole,
+    hole: withoutLocalConversations(hole),
     assets,
   };
 }
@@ -39,7 +40,9 @@ export function validatePortableProjection(raw) {
     throw new Error("Import failed: file assets must be an object.");
   }
   validatePortableAssets(parsed.assets);
-  return /** @type {PortableArtifact} */ (/** @type {unknown} */ (parsed));
+  const projection = /** @type {PortableArtifact} */ (/** @type {unknown} */ (parsed));
+  const hole = withoutLocalConversations(projection.hole);
+  return hole === projection.hole ? projection : { ...projection, hole };
 }
 
 /** @param {unknown} assets */

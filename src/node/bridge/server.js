@@ -14,6 +14,7 @@ import {
   errorBody,
   isAbortError,
 } from "./errors.js";
+import { conversationRequest } from "./conversation.js";
 import { countImageParts } from "./messages.js";
 import { routeModelId } from "./models.js";
 import { BridgeStateStore } from "./state.js";
@@ -229,6 +230,7 @@ export async function createBridge({
         );
       }
 
+      const conversation = conversationRequest(body.rabbithole_conversation, route.backend, body.stream);
       const backend = route.backend === "claude" ? claude : codex;
 
       const catalog = await backend.listModels();
@@ -260,6 +262,7 @@ export async function createBridge({
         messages: body.messages,
         reasoningEffort: effort,
         signal: controller.signal,
+        ...(conversation ? { conversation } : {}),
         onSearch(event) {
           if (!stream) return;
           startStream();
@@ -284,6 +287,9 @@ export async function createBridge({
 
       if (stream) {
         startStream();
+        if (conversation && result.conversation) {
+          sseData(res, { object: "rabbithole.conversation", nodeId: conversation.nodeId, conversation: result.conversation });
+        }
         sseData(res, {
           id,
           object: "chat.completion.chunk",
@@ -310,6 +316,7 @@ export async function createBridge({
             finish_reason: result.finishReason || "stop",
           }],
           ...(result.usage ? { usage: result.usage } : {}),
+          ...(conversation ? { rabbithole_conversation: { nodeId: conversation.nodeId, conversation: result.conversation } } : {}),
         });
       }
     } catch (error) {

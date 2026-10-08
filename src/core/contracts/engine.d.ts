@@ -129,6 +129,7 @@ export interface NodeProgressEvent extends NodeTarget, BaseUrlFields {
 }
 export interface NodeAnsweredEvent extends NodeTarget, BaseUrlFields, NodePresentationFields {
   type: "node_answered";
+  codex_conversation?: import("../conversation.js").CodexConversation;
   parent_id?: unknown;
   title?: unknown;
   markdown?: unknown;
