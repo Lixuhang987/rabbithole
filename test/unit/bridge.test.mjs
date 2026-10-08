@@ -6,9 +6,8 @@ import path from "node:path";
 
 import { parseClaudeEvent } from "../../src/node/bridge/claude.js";
 import {
-  codexConfigToml,
+  codexIsolationArgs,
   parseCodexEvent,
-  prepareCodexHome,
 } from "../../src/node/bridge/codex.js";
 import { isAllowedOrigin } from "../../src/node/bridge/cors.js";
 import {
@@ -171,15 +170,10 @@ try {
   assert.equal((await fs.stat(third.path)).mode & 0o777, 0o600);
   assert.equal((await fs.stat(path.dirname(third.path))).mode & 0o777, 0o700);
 
-  const codexHome = await prepareCodexHome({ env });
-  const config = await fs.readFile(path.join(codexHome, "config.toml"), "utf8");
-  assert.equal(config.includes("mcp_servers"), false);
-  assert.equal(config, codexConfigToml());
-  assert.equal(
-    await fs.readlink(path.join(codexHome, "auth.json")),
-    path.join(env.HOME, ".codex", "auth.json")
-  );
-  assert.equal((await fs.stat(codexHome)).mode & 0o777, 0o700);
+  const overrides = codexIsolationArgs();
+  assert.ok(overrides.includes('skills.include_instructions=false'));
+  assert.ok(overrides.includes('orchestrator.mcp.enabled=false'));
+  assert.ok(overrides.includes('sandbox_mode="read-only"'));
 
   const model = {
     id: "codex/test",

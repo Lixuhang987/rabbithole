@@ -55,6 +55,7 @@ function packBranchContext(context, { tokenBudget = DEFAULT_TOKEN_BUDGET } = {})
   const budget = Math.max(2000, Number(tokenBudget) || DEFAULT_TOKEN_BUDGET);
   const charBudget = budget * APPROX_CHARS_PER_TOKEN;
   const rootTitle = normalizePromptText(context?.root_title || context?.rootTitle || "Untitled");
+  const rootQuestion = normalizePromptText(context?.root_question || "");
   const parentTitle = normalizePromptText(context?.parent_title || context?.parentTitle || "Untitled");
   const selectedText = normalizePromptText(context?.selected_text || context?.selectedText || "");
   const blockId = normalizePromptText(context?.anchor?.block?.block_id || context?.block_id || "");
@@ -68,6 +69,7 @@ function packBranchContext(context, { tokenBudget = DEFAULT_TOKEN_BUDGET } = {})
 
   const header = [
     `Root title: ${rootTitle}`,
+    ...(rootQuestion ? ["Original canvas question:", rootQuestion, ""] : []),
     `Parent title: ${parentTitle}`,
     `Lens: ${lensLine}`,
     "Preset instruction:",

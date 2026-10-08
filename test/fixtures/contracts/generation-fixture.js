@@ -5,13 +5,13 @@
 export const generationEventFixtures = [
   { type: "text", delta: "A streamed paragraph." },
   { type: "title", title: "Typed generation" },
+  { type: "search", id: "typed-search", status: "searching", action: "search" },
 ];
 
 /** @type {Provider} */
 export const brainFixture = {
   async *answerBranch(_context, _signal) {
-    yield generationEventFixtures[0];
-    yield generationEventFixtures[1];
+    yield* generationEventFixtures;
   },
   async *authorExplainer(_context, _signal) {
     yield { type: "text", delta: "An explanation." };

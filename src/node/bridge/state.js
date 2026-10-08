@@ -115,6 +115,20 @@ export class BridgeStateStore {
     return this.refreshPromise;
   }
 
+  async replaceBackends(backends) {
+    clearTimeout(this.timer);
+    await this.refreshPromise;
+    if (this.closed) return this.value;
+    clearTimeout(this.timer);
+    this.backends = backends;
+    this.value = {
+      bridge: this.version,
+      agents: [backends.claude.initialState(), backends.codex.initialState()].map(assertAgentState),
+    };
+    for (const listener of this.listeners) listener(this.value);
+    return this.refresh();
+  }
+
   close() {
     this.closed = true;
     clearTimeout(this.timer);

@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createProvider } from "../../src/web/provider/openai-compatible.js";
 import { createBridge } from "../../src/node/bridge/server.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -145,6 +146,19 @@ try {
   claudeAbort.abort();
   await waitForFile(claudeKilledRecord, (value) => value === "SIGTERM\n", "Claude child was not terminated");
 
+  const searchProvider = createProvider({ preset: "subscriptions", base_url: `${bridge.url}/v1`, model: "codex/gpt-fake", web_search: "auto" }, bridge.token);
+  const searchStatus = [];
+  await assert.rejects(async () => {
+    for await (const event of searchProvider.authorExplainer({ question: "SEARCH FAIL" })) searchStatus.push(event);
+  }, (/** @type {any} */ error) => error.code === "web_search_failed" && /Codex configuration/.test(error.message));
+  assert.deepEqual(searchStatus.map((event) => event.status), ["searching"]);
+  const searchAbort = new AbortController();
+  const searchStream = searchProvider.authorExplainer({ question: "SEARCH SLOW" }, searchAbort.signal);
+  assert.equal((await searchStream.next()).value.status, "searching");
+  searchAbort.abort();
+  await assert.rejects(() => searchStream.next(), (/** @type {any} */ error) => error.code === "abort");
+  await searchStream.return();
+
   const codexAbort = new AbortController();
   const slowCodex = startChat(bridge, {
     model: "codex/gpt-fake",
@@ -153,6 +167,11 @@ try {
   }, codexAbort.signal);
   slowCodex.catch(() => {});
   await waitForFile(concurrencyRecord, (value) => Number(value.trim()) >= 1, "Codex slow turn did not start");
+  const restartWhileBusy = await fetch(`${bridge.url}/bridge/restart`, {
+    method: "POST", headers: { Authorization: `Bearer ${bridge.token}`, "Content-Type": "application/json" }, body: "{}",
+  });
+  assert.equal(restartWhileBusy.status, 409);
+  assert.equal((await restartWhileBusy.json()).error.code, "bridge_busy");
   const concurrent = await chat(bridge, {
     model: "codex/gpt-fake",
     messages: [{ role: "user", content: "concurrent turn" }],

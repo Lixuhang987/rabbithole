@@ -27,6 +27,10 @@ export function blobToDataUrl(blob) {
 /** Narrow, browser-free branch wiring: GenerationEvent -> Run -> DocEvent. */
 export async function* generationDocEvents(generation, run, { nodeId, progressFields = {}, answeredFields = {}, beforeComplete = null, complete = null }) {
   for await (const event of generation) {
+    if (event.type === "search") {
+      yield { type: "node_search_status", node_id: nodeId, call_id: event.id, status: event.status, action: event.action, run: { id: run.id } };
+      continue;
+    }
     const progress = run.accept(event, { nodeId, progressFields });
     if (progress) yield progress;
   }
@@ -39,7 +43,7 @@ export async function* generationDocEvents(generation, run, { nodeId, progressFi
 export function rootAnsweredFields(node) {
   if (!node) return {};
   const { id: _id, ...fields } = projectNode(node, "wire");
-  return { ...fields, parent_id: null, origin: null, read: true };
+  return { ...fields, parent_id: null, read: true };
 }
 
 export function branchAnsweredFields(node) {
@@ -58,3 +62,9 @@ export function isAuthError(error) {
 }
 export function resetMarkdownForRun(node) { return node?.markdown && node.status === "pending" ? String(node.markdown) : ""; }
 export function rootQuestionForNode(node) { return String(node?.origin?.[WEB_ROOT_QUESTION] || "").trim(); }
+
+export function rootQuestionMarkdown(question) {
+  // Keep Markdown formatting; the shared renderer escapes raw HTML.
+  const text = String(question || "").trim().replace(/\r\n?/g, "\n");
+  return text ? `> **Original question**\n>\n${text.split("\n").map((line) => `> ${line}`).join("\n")}\n\n` : "";
+}

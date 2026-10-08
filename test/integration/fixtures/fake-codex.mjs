@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import path from "node:path";
 
 const args = process.argv.slice(2);
 if (process.env.FAKE_CODEX_APP_SERVER_ARGS) {
   fs.appendFileSync(process.env.FAKE_CODEX_APP_SERVER_ARGS, `${JSON.stringify({
     args,
     codexHome: process.env.CODEX_HOME,
+    config: fs.existsSync(path.join(process.env.CODEX_HOME || path.join(process.env.HOME, ".codex"), "config.toml")) ? fs.readFileSync(path.join(process.env.CODEX_HOME || path.join(process.env.HOME, ".codex"), "config.toml"), "utf8") : null,
   })}\n`);
+}
+if (args[0] === "mcp") {
+  process.stdout.write(JSON.stringify([{ name: "user_server", enabled: true }]));
+  process.exit(0);
 }
 if (args[0] !== "app-server") process.exit(2);
 
@@ -15,6 +21,7 @@ let turnCounter = 0;
 let active = 0;
 let maxActive = 0;
 const turns = new Map();
+const threads = new Map();
 
 function emit(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`);
@@ -28,22 +35,38 @@ function recordConcurrency() {
 
 function complete(threadId, turnId) {
   if (!turns.has(turnId)) return;
+  const turn = turns.get(turnId);
   turns.delete(turnId);
   active -= 1;
+  if (turn.search) {
+    if (turn.failSearch) {
+      emit({ method: "turn/completed", params: { threadId, turn: { id: turnId, status: "failed", error: { message: "search endpoint returned 403" } } } });
+      return;
+    }
+    emit({ method: "item/completed", params: { threadId, turnId, item: {
+      type: "webSearch", id: `search-${turnId}`, query: "test search", action: { type: "search", query: "test search" },
+      results: [
+        { type: "text_result", ref_id: "turn0search0", url: "https://example.com/search-result", title: "Search [Result]", future_field: true },
+        { type: "text_result", ref_id: "turn0search1", url: "javascript:alert(1)", title: "Unsafe" },
+      ],
+    } } });
+  }
+  const text = turn.answer || "OK";
+  const split = text.includes("cite") ? text.indexOf("cite") + 3 : 1;
   emit({
     method: "item/agentMessage/delta",
-    params: { threadId, turnId, delta: "O" },
+    params: { threadId, turnId, delta: text.slice(0, split) },
   });
   emit({
     method: "item/agentMessage/delta",
-    params: { threadId, turnId, delta: "K" },
+    params: { threadId, turnId, delta: text.slice(split) },
   });
   emit({
     method: "item/completed",
     params: {
       threadId,
       turnId,
-      item: { type: "agentMessage", text: "OK" },
+      item: { type: "agentMessage", text },
     },
   });
   emit({
@@ -126,6 +149,8 @@ process.stdin.on("data", (chunk) => {
       });
     } else if (method === "thread/start") {
       const threadId = `thread-${++threadCounter}`;
+      threads.set(threadId, params);
+      if (process.env.FAKE_CODEX_THREAD_RECORD) fs.appendFileSync(process.env.FAKE_CODEX_THREAD_RECORD, `${JSON.stringify(params)}\n`);
       emit({ id, result: { thread: { id: threadId, ephemeral: true } } });
     } else if (method === "turn/start") {
       const turnId = `turn-${++turnCounter}`;
@@ -144,10 +169,22 @@ process.stdin.on("data", (chunk) => {
       maxActive = Math.max(maxActive, active);
       recordConcurrency();
       const text = params.input?.map((part) => part.text || "").join("\n") || "";
+      const search = process.env.FAKE_CODEX_WEB_SEARCH !== "disabled" && text.includes("SEARCH");
+      const branch = text.includes("SEARCH branch");
+      const answer = text.includes("SEARCH")
+        ? `${branch ? "TITLE: Search branch" : "# Search answer"}\nFound online citeturn0search0. Missing citeturn0search1.`
+        : "OK";
+      if (search) {
+        const item = { type: "agentMessage", id: `commentary-${turnId}`, phase: "commentary", text: "I will search now." };
+        emit({ method: "item/started", params: { threadId: params.threadId, turnId, item } });
+        emit({ method: "item/agentMessage/delta", params: { threadId: params.threadId, turnId, itemId: item.id, delta: item.text } });
+        emit({ method: "item/completed", params: { threadId: params.threadId, turnId, item } });
+      }
+      if (search) emit({ method: "item/started", params: { threadId: params.threadId, turnId, item: { type: "webSearch", id: `search-${turnId}`, query: "", action: null, results: null } } });
       const timer = text.includes("SLOW")
         ? null
         : setTimeout(() => complete(params.threadId, turnId), 20);
-      turns.set(turnId, { threadId: params.threadId, timer });
+      turns.set(turnId, { threadId: params.threadId, timer, search, answer, failSearch: text.includes("SEARCH FAIL") });
     } else if (method === "turn/interrupt") {
       const turn = turns.get(params.turnId);
       if (turn) {

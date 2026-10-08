@@ -7,80 +7,50 @@ import { abortError, BridgeError } from "../errors.js";
 import { buildCodexInput } from "../messages.js";
 import { codexModelEntry } from "../models.js";
 import { startingAgent } from "../state.js";
-import { bridgeDirectory } from "../token.js";
-import { resolveExecutable, terminateChild } from "./isolation.js";
+import { resolveExecutable, terminateChild, runCaptured } from "./isolation.js";
 import { armAgentTurnDeadline } from "../../shared/deadline.js";
 import { createNdjsonReader } from "../../shared/ndjson.js";
 import { openAiUsage, probeAgent } from "./agent.js";
+import { SearchCitations, searchSources } from "./codex-search.js";
 
 const INITIALIZE_TIMEOUT_MS = 20_000;
 const REQUEST_TIMEOUT_MS = 20_000;
 const INSTALL_FIX = "npm install -g @openai/codex";
 const LOGIN_FIX = "codex login";
 
-export function codexConfigToml({ suffix = "" } = {}) {
+// Overlay only execution capabilities; provider, authentication and search remain user-owned.
+export function codexIsolationArgs() {
   return [
-    'sandbox_mode = "read-only"',
-    'approval_policy = "never"',
-    'web_search = "disabled"',
-    "",
-    suffix ? suffix.trim() : "",
-    "",
-    "[features]",
-    "# Required: otherwise Codex exposes the capable multi_agent_v1 tool.",
-    "multi_agent = false",
-    "",
-    "[skills]",
-    "include_instructions = false",
-    "",
-    "[skills.bundled]",
-    "enabled = false",
-    "",
-    "[tools.experimental_request_user_input]",
-    "enabled = false",
-    "",
-    "[orchestrator.skills]",
-    "enabled = false",
-    "",
-    "[orchestrator.mcp]",
-    "enabled = false",
-    "",
-  ].join("\n");
+    'sandbox_mode="read-only"',
+    'approval_policy="never"',
+    'features.multi_agent=false',
+    'features.multi_agent_v2=false',
+    'agents.enabled=false',
+    'features.goals=false',
+    'features.plugins=false',
+    'features.remote_plugin=false',
+    'skills.include_instructions=false',
+    'skills.bundled.enabled=false',
+    'tools.experimental_request_user_input.enabled=false',
+    'orchestrator.skills.enabled=false',
+    'orchestrator.mcp.enabled=false',
+  ].flatMap((override) => ["-c", override]);
 }
 
-export async function prepareCodexHome({
-  env = process.env,
-  configSuffix = "",
-} = {}) {
-  const directory = bridgeDirectory(env);
-  const codexHome = path.join(directory, "codex-home");
-  const configPath = path.join(codexHome, "config.toml");
-  const authPath = path.join(codexHome, "auth.json");
-  const userAuthPath = path.join(env.HOME || os.homedir(), ".codex", "auth.json");
-
-  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
-  await fs.chmod(directory, 0o700);
-  await fs.mkdir(codexHome, { recursive: true, mode: 0o700 });
-  await fs.chmod(codexHome, 0o700);
-  await fs.writeFile(configPath, codexConfigToml({ suffix: configSuffix }), {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  await fs.chmod(configPath, 0o600);
-
-  let currentTarget;
-  try {
-    currentTarget = await fs.readlink(authPath);
-  } catch (error) {
-    if (error?.code !== "ENOENT" && error?.code !== "EINVAL") throw error;
+async function launchArgs(executable, { env, cwd }) {
+  const overrides = codexIsolationArgs();
+  // Empty tables merge with user configuration, so disable each configured server.
+  const result = await runCaptured(executable, ["mcp", ...overrides, "list", "--json"], { env, cwd });
+  let servers;
+  try { servers = JSON.parse(result.stdout); } catch { /* Fail closed below. */ }
+  if (result.code !== 0 || !Array.isArray(servers) || servers.some((server) => typeof server?.name !== "string")) {
+    throw new BridgeError("Could not read Codex MCP configuration for isolation.", "turn_failed", 500);
   }
-  if (currentTarget !== userAuthPath) {
-    await fs.unlink(authPath).catch((error) => {
-      if (error?.code !== "ENOENT") throw error;
-    });
-    await fs.symlink(userAuthPath, authPath);
+  if (servers.length) {
+    const entries = servers.map((server) => `${JSON.stringify(server.name)}={enabled=false}`);
+    overrides.push("-c", `mcp_servers={${entries.join(",")}}`);
   }
-  return codexHome;
+  return ["app-server", ...overrides, "--listen", "stdio://"];
 }
 
 function turnError(value) {
@@ -119,6 +89,21 @@ function findDefaultMode(value) {
 export function parseCodexEvent(message) {
   const method = message?.method;
   const params = message?.params || {};
+  if ((method === "item/started" || method === "item/completed") && params.item?.type === "webSearch") {
+    return {
+      type: "search",
+      threadId: params.threadId,
+      turnId: params.turnId,
+      id: params.item.id,
+      status: method === "item/started" ? "searching" : "completed",
+      action: params.item.action?.type || "search",
+      query: typeof params.item.query === "string" ? params.item.query : "",
+      sources: searchSources(params.item.results),
+    };
+  }
+  if (method === "item/started" && params.item?.type === "agentMessage") {
+    return { type: "message_started", threadId: params.threadId, turnId: params.turnId, itemId: params.item.id, phase: params.item.phase };
+  }
   if (method === "turn/started") {
     return {
       type: "turn_started",
@@ -129,6 +114,7 @@ export function parseCodexEvent(message) {
   if (method === "item/agentMessage/delta" && typeof params.delta === "string") {
     return {
       type: "delta",
+      itemId: params.itemId,
       threadId: params.threadId,
       turnId: params.turnId,
       text: params.delta,
@@ -137,6 +123,8 @@ export function parseCodexEvent(message) {
   if (method === "item/completed" && params.item?.type === "agentMessage") {
     return {
       type: "completed_text",
+      itemId: params.item.id,
+      phase: params.item.phase,
       threadId: params.threadId,
       turnId: params.turnId,
       text: typeof params.item.text === "string" ? params.item.text : "",
@@ -198,7 +186,9 @@ export class CodexAppServer {
     if (!this.executable) {
       throw new BridgeError("Codex is not installed", "agent_missing", 503);
     }
-    const child = spawn(this.executable, ["app-server", "--listen", "stdio://"], {
+    const args = await launchArgs(this.executable, { env: this.env, cwd: this.cwd });
+    if (this.closed) throw new BridgeError("Codex is shutting down.", "turn_failed", 500);
+    const child = spawn(this.executable, args, {
       cwd: this.cwd,
       env: this.env,
       stdio: ["pipe", "pipe", "pipe"],
@@ -268,6 +258,7 @@ export class CodexAppServer {
     if (!event?.threadId) return;
     const turn = this.turns.get(event.threadId);
     if (!turn || (event.turnId && turn.turnId && event.turnId !== turn.turnId)) return;
+    if (turn.aborted && event.type !== "turn_started" && event.type !== "turn_completed") return;
     if (event.type === "turn_started") {
       turn.turnId = event.turnId || turn.turnId;
       if (!turn.started) {
@@ -275,37 +266,56 @@ export class CodexAppServer {
         turn.resolveStarted();
       }
       if (turn.aborted) void this.interrupt(turn);
+    } else if (event.type === "message_started") {
+      turn.messagePhases.set(event.itemId, event.phase);
     } else if (event.type === "delta") {
+      if (turn.messagePhases.get(event.itemId) === "commentary") return;
       turn.turnId = event.turnId || turn.turnId;
-      turn.streamedText += event.text;
+      turn.rawText += event.text;
       try {
-        turn.onDelta(event.text);
+        const text = turn.citations.push(event.text);
+        if (text) turn.onDelta(text);
       } catch (error) {
         turn.reject(error);
       }
     } else if (event.type === "completed_text") {
+      if (event.phase === "commentary" || turn.messagePhases.get(event.itemId) === "commentary") return;
       turn.authoritativeText = event.text;
-      if (event.text.startsWith(turn.streamedText)) {
-        const suffix = event.text.slice(turn.streamedText.length);
+      if (event.text.startsWith(turn.rawText)) {
+        const suffix = event.text.slice(turn.rawText.length);
         if (suffix) {
-          turn.streamedText += suffix;
-          turn.onDelta(suffix);
+          turn.rawText += suffix;
+          const text = turn.citations.push(suffix);
+          if (text) turn.onDelta(text);
         }
       }
+    } else if (event.type === "search") {
+      turn.citations.add(event.sources);
+      if (event.status === "searching") turn.searches.add(event.id);
+      else turn.searches.delete(event.id);
+      const { threadId: _threadId, turnId: _turnId, ...search } = event;
+      turn.onSearch(search);
+      const text = turn.citations.push("");
+      if (text) turn.onDelta(text);
     } else if (event.type === "usage") {
       turn.usage = event.usage || turn.usage;
     } else if (event.type === "turn_completed") {
       this.turns.delete(event.threadId);
       if (event.status === "completed" && !event.error) {
+        const tail = turn.citations.finish();
+        if (tail) turn.onDelta(tail);
         turn.resolve({
-          text: turn.authoritativeText || turn.streamedText,
+          text: turn.citations.render(turn.authoritativeText || turn.rawText),
           usage: turn.usage,
           finishReason: "stop",
         });
       } else if (event.status === "interrupted" && turn.aborted) {
         turn.reject(abortError(turn.signal));
       } else {
-        turn.reject(turnError(event.error || event.status));
+        const failure = turnError(event.error || event.status);
+        turn.reject(failure.code === "turn_failed" && (turn.searches.size || /search|web\.run/i.test(event.error?.message || ""))
+          ? new BridgeError("Codex web search failed. Retry or check Web search in your Codex configuration.", "web_search_failed", 502)
+          : failure);
       }
     }
   }
@@ -425,6 +435,7 @@ export class CodexAppServer {
     reasoningEffort,
     signal,
     onDelta,
+    onSearch = () => {},
   }) {
     const codexInput = buildCodexInput(messages);
     if (codexInput.imagePartCount !== codexInput.imageCount) {
@@ -470,7 +481,11 @@ export class CodexAppServer {
         turnId: null,
         signal,
         onDelta,
-        streamedText: "",
+        onSearch,
+        citations: new SearchCitations(),
+        searches: new Set(),
+        messagePhases: new Map(),
+        rawText: "",
         authoritativeText: "",
         usage: undefined,
         resolve: resolveTurn,
@@ -549,17 +564,14 @@ export class CodexBackend {
     env = process.env,
     cwd,
     bridgeVersion,
-    configSuffix = "",
   }) {
-    const codexHome = await prepareCodexHome({ env, configSuffix });
-    const codexEnv = { ...env, CODEX_HOME: codexHome };
     return new CodexBackend({
       executable: resolveExecutable(
         "codex",
         env.RABBITHOLE_BRIDGE_CODEX_BIN,
         env
       ),
-      env: codexEnv,
+      env,
       cwd,
       bridgeVersion,
     });
@@ -616,10 +628,10 @@ export class CodexBackend {
   // The route (server.js handleChat) validates model, image capability, and
   // reasoning effort against the live catalog it fetches from this backend
   // immediately before calling generate — no re-validation here.
-  async generate({ model, messages, reasoningEffort, signal, onDelta = () => {} }) {
+  async generate({ model, messages, reasoningEffort, signal, onDelta = () => {}, onSearch = () => {} }) {
     if (signal?.aborted) throw abortError(signal);
     await this.appServer.ensureStarted();
-    return this.appServer.turn({ model, messages, reasoningEffort, signal, onDelta });
+    return this.appServer.turn({ model, messages, reasoningEffort, signal, onDelta, onSearch });
   }
 
   close() {

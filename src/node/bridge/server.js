@@ -86,7 +86,7 @@ function requestError(error) {
   return bridgeError(error);
 }
 
-/** @param {{port?: number, env?: NodeJS.ProcessEnv, version?: string, logger?: {warn?: (...args: any[]) => void}, newToken?: boolean, stateRefreshMs?: number, codexConfigSuffix?: string}} [options] */
+/** @param {{port?: number, env?: NodeJS.ProcessEnv, version?: string, logger?: {warn?: (...args: any[]) => void}, newToken?: boolean, stateRefreshMs?: number}} [options] */
 export async function createBridge({
   port = 41414,
   env = process.env,
@@ -94,7 +94,6 @@ export async function createBridge({
   logger,
   newToken = false,
   stateRefreshMs,
-  codexConfigSuffix = "",
 } = {}) {
   const { token, created: tokenCreated } = await readOrCreateBridgeToken({
     env,
@@ -112,7 +111,6 @@ export async function createBridge({
       env,
       cwd: codexCwd,
       bridgeVersion: version,
-      configSuffix: codexConfigSuffix,
     });
   } catch (error) {
     await Promise.allSettled([
@@ -130,9 +128,40 @@ export async function createBridge({
   });
   let actualPort = port;
   let closing = false;
+  let restartPromise = null;
   const activeControllers = new Set();
 
+  async function restart() {
+    if (closing) throw new BridgeError("Bridge is shutting down.", "bridge_restarting", 503);
+    if (restartPromise) return restartPromise;
+    if (activeControllers.size) {
+      throw new BridgeError("Wait for current answers to finish, then restart the bridge.", "bridge_busy", 409);
+    }
+    restartPromise = (async () => {
+      // Construct replacements before closing the working backends.
+      const nextClaude = ClaudeBackend.create({ env, cwd: claudeCwd });
+      const nextCodex = await CodexBackend.create({ env, cwd: codexCwd, bridgeVersion: version });
+      await state.refreshPromise;
+      if (closing) {
+        await Promise.allSettled([nextClaude.close(), nextCodex.close()]);
+        throw new BridgeError("Bridge is shutting down.", "bridge_restarting", 503);
+      }
+      await Promise.allSettled([claude.close(), codex.close()]);
+      claude = nextClaude;
+      codex = nextCodex;
+      return state.replaceBackends({ claude, codex });
+    })().finally(() => { restartPromise = null; });
+    return restartPromise;
+  }
+
+  function assertAvailable() {
+    if (closing || restartPromise) {
+      throw new BridgeError("Bridge is restarting. Try again shortly.", "bridge_restarting", 503);
+    }
+  }
+
   async function models() {
+    assertAvailable();
     const settled = await Promise.allSettled([
       claude.listModels(),
       codex.listModels(),
@@ -143,6 +172,7 @@ export async function createBridge({
   }
 
   async function handleChat(req, res, body) {
+    assertAvailable();
     let streamStarted = false;
     let clientAborted = false;
     let timedOut = false;
@@ -200,6 +230,7 @@ export async function createBridge({
       }
 
       const backend = route.backend === "claude" ? claude : codex;
+
       const catalog = await backend.listModels();
       const modelEntry = catalog.find((entry) => entry.id === body.model);
       if (!modelEntry) {
@@ -229,6 +260,11 @@ export async function createBridge({
         messages: body.messages,
         reasoningEffort: effort,
         signal: controller.signal,
+        onSearch(event) {
+          if (!stream) return;
+          startStream();
+          sseData(res, { object: "rabbithole.search", ...event });
+        },
         onDelta(text) {
           if (!stream || !text) return;
           startStream();
@@ -361,6 +397,8 @@ export async function createBridge({
           object: "list",
           data: await models(),
         });
+      } else if (req.method === "POST" && url.pathname === "/bridge/restart") {
+        sendJson(res, 200, { ok: true, state: await restart() });
       } else if (req.method === "POST" && url.pathname === "/v1/chat/completions") {
         await handleChat(req, res, body);
       } else {

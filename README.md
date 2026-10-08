@@ -63,6 +63,7 @@ Useful references:
 - [Generated module map](docs/generated/module-map.md)
 - [Generated command map](docs/generated/commands.md)
 - [Testing model](docs/05-contribute.md)
+- [Deployment and bridge operations](docs/06-deploy.md)
 - [Compatibility contract](docs/compatibility.md)
 - [Design system](docs/design-system.md)
 - [Historical proposals](docs/proposals/README.md)

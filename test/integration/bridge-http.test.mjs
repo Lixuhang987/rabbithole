@@ -6,6 +6,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createProvider } from "../../src/web/provider/openai-compatible.js";
+import { DirectRabbitholeHost, createPendingHoleFromQuestion } from "../../src/web/transport/direct-host.js";
+import { createPortableProjection } from "../../src/core/portable-projection.js";
+import { toPersistedHole } from "../../src/core/schema.js";
+import { createSnapshotProjection } from "../../src/core/snapshot-projection.js";
+import { applyServerEvent } from "../../src/ui/store/apply-server-event.js";
 import { createBridge } from "../../src/node/bridge/server.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -16,9 +22,12 @@ const home = path.join(temporaryRoot, "home");
 const data = path.join(temporaryRoot, "data");
 const claudeRecord = path.join(temporaryRoot, "claude.ndjson");
 const codexRecord = path.join(temporaryRoot, "codex.ndjson");
+const codexThreadRecord = path.join(temporaryRoot, "codex-threads.ndjson");
 const codexArgsRecord = path.join(temporaryRoot, "codex-args.ndjson");
 await fs.mkdir(path.join(home, ".codex"), { recursive: true });
 await fs.writeFile(path.join(home, ".codex", "auth.json"), "{}\n");
+const userConfig = 'web_search = "cached"\n[features]\nstandalone_web_search = false\n';
+await fs.writeFile(path.join(home, ".codex", "config.toml"), userConfig);
 
 /** @param {any} bridge @param {{method?: string, pathname?: string, headers?: Record<string, any>, body?: any}} [options] */
 function request(bridge, {
@@ -103,11 +112,13 @@ try {
     env: {
       ...process.env,
       HOME: home,
+      CODEX_HOME: undefined,
       RABBITHOLE_DIR: data,
       RABBITHOLE_BRIDGE_CLAUDE_BIN: FAKE_CLAUDE,
       RABBITHOLE_BRIDGE_CODEX_BIN: FAKE_CODEX,
       FAKE_CLAUDE_RECORD: claudeRecord,
       FAKE_CODEX_RECORD: codexRecord,
+      FAKE_CODEX_THREAD_RECORD: codexThreadRecord,
       FAKE_CODEX_APP_SERVER_ARGS: codexArgsRecord,
       CLAUDE_CONFIG_DIR: path.join(temporaryRoot, "must-not-be-used"),
     },
@@ -329,6 +340,56 @@ try {
     detail: "high",
   });
 
+  const saved = [];
+  const searchEvents = [];
+  const provider = createProvider({ preset: "subscriptions", base_url: `${bridge.url}/v1`, model: "codex/gpt-fake", web_search: "auto" }, bridge.token);
+  const hole = createPendingHoleFromQuestion("SEARCH current information");
+  const host = new DirectRabbitholeHost({ hole, provider, store: { saveHole: async (value) => saved.push(structuredClone(value)) } });
+  const uiNode = { id: hole.root_id, status: "pending", markdown: "", extensions: {} };
+  host.onEvent = (event) => {
+    if (event.type === "node_search_status") {
+      searchEvents.push(event);
+      if (event.node_id === uiNode.id) {
+        applyServerEvent({ nodes: { [uiNode.id]: uiNode } }, event);
+        assert.equal(uiNode._searchStatus, event.status === "searching" ? "searching" : null);
+      }
+    }
+  };
+  await host.runRootAnswer(hole.root_id, "SEARCH current information", new AbortController());
+  assert.deepEqual(searchEvents.map((event) => event.status), ["searching", "completed"], "native search lifecycle reaches the browser host");
+  assert.equal(saved.length, 1);
+  const markdown = saved[0].nodes[0].markdown;
+  assert.ok(markdown.startsWith("> **Original question**\n>\n> SEARCH current information\n\n# Search answer"), "the original question precedes the answer, without Codex commentary");
+  assert.match(markdown, /https:\/\/example\.com\/search-result/);
+  assert.equal(markdown.includes(""), false, "fragmented native citations become durable Markdown");
+  assert.equal(markdown.includes("javascript:"), false);
+  assert.match(markdown, /source unavailable/i);
+  assert.equal(JSON.stringify(saved[0]).includes("turn0search"), false, "ephemeral backend refs are not persisted");
+  assert.equal(JSON.stringify(saved[0]).includes("_searchStatus"), false);
+  const persisted = toPersistedHole(saved[0]);
+  const portable = createPortableProjection(persisted, {});
+  assert.equal(portable.hole.nodes[0].markdown, markdown);
+  assert.equal(createSnapshotProjection(persisted, persisted.view_state, {}).hole.nodes[0].markdown, markdown);
+  const threadCalls = () => fs.readFile(codexThreadRecord, "utf8").then((raw) => raw.trim().split("\n").map((line) => JSON.parse(line)));
+  assert.equal((await threadCalls()).at(-1).config, undefined);
+  const branchResult = await host.handleBrowserEvent({ type: "branch_request", node_id: "search-branch", parent_id: hole.root_id, question: "SEARCH branch", selected_text: "Found online", position: { x: 100, y: 100 } });
+  assert.equal(branchResult.ok, true);
+  const branchDeadline = Date.now() + 5000;
+  while (host.state.nodes.get("search-branch")?.status !== "answered" && Date.now() < branchDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
+  const branchNode = host.state.nodes.get("search-branch");
+  assert.equal(branchNode.status, "answered");
+  assert.equal(branchNode.title, "Search branch");
+  assert.match(branchNode.markdown, /https:\/\/example\.com\/search-result/);
+  assert.equal(branchNode.markdown.includes("TITLE:"), false);
+  assert.equal(branchNode.markdown.includes("I will search"), false);
+  assert.deepEqual(searchEvents.map((event) => event.status), ["searching", "completed", "searching", "completed"]);
+  const off = createProvider({ preset: "subscriptions", base_url: `${bridge.url}/v1`, model: "codex/gpt-fake", web_search: "off" }, bridge.token);
+  for await (const _event of off.authorExplainer({ question: "No search" })) {}
+  assert.equal((await threadCalls()).at(-1).config, undefined);
+  for await (const _event of provider.authorDocument({ markdown: "Original source" })) {}
+  assert.equal((await threadCalls()).at(-1).config, undefined, "source authoring inherits Codex search configuration too");
+  await host.dispose();
+
   const noImages = await chat(bridge, {
     model: "codex/gpt-second",
     messages: [{
@@ -343,14 +404,28 @@ try {
   assert.equal(noImages.status, 400);
   assert.equal(noImages.json.error.code, "model_no_images");
 
-  const configPath = path.join(data, "codex-home", "config.toml");
-  const config = await fs.readFile(configPath, "utf8");
-  assert.equal(config.includes("mcp_servers"), false);
-  assert.equal(await fs.readlink(path.join(data, "codex-home", "auth.json")),
-    path.join(home, ".codex", "auth.json"));
-  const codexLaunch = JSON.parse((await fs.readFile(codexArgsRecord, "utf8")).trim().split("\n")[0]);
-  assert.deepEqual(codexLaunch.args, ["app-server", "--listen", "stdio://"]);
-  assert.equal(codexLaunch.codexHome, path.join(data, "codex-home"));
+  const codexLaunch = (await fs.readFile(codexArgsRecord, "utf8")).trim().split("\n").map((line) => JSON.parse(line)).find((call) => call.args[0] === "app-server");
+  assert.equal(codexLaunch.codexHome, undefined);
+  assert.ok(codexLaunch.args.includes('skills.include_instructions=false'));
+  assert.ok(codexLaunch.args.includes('mcp_servers={"user_server"={enabled=false}}'));
+  assert.equal(codexLaunch.args.some((arg) => /web_search/.test(arg)), false);
+  assert.equal(await fs.readFile(path.join(home, ".codex", "config.toml"), "utf8"), userConfig);
+  const changedConfig = userConfig.replace('"cached"', '"live"');
+  await fs.writeFile(path.join(home, ".codex", "config.toml"), changedConfig);
+  const previousToken = bridge.token;
+  const unauthorizedRestart = await request(bridge, { method: "POST", pathname: "/bridge/restart", headers: { "Content-Type": "application/json" }, body: "{}" });
+  assert.equal(unauthorizedRestart.status, 401);
+  const restarted = await request(bridge, { method: "POST", pathname: "/bridge/restart", headers: authHeaders(bridge, { "Content-Type": "application/json" }), body: "{}" });
+  assert.equal(restarted.status, 200);
+  assert.equal(restarted.json.ok, true);
+  assert.equal(restarted.json.state.agents.find((agent) => agent.id === "codex").state, "ready");
+  assert.equal(bridge.token, previousToken);
+  const launches = (await fs.readFile(codexArgsRecord, "utf8")).trim().split("\n").map((line) => JSON.parse(line)).filter((call) => call.args[0] === "app-server");
+  assert.equal(launches.length, 2);
+  assert.equal(launches.at(-1).config, changedConfig, "new CLI process reads updated user configuration");
+  const afterRestart = await chat(bridge, { model: "codex/gpt-fake", messages: [{ role: "user", content: "After restart" }], stream: false });
+  assert.equal(afterRestart.status, 200);
+  assert.equal(afterRestart.json.choices[0].message.content, "OK");
   await assert.rejects(fs.access(path.join(data, "codex-models.json")));
 } finally {
   await bridge?.close();

@@ -516,7 +516,7 @@ function handleServer(msg) {
       if (p && p.bodyEl) upgradeMarks(p.bodyEl, node.id);
     } else if (result.type === "node_progress") {
       if (result.invalidated.has("stream")) scheduleStreamRender(node, result.firstChunk);
-    } else if (result.type === "node_work_state") {
+    } else if (result.type === "node_work_state" || result.type === "node_search_status") {
       if (!result.invalidated.has("status")) return;
       cancelQueuedStreamRender(node.id);
       renderStreamSurfaces(node, true);

@@ -114,6 +114,22 @@ export function initAskFollowups() {
     autoGrowEl(askText, 110);
     updateSelectionDraftSurface();
   });
+  askScope.listen(askText, "copy", function (e) {
+    if (
+      e.defaultPrevented ||
+      !e.clipboardData ||
+      askText.value !== "" ||
+      !selectionDraft ||
+      !ask.classList.contains("visible")
+    )
+      return;
+    // Opening the composer moves focus away from the native document selection.
+    // Its empty editor still represents the highlighted subject for Copy.
+    const text = selectionDraft.range ? selectionDraft.range.toString() : selectionDraft.selectedText;
+    if (!text) return;
+    e.clipboardData.setData("text/plain", text);
+    e.preventDefault();
+  });
   askScope.listen(ask, "transitionend", function (e) {
     if (e.target === ask && askPosition) askPosition.update();
   });

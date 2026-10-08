@@ -457,7 +457,11 @@ export function buildLoading(node) {
       ? "Waiting for previous answer"
       : node && node.delegated
         ? "Working in sub-agent…"
-        : "Thinking") +
+        : node?._searchStatus === "reading"
+          ? "Reading page…"
+          : node?._searchStatus
+            ? "Searching the web…"
+            : "Thinking") +
     "</span>" +
     '<span class="ll-stalled">Saved — waiting for the agent</span>' +
     '<span class="ll-closed">Saved — answered when you reopen this hole</span>' +
@@ -526,7 +530,13 @@ export function fillStreaming(dc, node, surfaceKey) {
   st.className = "stream-status";
   st.innerHTML =
     '<span class="shimmer-text ll-live">' +
-    (node && node.delegated ? "Working in sub-agent…" : "Writing") +
+    (node && node.delegated
+      ? "Working in sub-agent…"
+      : node?._searchStatus === "reading"
+        ? "Reading page…"
+        : node?._searchStatus
+          ? "Searching the web…"
+          : "Writing") +
     "</span>" +
     '<span class="ll-stalled">Paused — waiting for the agent</span>' +
     '<span class="ll-closed">Saved — answered in full when you reopen this hole</span>' +

@@ -28,6 +28,28 @@ function assertNoRawHtmlLeak(html) {
 async function runMarkdownFixtures() {
   const fixtures = [
     {
+      name: "Chinese double-star emphasis next to punctuation",
+      markdown: [
+        "这是**重点（解释）**后面的内容，含**“引号”**和**重点：**说明。",
+        "嵌套**重点（*说明*）**文字，普通 **English bold**。",
+        "代码 `**重点（解释）**`，转义 \\*\\*重点\\*\\*，未闭合 **重点。",
+        "",
+        "```text",
+        "**重点（解释）**",
+        "```",
+      ].join("\n"),
+      assert(html) {
+        assert(html.includes("这是<strong>重点（解释）</strong>后面的内容"));
+        assert(html.includes("<strong>“引号”</strong>"));
+        assert(html.includes("<strong>重点：</strong>说明"));
+        assert(html.includes("<strong>重点（<em>说明</em>）</strong>文字"));
+        assert(html.includes("<strong>English bold</strong>"));
+        assert(html.includes("<code>**重点（解释）**</code>"));
+        assert(html.includes("转义 **重点**，未闭合 **重点。"));
+        assert.equal(count(html, "**重点（解释）**"), 2);
+      },
+    },
+    {
       name: "all four math delimiters",
       markdown: [
         "Inline dollar $a+b$ and paren \\(c+d\\).",

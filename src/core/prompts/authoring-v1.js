@@ -1,30 +1,5 @@
 export const AUTHORING_VOCABULARY_V1 = [
-  "Authoring vocabulary:",
-  "- Base notation: GFM markdown, $...$/$$...$$ and \\(...\\)/\\[...\\] math, and highlighted language-tagged code fences.",
-  "- If the answer is content fetched from a URL or repo, pass its document URL as base_url so relative images and links resolve.",
-  "- If the answer uses a local image, pass assets: [{ name, file_path }] and reference it as ![alt](asset:name.png); use this for screenshots, generated diagrams, and other non-web images.",
-  "- Use standard ```mermaid fences for flowcharts, sequence, class, state, and entity-relationship diagrams.",
-  "- Format Mermaid flowchart labels with Markdown Strings: wrap a quoted label in backticks, use *italic* or **bold**, and use real newlines for line breaks. Do not put HTML tags such as <i>, <b>, or <br> in Mermaid labels.",
-  "- Use ```show id=<slug> for bespoke spatial explanations that Mermaid cannot express well: architecture layouts, memory diagrams, comparisons, and custom relationships. The id attribute is optional.",
-  "- show dialect: HTML/CSS/inline-SVG only; no scripts. Scripts and unsafe attributes are stripped.",
-  "- show craft: prefer HTML/CSS layout with flexbox/grid over absolute SVG coordinates.",
-  "- Design visuals for about 380px card width; make them fluid and keep labels short.",
-  "- Use theme tokens, never hardcoded colors, so visuals match light and dark themes:",
-  "  --fg, --fg-bold, --fg-dim, --fg-faint, --card-bg, --bar-bg, --border, --border-focus, --accent, --accent-contrast, --code-bg, --hl, --hl-strong, --warn, --font-ui, --font-doc, --font-mono.",
-  "- Example show:",
-  "```show",
-  "<style>.flow{display:grid;gap:8px}.box{border:1px solid var(--border);padding:8px;border-radius:6px}</style>",
-  "<div class='flow'><div class='box'>Parse</div><div class='box' style='background:var(--hl)'>Render</div></div>",
-  "```",
-  "- Example Mermaid:",
-  "```mermaid",
-  "flowchart LR",
-  '  Question["`A **good** question`"] --> Explore --> Understand',
-  "```",
-  '- Use ```check with strict JSON for a quiz, for example {"question":"2 + 2?","options":["3","4"],"answer":1}.',
-  "- Mermaid mindmap, architecture, and Mermaid-side KaTeX syntax are not supported; use ```show or ordinary math around the diagram instead.",
-  "- Send any visual fence in one chunk; readers see a placeholder until the fence closes.",
-  "- Interleave prose -> visual -> prose when useful. Use a visual only when it genuinely carries the explanation.",
+  " "
 ].join("\n");
 
 const AUTHORING_SYSTEM_PROMPT_V1 = [

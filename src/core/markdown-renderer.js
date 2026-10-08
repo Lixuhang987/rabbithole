@@ -1,4 +1,4 @@
-import { Marked } from "marked";
+import { Marked, Tokenizer } from "marked";
 import katex from "katex";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
@@ -45,6 +45,14 @@ const BACKSLASH_CLOSE_INLINE = "\\)";
 const BACKSLASH_CLOSE_DISPLAY = "\\]";
 const TRAILING_NEWLINE = /\n$/;
 const BLOCK_MATH_START = /(?:^|\n) {0,3}(?:\$\$(?!\$)|\\\[)/;
+
+/** Preserve offsets while relaxing punctuation boundaries for CJK strong text.
+ * @param {string} source
+ */
+function maskCjkPunctuation(source) {
+  return source.replace(/[\u2000-\u206f\u3000-\u303f\uff00-\uffef]/g,
+    (character) => /[\p{P}\p{S}]/u.test(character) ? "a" : character);
+}
 // GFM accepts either one or two tildes for deletion. A lone tilde is far more
 // commonly approximation notation in pasted technical prose (`~77%`,
 // `~1,000`) and can otherwise pair with a distant tilde to delete whole
@@ -441,6 +449,18 @@ export function createMarkdownRenderer({ encodeBase64 = defaultEncodeBase64, res
   /** @returns {import("marked").TokenizerObject} */
   function buildTokenizer() {
     return {
+      emStrong(src, maskedSrc, prevChar) {
+        const native = Tokenizer.prototype.emStrong.call(this, src, maskedSrc, prevChar);
+        if (native) return native;
+        if (!src.startsWith("**") || src.startsWith("***")) return undefined;
+        const relaxed = Tokenizer.prototype.emStrong.call(this,
+          maskCjkPunctuation(src), maskCjkPunctuation(maskedSrc), maskCjkPunctuation(prevChar || ""));
+        if (relaxed?.type !== "strong") return undefined;
+        const raw = src.slice(0, relaxed.raw.length);
+        const text = raw.slice(2, -2);
+        if (!/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text)) return undefined;
+        return { type: "strong", raw, text, tokens: this.lexer.inlineTokens(text) };
+      },
       del(src) {
         // Marked tokenizer overrides fall back to the native tokenizer only
         // when they return false. Delegate double tildes so Marked remains the

@@ -19,6 +19,7 @@ import {
   resetMarkdownForRun,
   rootAnsweredFields,
   rootQuestionForNode,
+  rootQuestionMarkdown,
   titleFromMarkdown,
 } from "./direct-host-values.js";
 
@@ -54,6 +55,10 @@ export class DirectHostGeneration extends DirectHostPdf {
   }
 
   dispatch(event, options) {
+    if (event.type === "node_search_status") {
+      this.emit(event);
+      return {};
+    }
     const effects = this.engine.dispatch(event, options);
     this.state = this.engine.state;
     return effects;
@@ -117,7 +122,8 @@ export class DirectHostGeneration extends DirectHostPdf {
     }
 
     const provider = this.provider;
-    const run = this.createRun(node, node.title || "Untitled");
+    const run = this.createRun({ ...node, markdown: "" }, node.title || "Untitled");
+    const questionMarkdown = rootQuestionMarkdown(question);
     const generation = provider.authorExplainer({ question }, controller.signal);
     for await (const docEvent of generationDocEvents(generation, run, {
       nodeId,
@@ -134,6 +140,9 @@ export class DirectHostGeneration extends DirectHostPdf {
       },
     })) {
       if (controller.signal.aborted || !this.isLivePending(nodeId)) return;
+      if (docEvent.type === "node_progress" || docEvent.type === "node_answered") {
+        docEvent.markdown = questionMarkdown + docEvent.markdown;
+      }
       this.dispatch(docEvent);
       if (docEvent.type === "node_progress") {
         const current = this.state.nodes.get(nodeId);
@@ -146,7 +155,7 @@ export class DirectHostGeneration extends DirectHostPdf {
     this.title = title;
     const finalNode = this.state.nodes.get(nodeId);
     this.abortByNode.delete(nodeId);
-    this.emit(buildNodeAnsweredEvent(finalNode, { parent_id: null, origin: null }));
+    this.emit(buildNodeAnsweredEvent(finalNode, { parent_id: null }));
     await this.flushSave();
     await this.onRootAnswered?.(finalNode);
   }
@@ -190,7 +199,7 @@ export class DirectHostGeneration extends DirectHostPdf {
       }
     } catch (error) {
       if ((!context.attachment && !context.attachments?.length) || controller.signal.aborted) throw error;
-      if (normalizeProviderError(error).code === "model_no_images") throw error;
+      if (["model_no_images", "web_search_failed"].includes(normalizeProviderError(error).code)) throw error;
       const hadPastedImages = !!context.attachments?.some((attachment) => attachment?.source === "pasted_image");
       delete context.attachment;
       delete context.attachments;
@@ -319,7 +328,7 @@ export class DirectHostGeneration extends DirectHostPdf {
     }
     if (isAuthError(normalized)) {
       this.onAuthRequired?.({ node, error: normalized, retry: () => this.handleRetry({ node_id: nodeId }) });
-    } else if (["network", "agent_signed_out", "agent_missing", "model_unknown", "model_no_images", "payload_too_large", "turn_failed"].includes(normalized.code)) {
+    } else if (["network", "agent_signed_out", "agent_missing", "model_unknown", "model_no_images", "payload_too_large", "turn_failed", "web_search_failed"].includes(normalized.code)) {
       this.onProviderFailure?.({
         node,
         error: normalized,
@@ -375,6 +384,7 @@ export class DirectHostGeneration extends DirectHostPdf {
     }));
     return {
       root_title: root?.title || this.state.title || "Untitled",
+      root_question: rootQuestionForNode(root),
       parent_id: parent?.id || null,
       parent_title: parent?.title || "Untitled",
       parent_markdown: parent?.markdown || "",

@@ -20,6 +20,7 @@ import {
   nextBridgeReconnectDelay,
   pairingFromInput,
   pingBridge,
+  restartBridge,
   planLabel,
   reasoningLabel,
 } from "../provider/bridge-catalog.js";
@@ -88,6 +89,8 @@ export function createModelSettings({
   let lastBridgeRenderKey = "";
   let bridgeRecoveryAgent = "";
   let bridgeUnauthorized = false;
+  let bridgeRestarting = false;
+  let bridgeRestartStatus = "";
   let pairingSetupPending = false;
   let pairingSetupComplete = null;
   let conditionalComboboxes = [];
@@ -252,6 +255,8 @@ export function createModelSettings({
       recoveryStatus,
       bridgeConnection.snapshot().probeUp,
       bridgeUnauthorized,
+      bridgeRestarting,
+      bridgeRestartStatus,
     ]);
     if (renderKey === lastBridgeRenderKey) return;
     lastBridgeRenderKey = renderKey;
@@ -279,7 +284,7 @@ export function createModelSettings({
     const finish = ready && (purpose !== "settings" || !getGenerationSetupStatus(settings).ready)
       ? `<div class="settings-section settings-complete-section"><${BUTTON_TAG} id="complete-model-setup" class="web-primary" type="button">${getGenerationSetupStatus(settings).ready ? "Done" : "Finish setup"}</button></div>`
       : "";
-    setSubscriptionHtml(host, `${recovery}<div id="bridge-surface" class="bridge-surface" data-state="${escapeHtml(state)}"><div class="bridge-agent-body">${body}</div></div>${finish}`);
+    setSubscriptionHtml(host, `${recovery}<div id="bridge-surface" class="bridge-surface" data-state="${escapeHtml(state)}"><div class="bridge-agent-body">${body}</div></div>${bridgeRestartMarkup()}${finish}`);
   }
 
   function renderConditionalSections() {
@@ -473,6 +478,28 @@ export function createModelSettings({
     return `<div class="settings-section bridge-setup-section">${heading}<p class="bridge-setup-why">${escapeHtml(why)}</p><div class="bridge-steps"><div class="bridge-step" data-step="run"><span class="bridge-step-marker" aria-hidden="true">1</span><div class="bridge-step-body"><p>Run this in your terminal:</p>${bridgeCommandMarkup(BRIDGE_COMMAND)}<small class="field-hint bridge-step-wait" role="status"><span class="ollama-spinner" aria-hidden="true"></span>Waiting for the bridge to start…</small></div></div><div class="bridge-step bridge-step-upcoming" data-step="connect"><span class="bridge-step-marker" aria-hidden="true">2</span><div class="bridge-step-body"><p>Click the link it prints to connect this page.</p></div></div></div><details class="bridge-paste-fallback"><summary>Paste the link instead</summary>${bridgePairingFieldMarkup({ inline: false })}</details></div>`;
   }
 
+  function bridgeRestartMarkup() {
+    return `<div class="settings-section"><div class="settings-row"><span class="switch-copy"><strong>Bridge configuration</strong><small>Restart after changing your CLI configuration. Wait for active answers to finish.</small></span><${BUTTON_TAG} id="restart-bridge" class="settings-text-action" type="button" ${bridgeRestarting ? 'disabled aria-busy="true"' : ""}>${bridgeRestarting ? "Restarting…" : "Restart Bridge"}</button></div><p id="bridge-restart-status" class="field-hint" role="status">${escapeHtml(bridgeRestartStatus)}</p></div>`;
+  }
+
+  async function restartConfiguredBridge() {
+    if (bridgeRestarting) return;
+    const settings = loadSettings();
+    bridgeRestarting = true;
+    bridgeRestartStatus = "";
+    renderConditionalSections();
+    try {
+      const state = await restartBridge(settings.base_url, settings.token);
+      if (state) acceptBridgeState(state);
+      bridgeRestartStatus = "Bridge restarted. Configuration reloaded.";
+    } catch (error) {
+      bridgeRestartStatus = error?.message || "Could not restart the bridge. Try again.";
+    } finally {
+      bridgeRestarting = false;
+      renderConditionalSections();
+    }
+  }
+
   function bridgeStartingMarkup(agentId = "") {
     const label = agentId ? BRIDGE_AGENT_LABELS[agentId] : "the bridge";
     return `<div class="settings-section bridge-agent-state bridge-starting" role="status"><span class="ollama-spinner" aria-hidden="true"></span><p>Connecting to ${escapeHtml(label)}…</p></div>`;
@@ -501,7 +528,10 @@ export function createModelSettings({
     const model = bridgeModelName(settings.model) || settings.model;
     const modelSection = `<div class="settings-section model-section local-model-section"><div class="settings-row"><span class="settings-label" id="bridge-model-label">Model</span>${comboboxMarkup({ id: "bridge-model", labelledBy: "bridge-model-label", value: settings.model, label: model, title: settings.model, iconHtml: chevron })}</div></div>`;
     const transcriptionSection = purpose === "setup" ? "" : bridgeTranscriptionMarkup(settings, agentId);
-    return `${modelSection}${reasoningSectionMarkup(settings)}${transcriptionSection}`;
+    const searchSection = agentId === "codex"
+      ? `<div class="settings-section"><p id="codex-web-search-config" class="field-hint">Web search follows your Codex configuration.</p></div>`
+      : "";
+    return `${modelSection}${reasoningSectionMarkup(settings)}${searchSection}${transcriptionSection}`;
   }
 
   function bridgeTranscriptionMarkup(settings, agentId) {
@@ -651,6 +681,7 @@ export function createModelSettings({
     });
     host.querySelector("#local-model-setup")?.addEventListener("click", launchOllamaRecovery);
     host.querySelector("#local-vision-retry")?.addEventListener("click", () => void runLocalDiscovery());
+    host.querySelector("#restart-bridge")?.addEventListener("click", () => void restartConfiguredBridge());
     host.querySelector("#complete-model-setup")?.addEventListener("click", () => void completeSetup());
     const pair = () => {
       const input = host.querySelector("#bridge-pairing-token");

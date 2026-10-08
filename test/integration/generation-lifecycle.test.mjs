@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Run } from "../../src/core/hole/run.js";
+import { renderMarkdownToHtml } from "../../src/core/markdown.js";
 import { createHoleState, reduceHoleEvent } from "../../src/core/hole/reduce.js";
 import { ProviderError, normalizeProviderError } from "../../src/web/provider/errors.js";
 import { adaptBranchGeneration, adaptTextGeneration } from "../../src/web/provider/generation-events.js";
@@ -433,6 +434,59 @@ for (const events of [[], [{ type: "text", delta: " \n" }]]) {
   }), { nodeId: "root", beforeComplete: rootBeforeComplete })), /provider returned an empty document/);
 }
 console.log("ok generation lifecycle: browser root wiring uses Run and rejects empty or whitespace streams");
+
+const originalQuestion = "Explain gravity for a ten-year-old, using no equations.\nRender **重点（解释）**正确 and <details> visible. $x$ &amp; [link](https://example.test)";
+const rootQuestionSaves = [];
+const rootQuestionEvents = [];
+const rootQuestionRequests = [];
+const rootQuestionHost = new DirectRabbitholeHost({
+  hole: createPendingHoleFromQuestion(originalQuestion),
+  store: { saveHole: async (hole) => rootQuestionSaves.push(structuredClone(hole)) },
+  provider: openAiProvider,
+});
+rootQuestionHost.onEvent = (event) => rootQuestionEvents.push(event);
+try {
+  globalThis.fetch = async (_url, options) => {
+    const messages = JSON.parse(options.body).messages;
+    rootQuestionRequests.push(messages);
+    const text = messages[0].content.includes("TITLE: <short node title>")
+      ? "TITLE: Follow-up\nA deeper answer."
+      : "# Gravity\nObjects attract each other.";
+    return responseFromChunks(chunksOf(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`, [10]));
+  };
+  await rootQuestionHost.runRootAnswer(rootQuestionHost.state.root_id, originalQuestion, new AbortController());
+  const answeredRoot = rootQuestionHost.state.nodes.get(rootQuestionHost.state.root_id);
+  assert.equal(answeredRoot.title, "Gravity", "the displayed question must not replace the answer title");
+  assert.ok(answeredRoot.markdown.startsWith("> **Original question**\n"), "root answer displays the question first");
+  const displayedRoot = renderMarkdownToHtml(answeredRoot.markdown);
+  assert.ok(displayedRoot.includes("<strong>重点（解释）</strong>正确"), "original question uses the shared Markdown emphasis renderer");
+  assert.ok(displayedRoot.includes("&lt;details&gt;"));
+  assert.ok(displayedRoot.includes('class="katex"'));
+  assert.ok(displayedRoot.includes('<a href="https://example.test"'));
+  assert.doesNotMatch(displayedRoot, /<details>/);
+  assert.ok(rootQuestionEvents.filter((event) => event.type === "node_progress").every((event) => event.markdown.startsWith("> **Original question**\n")));
+  assert.equal(answeredRoot.origin.web_root_question, originalQuestion);
+  const restored = new DirectRabbitholeHost({
+    hole: rootQuestionSaves.at(-1), store: { saveHole: async () => {} }, provider: openAiProvider,
+  });
+  try {
+    let parentId = restored.state.root_id;
+    for (const id of ["first-followup", "deeper-followup"]) {
+      restored.dispatch({ type: "branch_request", node_id: id, parent_id: parentId, origin: { question: "Why?" } });
+      await restored.runAnswer(id, new AbortController());
+      assert.ok(rootQuestionRequests.at(-1)[1].content.includes(`Original canvas question:\n${originalQuestion}`), "every branch request retains the full original question after reload");
+      parentId = id;
+    }
+  } finally { await restored.dispose(); }
+  rootQuestionHost.state.nodes.get(answeredRoot.id).status = "pending";
+  rootQuestionHost.dispatchProgress(answeredRoot.id, "");
+  await rootQuestionHost.runRootAnswer(answeredRoot.id, originalQuestion, new AbortController());
+  assert.equal(rootQuestionHost.state.nodes.get(answeredRoot.id).markdown.split("> **Original question**").length, 2, "a retry includes the question once");
+} finally {
+  globalThis.fetch = originalFetch;
+  await rootQuestionHost.dispose();
+}
+console.log("ok generation lifecycle: original question displays before streamed root answer and survives reload, deep requests, and retry");
 
 const authoringHole = createHoleFromMarkdown({ title: "Source", markdown: "Original source" });
 authoringHole.nodes[0].status = "pending";

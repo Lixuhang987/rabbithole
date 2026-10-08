@@ -81,10 +81,12 @@ console.log("ok data boundaries: typed artifact fixtures validate and invalid pe
 
 const isGenerationEvent = (event) => event !== null && typeof event === "object" && (
   (event.type === "text" && typeof event.delta === "string") ||
-  (event.type === "title" && typeof event.title === "string")
+  (event.type === "title" && typeof event.title === "string") ||
+  (event.type === "search" && typeof event.id === "string" && ["searching", "completed"].includes(event.status))
 );
 for (const event of generationEventFixtures) assert.equal(isGenerationEvent(event), true);
 for (const malformed of [
+  { type: "search", id: "wrong", status: "unknown" },
   { type: "text", delta: 42 },
   { type: "title", title: null },
   { type: "usage", input_tokens: 1, output_tokens: 2 },
@@ -93,7 +95,7 @@ for (const malformed of [
 const generated = [];
 for await (const event of brainFixture.answerBranch({}, new AbortController().signal)) generated.push(event);
 assert.deepEqual(generated, generationEventFixtures);
-console.log("ok data boundaries: typed generation fixture distinguishes the two-event vocabulary from malformed events");
+console.log("ok data boundaries: typed generation fixture distinguishes text/title/search vocabulary from malformed events");
 
 const isMarkdownExtension = (value) => value !== null && typeof value === "object" &&
   typeof value.language === "string" && typeof value.render === "function";

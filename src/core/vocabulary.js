@@ -10,7 +10,7 @@ export const DOC_EVENT = vocabulary([
 ]);
 
 export const WIRE_EVENT = vocabulary([
-  "node_progress", "node_answered", "node_deleted", "node_work_state", "node_error",
+  "node_progress", "node_answered", "node_deleted", "node_work_state", "node_search_status", "node_error",
   "node_extensions_patch", "pdf_convert_progress", "agent_state", "context_usage", "preferences", "session_closed",
 ]);
 

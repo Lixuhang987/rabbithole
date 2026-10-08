@@ -43,7 +43,7 @@ export class OpenAICompatibleProvider {
       temperature: 0.2,
       ...this.tuning(),
     };
-    yield* adaptTextGeneration(streamOpenAICompatible({
+    yield* adaptTextGeneration(streamOpenAIEvents({
       url: chatCompletionsUrl(this.baseUrl),
       apiKey: this.apiKey,
       body,
@@ -62,7 +62,7 @@ export class OpenAICompatibleProvider {
       temperature: 0.35,
       ...this.tuning(),
     };
-    yield* adaptTextGeneration(streamOpenAICompatible({
+    yield* adaptTextGeneration(streamOpenAIEvents({
       url: chatCompletionsUrl(this.baseUrl),
       apiKey: this.apiKey,
       body,
@@ -80,7 +80,7 @@ export class OpenAICompatibleProvider {
       temperature: 0.4,
       ...this.tuning(),
     };
-    yield* adaptBranchGeneration(streamOpenAICompatible({
+    yield* adaptBranchGeneration(streamOpenAIEvents({
       url: chatCompletionsUrl(this.baseUrl),
       apiKey: this.apiKey,
       body,
@@ -91,7 +91,7 @@ export class OpenAICompatibleProvider {
   }
 
   async *transcribePages(input, signal) {
-    yield* adaptTextGeneration(streamOpenAICompatible({
+    yield* adaptTextGeneration(streamOpenAIEvents({
       url: chatCompletionsUrl(this.baseUrl), apiKey: this.apiKey,
       body: { model: this.transcribeModel, messages: buildTranscribeMessages(input), stream: true, temperature: 0.1, ...this.tuning() },
       signal, extraHeaders: this.extraHeaders, title: this.title,
@@ -107,9 +107,15 @@ export class OpenAICompatibleProvider {
  *   signal?: AbortSignal,
  *   extraHeaders?: Record<string, string>,
  *   title?: string,
- * }} input
+ * }} options
  */
-export async function* streamOpenAICompatible({ url, apiKey, body, signal, extraHeaders = {}, title = "Rabbithole" }) {
+export async function* streamOpenAICompatible(options) {
+  for await (const event of streamOpenAIEvents(options)) {
+    if (event.type === "text") yield event.delta;
+  }
+}
+
+export async function* streamOpenAIEvents({ url, apiKey = "", body, signal = undefined, extraHeaders = {}, title = "Rabbithole" }) {
   let response;
   try {
     /** @type {Record<string, string>} */
@@ -143,13 +149,11 @@ export async function* streamOpenAICompatible({ url, apiKey, body, signal, extra
       const events = buffer.split(/\r?\n\r?\n/);
       buffer = events.pop() || "";
       for (const event of events) {
-        const text = parseOpenAISseEvent(event);
-        if (text) yield text;
+        yield* parseOpenAISseEvents(event);
       }
     }
     if (buffer) {
-      const text = parseOpenAISseEvent(buffer);
-      if (text) yield text;
+      yield* parseOpenAISseEvents(buffer);
     }
   } catch (err) {
     throw normalizeProviderError(err);
@@ -159,8 +163,12 @@ export async function* streamOpenAICompatible({ url, apiKey, body, signal, extra
 }
 
 export function parseOpenAISseEvent(eventText) {
+  return parseOpenAISseEvents(eventText).filter((event) => event.type === "text").map((event) => event.delta).join("");
+}
+
+function parseOpenAISseEvents(eventText) {
   const lines = String(eventText || "").split(/\r?\n/);
-  let out = "";
+  const out = [];
   for (const line of lines) {
     if (!line.startsWith("data:")) continue;
     const data = line.slice(5).trimStart();
@@ -168,7 +176,12 @@ export function parseOpenAISseEvent(eventText) {
     let json;
     try { json = JSON.parse(data); } catch { continue; }
     if (json.error) throw new ProviderError(json.error.message || "The provider returned an error.", { code: json.error.code || "provider_error" });
-    out += json.choices?.[0]?.delta?.content || json.choices?.[0]?.message?.content || "";
+    if (json.object === "rabbithole.search" && ["searching", "completed"].includes(json.status) && typeof json.id === "string") {
+      out.push({ type: "search", id: json.id, status: json.status, action: json.action, query: json.query });
+      continue;
+    }
+    const delta = json.choices?.[0]?.delta?.content || json.choices?.[0]?.message?.content || "";
+    if (delta) out.push({ type: "text", delta });
   }
   return out;
 }
@@ -200,6 +213,7 @@ async function responseError(response) {
     "model_no_images",
     "payload_too_large",
     "turn_failed",
+    "web_search_failed",
   ].includes(providerCode);
   return new ProviderError(bridgeFailure && detail ? detail : detail ? `${prefix}: ${detail}` : prefix, {
     status,

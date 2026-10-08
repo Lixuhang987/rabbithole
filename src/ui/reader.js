@@ -503,9 +503,11 @@ function pendingStatusHtml(k) {
         ? '<span class="shimmer-text">Waiting for previous answer</span>'
         : k && k.delegated
           ? '<span class="shimmer-text">Working in sub-agent…</span>'
-          : k && k.html
-            ? '<span class="shimmer-text">Writing…</span>'
-            : '<span class="shimmer-text">Thinking…</span>',
+          : k?._searchStatus
+            ? `<span class="shimmer-text">${k._searchStatus === "reading" ? "Reading page…" : "Searching the web…"}</span>`
+            : k && k.html
+              ? '<span class="shimmer-text">Writing…</span>'
+              : '<span class="shimmer-text">Thinking…</span>',
   };
   return copy[sessionPhase()];
 }

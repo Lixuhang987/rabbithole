@@ -5,6 +5,7 @@ const DOCUMENT_EVENTS = new Set([
   "node_deleted",
   "node_progress",
   "node_work_state",
+  "node_search_status",
   "node_extensions_patch",
   "pdf_convert_progress",
   "node_error",
@@ -38,6 +39,8 @@ export function applyServerEvent(store, message, options = {}) {
     node.delegated = false;
     node.queued = false;
     node.error = null;
+    node._searchStatus = null;
+    node._searchCalls = new Map();
     node.status = "answered";
     node.title = message.title || node.title;
     node.markdown = message.markdown || node.markdown || "";
@@ -52,10 +55,24 @@ export function applyServerEvent(store, message, options = {}) {
     node.delegated = false;
     node.queued = false;
     node.error = null;
+    if (!message.markdown) {
+      node._searchStatus = null;
+      node._searchCalls = new Map();
+    }
     node.markdown = message.markdown || "";
     node.base_url = message.base_url || node.base_url || null;
     node.base_url_source = message.base_url_source || node.base_url_source || null;
     invalidated.add("stream");
+  } else if (type === "node_search_status" && node.status === "pending") {
+    node._searchCalls ||= new Map();
+    if (message.status === "searching") {
+      node._searchCalls.set(
+        message.call_id,
+        ["openPage", "findInPage"].includes(message.action) ? "reading" : "searching",
+      );
+    } else node._searchCalls.delete(message.call_id);
+    node._searchStatus = node._searchCalls.values().next().value || null;
+    invalidated.add("status");
   } else if (type === "node_work_state" && node.status === "pending") {
     node.delegated = message.state === "delegated";
     node.queued = message.state === "queued";
@@ -83,6 +100,8 @@ export function applyServerEvent(store, message, options = {}) {
     node._pdfProgress = { done: message.page_done, total: message.page_total };
     invalidated.add("document");
   } else if (type === "node_error" && node.status === "pending") {
+    node._searchStatus = null;
+    node._searchCalls = new Map();
     result.restoreNote = message.restore_note === true;
     if (!result.restoreNote) {
       node.error = {

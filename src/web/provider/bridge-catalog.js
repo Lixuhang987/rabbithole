@@ -50,6 +50,21 @@ export async function pingBridge(baseUrl, { timeoutMs = 1_500 } = {}) {
   }
 }
 
+/** Restart CLI backends while preserving the paired HTTP listener. */
+export async function restartBridge(baseUrl, bearerToken) {
+  const url = `${bridgeRootUrl(baseUrl)}/bridge/restart`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${String(bearerToken || "")}` },
+    body: "{}",
+    signal: AbortSignal.timeout(60_000),
+    ...addressSpaceHint(url),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error?.message || `Restart failed (HTTP ${response.status}).`);
+  return payload.state;
+}
+
 /*
  * The bridge prints one pairing link; people paste whatever their terminal
  * lets them grab — the whole link, the fragment, or just the token. Accept

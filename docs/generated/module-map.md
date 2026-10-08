@@ -66,6 +66,7 @@ This inventory is derived from the source tree.
 
 - `src/node/bridge/agents/agent.js`
 - `src/node/bridge/agents/claude.js`
+- `src/node/bridge/agents/codex-search.js`
 - `src/node/bridge/agents/codex.js`
 - `src/node/bridge/agents/isolation.js`
 - `src/node/bridge/claude.js`

@@ -5,6 +5,7 @@ import path from "node:path";
 import { extractSnapshotPayload } from "../../src/core/portable-import.js";
 import { serializeForInlineScript } from "../../src/core/utils.js";
 import { MOCK_MODEL, corsHeaders, routeProvider, seedConfiguredOpenRouter } from "../support/provider-mock.mjs";
+import { installBridgeFetchStub } from "../support/bridge-browser-fixture.mjs";
 import { ROOT, bootWebApp } from "../support/web-app-harness.mjs";
 const MOCK_KEY = `sk-or-v1-${"x".repeat(64)}`;
 const BAD_KEY = `sk-or-v1-${"y".repeat(64)}`;
@@ -16,9 +17,6 @@ const LOCAL_SHOW_URL = "http://localhost:11434/api/show";
 const LOCAL_VERSION_URL = "http://localhost:11434/api/version";
 const LOCAL_CHAT_URL = "http://localhost:11434/v1/chat/completions";
 const GITHUB_REPO_API_URL = "https://api.github.com/repos/shlokkhemani/rabbithole";
-const BRIDGE_EVENTS_URL = "http://127.0.0.1:41414/bridge/events";
-const BRIDGE_CHAT_URL = "http://127.0.0.1:41414/v1/chat/completions";
-const BRIDGE_PING_URL = "http://127.0.0.1:41414/bridge/ping";
 const app = await bootWebApp();
 const { browser, baseUrl } = app;
 try {
@@ -51,9 +49,11 @@ async function verifyReducedMotionOverlays() {
       return { opacity: styles.opacity, transform: styles.transform, animationName: styles.animationName };
     }), { opacity: "1", transform: "none", animationName: "none" }, "reduced motion should reveal the composer without relying on its entrance animation");
     await page.click("#composer-path-ask");
-    await page.fill("#composer-input", "Check reduced motion");
+    await page.fill("#composer-input", "Check reduced motion，**重点（说明）**正常加粗");
     await page.click("#composer-primary");
     await waitForCanvasText(page, "Usable without animation.");
+    assert.match(await page.locator(".card.root blockquote").innerText(), /Original question\s+Check reduced motion/, "the original question is visible above the generated answer");
+    assert.equal(await page.locator(".card.root blockquote strong").nth(1).innerText(), "重点（说明）", "Chinese emphasis in the original question renders as bold");
     assert.equal(await page.locator(".card.root").evaluate((node) => getComputedStyle(node).opacity), "1", "reduced motion should render the generated root without an entrance transition");
     await page.click("#t-settings");
     await page.waitForSelector("#settings-sheet");
@@ -817,110 +817,6 @@ function bridgeStateFixture(claudeState, codexState = "starting", options = {}) 
     ],
   };
 }
-async function installBridgeFetchStub(context) {
-  await context.addInitScript(({ eventsUrl, chatUrl, pingUrl }) => {
-    const realFetch = window.fetch.bind(window);
-    const encoder = new TextEncoder();
-    const streams = new Set();
-    const requests = [];
-    const chatQueue = [];
-    let denyNextConnection = false;
-    let online = true;
-    let pingUp = false;
-    let currentState = null;
-    let hidden = false;
-    Object.defineProperty(document, "hidden", {
-      configurable: true,
-      get: () => hidden,
-    });
-    function authorization(options) {
-      return new Headers(options?.headers || {}).get("Authorization") || "";
-    }
-    function push(state) {
-      currentState = state;
-      const bytes = encoder.encode(`data: ${JSON.stringify(state)}\n\n`);
-      for (const stream of [...streams]) {
-        try { stream.enqueue(bytes); } catch { streams.delete(stream); }
-      }
-    }
-    function closeStreams() {
-      for (const stream of [...streams]) {
-        streams.delete(stream);
-        try { stream.close(); } catch {}
-      }
-    }
-    window.__bridgeStub = {
-      requests,
-      push,
-      close: closeStreams,
-      kill() {
-        online = false;
-        closeStreams();
-      },
-      restart(state) {
-        online = true;
-        currentState = state;
-      },
-      setHidden(value) {
-        hidden = Boolean(value);
-        document.dispatchEvent(new Event("visibilitychange"));
-      },
-      denyNextConnection() { denyNextConnection = true; },
-      queueChat(...items) { chatQueue.push(...items); },
-      setPing(value) { pingUp = Boolean(value); },
-    };
-    window.fetch = async (input, options = {}) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-      if (url === pingUrl) {
-        requests.push({ kind: "ping", at: performance.now() });
-        if (!pingUp) throw new TypeError("Failed to fetch");
-        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } });
-      }
-      if (url === eventsUrl) {
-        requests.push({ kind: "events", url, authorization: authorization(options), at: performance.now() });
-        if (!online) throw new TypeError("Failed to fetch");
-        if (denyNextConnection) {
-          denyNextConnection = false;
-          return new Response(JSON.stringify({ error: { code: "unauthorized" } }), {
-            status: 401,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-        return new Response(new ReadableStream({
-          start(controller) {
-            streams.add(controller);
-            if (currentState) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(currentState)}\n\n`));
-            }
-            options.signal?.addEventListener("abort", () => {
-              streams.delete(controller);
-              try { controller.error(new DOMException("Aborted", "AbortError")); } catch {}
-            }, { once: true });
-          },
-          cancel() {},
-        }), { status: 200, headers: { "Content-Type": "text/event-stream" } });
-      }
-      if (url === chatUrl) {
-        const body = JSON.parse(typeof options.body === "string" ? options.body : "{}");
-        requests.push({ kind: "chat", authorization: authorization(options), body });
-        const item = chatQueue.shift() || { text: "Subscription response." };
-        if (item.beforeState) {
-          push(item.beforeState);
-          await new Promise((resolve) => setTimeout(resolve, 30));
-        }
-        if (item.code) {
-          return new Response(JSON.stringify({ error: { code: item.code, message: item.message || item.code } }), {
-            status: item.status || 400,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-        const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: item.text } }] })}\n\ndata: [DONE]\n\n`;
-        return new Response(sse, { status: 200, headers: { "Content-Type": "text/event-stream" } });
-      }
-      return realFetch(input, options);
-    };
-  }, { eventsUrl: BRIDGE_EVENTS_URL, chatUrl: BRIDGE_CHAT_URL, pingUrl: BRIDGE_PING_URL });
-}
 async function pushBridgeState(page, state) {
   await page.evaluate((value) => window.__bridgeStub.push(value), state);
 }
@@ -1052,6 +948,24 @@ async function verifySubscriptionsPanelStates() {
     assert.equal(afterAgentSignOut.popupCount, 0, "transition disposal leaves no orphan combobox popup");
     await pushBridgeState(page, readyState);
     await page.waitForSelector('.bridge-surface[data-state="ready"] #bridge-model');
+    await page.click('[data-provider="codex"]');
+    await page.waitForSelector("#codex-web-search-config");
+    assert.match(await page.locator("#codex-web-search-config").innerText(), /Codex configuration/);
+    await page.evaluate(() => window.__bridgeStub.queueRestart({ error: "Wait for current answers to finish, then restart the bridge." }));
+    await page.click("#restart-bridge");
+    assert.equal(await page.locator("#restart-bridge").isDisabled(), true);
+    await page.locator("#bridge-restart-status").filter({ hasText: "Wait for current answers" }).waitFor();
+    assert.equal(await page.locator("#restart-bridge").isEnabled(), true);
+    const restartTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+    await page.click("#restart-bridge");
+    await page.locator("#bridge-restart-status").filter({ hasText: "Configuration reloaded" }).waitFor();
+    assert.equal(await page.evaluate(() => performance.timeOrigin), restartTimeOrigin, "restart stays on the same page");
+    const restarts = await page.evaluate(() => window.__bridgeStub.requests.filter((request) => request.kind === "restart"));
+    assert.equal(restarts.length, 2);
+    assert.equal(restarts.every((request) => request.method === "POST" && request.authorization.startsWith("Bearer ")), true);
+
+    await page.click('[data-provider="claude"]');
+    assert.equal(await page.locator("#codex-web-search-config").count(), 0);
     const loadTimeOrigin = await page.evaluate(() => performance.timeOrigin);
     const requestsBeforeKill = await page.evaluate(() => window.__bridgeStub.requests.filter((request) => request.kind === "events").length);
     const killedAt = performance.now();
@@ -1136,6 +1050,25 @@ async function verifySubscriptionsPanelStates() {
     assert.equal(chatRequests[0].body.model, "claude/opus");
     assert.equal(chatRequests[1].body.model, "claude/sonnet", "the retry uses the fresh stream catalog");
     assert.equal(chatRequests.every((request) => request.authorization === "Bearer fresh-token"), true, "every generation call carries the paired token");
+    await page.click("#t-settings");
+    await page.waitForSelector("#settings-sheet");
+    await page.click('[data-settings-section="model"]');
+    await page.click('[data-provider="codex"]');
+    await page.waitForSelector("#codex-web-search-config");
+    await page.click("#complete-model-setup");
+    await page.waitForSelector("#settings-sheet", { state: "detached" });
+    await page.evaluate(() => window.__bridgeStub.queueChat({ search: true, text: "# Codex search\n\nFound [Example](https://example.com/search-result)." }));
+    await page.click("#t-new");
+    await page.waitForSelector("#composer-modal:not([hidden])");
+    await page.click("#composer-path-ask");
+    await page.fill("#composer-input", "Search current sources");
+    await page.click("#composer-primary");
+    await page.locator(".shimmer-text").filter({ hasText: "Searching the web" }).first().waitFor({ state: "visible" });
+    assert.equal((await page.evaluate(() => window.__bridgeStub.requests.filter((request) => request.kind === "chat").at(-1))).body.web_search, undefined);
+    await page.evaluate(() => window.__bridgeStub.finishSearch());
+    await waitForCanvasText(page, "Found Example.");
+    assert.equal(await page.locator('.md a[href="https://example.com/search-result"]').first().getAttribute("href"), "https://example.com/search-result");
+    assert.equal(await page.locator(".shimmer-text").filter({ hasText: "Searching the web" }).count(), 0);
     console.log("ok web app: SSE states, transition-only repaint mutations=0, stream-close, re-pair, model_unknown retry=1");
   } finally {
     await context.close();

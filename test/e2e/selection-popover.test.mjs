@@ -8,6 +8,7 @@ const { browser, baseUrl } = app;
 
 try {
   const page = await browser.newPage();
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.evaluate(() => window.__rabbitholeTest.createDocument([
     "# Paragraph selection",
@@ -48,8 +49,30 @@ try {
   );
   await page.waitForSelector("#ask.visible");
 
+  assert.equal(await page.locator("#ask-text").evaluate((input) => document.activeElement === input), true,
+    "opening a selection must still allow immediate question typing");
+  await page.evaluate(() => navigator.clipboard.writeText("previous clipboard"));
+  await page.keyboard.press("ControlOrMeta+c");
+  assert.equal((await page.evaluate(() => navigator.clipboard.readText())).trim(), wholeParagraph,
+    "copy from the empty selection composer must copy the highlighted document text");
+  assert.equal(await page.locator("#ask.visible").count(), 1,
+    "copying the subject must keep the selection composer open");
+
+  await page.fill("#ask-text", "Explain this paragraph");
+  await page.locator("#ask-text").evaluate((input) => input.setSelectionRange(0, 7));
+  await page.keyboard.press("ControlOrMeta+c");
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Explain",
+    "copying a question selection must retain native editor behavior");
+  await page.locator("#ask-text").evaluate((input) => input.setSelectionRange(7, 7));
+  await page.keyboard.press("ControlOrMeta+c");
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Explain",
+    "a nonempty question with no selection must not copy the document subject");
+
   await page.keyboard.press("Escape");
   await page.waitForSelector("#ask:not(.visible)", { state: "attached" });
+  await page.keyboard.press("ControlOrMeta+c");
+  assert.equal((await page.evaluate(() => navigator.clipboard.readText())).trim(), wholeParagraph,
+    "Escape must still restore a natively copyable document selection");
 
   await paragraphs.nth(0).click({ clickCount: 3, position: { x: 36, y: 10 } });
   await page.waitForSelector("#ask.visible");

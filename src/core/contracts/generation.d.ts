@@ -1,7 +1,7 @@
 /**
  * Shared generation adapter vocabulary.
  *
- * Runtime authority for the browser provider surfaces and their current raw-text
+ * Runtime authority for the browser provider surfaces and their text/search
  * streams: {@link ../../web/provider/openai-compatible.js}. Current consumers and
  * title extraction are {@link ../../web/transport/direct-host.js},
  * {@link ../../web/provider/title-sentinel.js}, and {@link ../../web/app.js}.
@@ -11,10 +11,11 @@
  * tool calls carrying `content`, `partial`, and `title` instead.
  *
  * Browser brains emit this vocabulary: branch adapters contain sentinel
- * parsing and authoring adapters emit text events only. The MCP host remains a
- * separate wire ingress with its own persistence policy.
+ * parsing, and answer adapters also pass transient search progress. The MCP host
+ * remains a separate wire ingress with its own persistence policy.
  * Transport-level run tagging uses `ProgressRun` from {@link ./engine.js}; it
  * is intentionally not redeclared here.
+ * Hosts intercept search progress before `Run`; tool state is never persisted.
  * `Run` runtime behavior is authoritative in
  * {@link ../hole/run.js}; `DocEvent` output shapes remain authoritative
  * in {@link ../hole/reduce.js} and are described by {@link ./engine.js}.
@@ -32,7 +33,16 @@ export interface TitleGenerationEvent {
   title: string;
 }
 
-export type GenerationEvent = TextGenerationEvent | TitleGenerationEvent;
+/** Live search lifecycle; hosts project it without persisting tool/session state. */
+export interface SearchGenerationEvent {
+  type: "search";
+  id: string;
+  status: "searching" | "completed";
+  action?: string;
+  query?: string;
+}
+
+export type GenerationEvent = TextGenerationEvent | TitleGenerationEvent | SearchGenerationEvent;
 
 /**
  * Browser generation surface shared by today's OpenAI-compatible and
@@ -71,7 +81,7 @@ export interface AnsweredDocContext {
 
 export declare class Run {
   constructor(options: RunOptions);
-  accept(event: GenerationEvent, context?: ProgressDocContext): NodeProgressEvent | null;
+  accept(event: TextGenerationEvent | TitleGenerationEvent, context?: ProgressDocContext): NodeProgressEvent | null;
   complete(context: AnsweredDocContext): NodeAnsweredEvent;
   snapshot(): RunSnapshot;
 }
