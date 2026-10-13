@@ -1,4 +1,4 @@
-/** @protects canvas edge scroll capability contracts. */
+/** @protects canvas edge scroll and anchored Command-wheel zoom capability contracts. */
 import assert from "node:assert/strict";
 import { routeProvider, seedConfiguredOpenRouter } from "../support/provider-mock.mjs";
 import { bootWebApp } from "../support/web-app-harness.mjs";
@@ -8,7 +8,7 @@ const { browser, baseUrl } = app;
 
 try {
   await verifyEdgeScrollCarriesTheCard();
-  console.log("canvas edge-scroll verification passed");
+  console.log("canvas edge-scroll and Command-wheel zoom verification passed");
 } finally {
   await app.close();
 }
@@ -25,6 +25,8 @@ async function verifyEdgeScrollCarriesTheCard() {
     await page.goto(baseUrl, { waitUntil: "networkidle" });
     await createDocument(page, "# Edge scroll\n\nA card must be draggable past the edge of what is on screen.");
     await page.waitForFunction(() => document.body.classList.contains("mode-canvas"));
+    await settleCamera(page);
+    await verifyCommandWheelZoom(page);
 
     const head = page.locator(".card.root .card-head").first();
     const start = await head.boundingBox();
@@ -97,13 +99,52 @@ async function verifyEdgeScrollCarriesTheCard() {
   }
 }
 
+async function verifyCommandWheelZoom(page) {
+  const head = await page.locator(".card.root .card-head").first().boundingBox();
+  const x = Math.round(head.x + head.width / 2);
+  const y = Math.round(head.y + head.height / 2);
+  const before = await readCanvasState(page);
+  const anchor = { x: (x - before.viewX) / before.scale, y: (y - before.viewY) / before.scale };
+
+  await page.keyboard.down("Meta");
+  await page.mouse.move(x, y);
+  await page.mouse.wheel(0, -60);
+  await waitForScale(page, before.scale, "in");
+  const enlarged = await readCanvasState(page);
+  assert.ok(enlarged.scale > before.scale, "Command + wheel upward must zoom in over a card");
+  assert.ok(Math.abs(enlarged.viewX + anchor.x * enlarged.scale - x) < 0.01, "zoom must hold the horizontal cursor anchor");
+  assert.ok(Math.abs(enlarged.viewY + anchor.y * enlarged.scale - y) < 0.01, "zoom must hold the vertical cursor anchor");
+  assert.equal(enlarged.nodeX, before.nodeX, "zoom must preserve the card's document position");
+  assert.equal(enlarged.nodeY, before.nodeY, "zoom must preserve the card's document position");
+
+  await page.mouse.wheel(0, 120);
+  await waitForScale(page, before.scale, "out");
+  assert.ok((await readCanvasState(page)).scale < before.scale, "Command + wheel downward must zoom out");
+  await page.mouse.wheel(0, -60);
+  await waitForScale(page, before.scale, "restore");
+  await page.keyboard.up("Meta");
+  const released = await readCanvasState(page);
+  await page.mouse.wheel(0, 40);
+  await page.waitForTimeout(100);
+  assert.deepEqual(await readCanvasState(page), released, "an ordinary wheel over the card header must preserve the camera");
+}
+
+async function waitForScale(page, baseline, direction) {
+  await page.waitForFunction(({ baseline, direction }) => {
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(document.getElementById("world")).transform);
+    if (direction === "in") return matrix.a > baseline;
+    if (direction === "out") return matrix.a < baseline;
+    return Math.abs(matrix.a - baseline) < 0.00001;
+  }, { baseline, direction });
+}
+
 // The camera is a transform on #world, so read it back the way the browser sees
 // it rather than trusting module state the page never exposes.
 function readCanvasState(page) {
   return page.evaluate(() => {
     const matrix = new DOMMatrixReadOnly(getComputedStyle(document.getElementById("world")).transform);
     const card = document.querySelector(".card.root");
-    return { viewX: matrix.m41, viewY: matrix.m42, nodeX: parseFloat(card.style.left), nodeY: parseFloat(card.style.top) };
+    return { viewX: matrix.m41, viewY: matrix.m42, scale: matrix.a, nodeX: parseFloat(card.style.left), nodeY: parseFloat(card.style.top) };
   });
 }
 

@@ -74,7 +74,7 @@ export function canScroll(el, dx, dy) {
 }
 
 export function onViewportWheel(e) {
-  if (e.ctrlKey) {
+  if (e.ctrlKey || e.metaKey) {
     e.preventDefault();
     r.wheelKind = null;
     zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.01));
