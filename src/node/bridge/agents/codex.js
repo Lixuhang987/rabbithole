@@ -41,7 +41,11 @@ export function codexIsolationArgs() {
 }
 
 async function launchArgs(executable, { env, cwd, egoBrowser }) {
-  const overrides = codexIsolationArgs();
+  const overrides = [
+    ...codexIsolationArgs(),
+    "-c", "model_context_window=1000000",
+    "-c", "model_auto_compact_token_limit=900000",
+  ];
   // Empty tables merge with user configuration, so disable each configured server.
   const result = await runCaptured(executable, ["mcp", ...overrides, "list", "--json"], { env, cwd });
   let servers;
@@ -167,7 +171,7 @@ export class CodexAppServer {
     this.cwd = cwd;
     this.version = version;
     this.child = null;
-    this.reader = createNdjsonReader({ onRecord: (message) => this.onMessage(message) });
+    this.reader = createNdjsonReader({ onRecord: (message) => this.onMessage(message), maxLineChars: Infinity });
     this.pending = new Map();
     this.turns = new Map();
     this.nextId = 1;

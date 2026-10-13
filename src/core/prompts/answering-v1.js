@@ -1,8 +1,8 @@
-import { AUTHORING_VOCABULARY_V1, normalizePromptText } from "./authoring-v1.js";
+import { normalizePromptText } from "./authoring-v1.js";
 import { parseBlockInfo } from "../blocks.js";
-import { lensLabel, truncate } from "../hole/lens.js";
+import { lensLabel } from "../hole/lens.js";
 
-const LEARN = `
+export const LEARN = `
 Reader likes to keep asking follow-up questions about the current problem until understanding the underlying principles.
 However, Reader's foundational knowledge may have gaps, so do not assume reader already understand a prerequisite concept.
 Reader cares about why a piece of knowledge matters to the current problem than about learning concepts in isolation.
@@ -33,16 +33,11 @@ const ANSWERING_SYSTEM_PROMPT_V1 = [
   "When external information is needed, use web search first. Use ego-browser only when web search is unavailable, fails, or cannot retrieve the required content. This order takes precedence over any browser-first preference in the ego-browser skill.",
 ].join("\n");
 
-const APPROX_CHARS_PER_TOKEN = 4;
-const DEFAULT_TOKEN_BUDGET = 12000;
-
-
-
 /** @typedef {Record<string, any>} AnswerContext */
 
-/** @param {AnswerContext} context @param {{ tokenBudget?: number, incremental?: boolean }} [options] @returns {Array<{role: string, content: any}>} */
-export function buildAnswerMessages(context, { tokenBudget = DEFAULT_TOKEN_BUDGET, incremental = false } = {}) {
-  let packed = incremental ? packIncrementalAsk(context, tokenBudget) : packBranchContext(context, { tokenBudget });
+/** @param {AnswerContext} context @param {{ incremental?: boolean }} [options] @returns {Array<{role: string, content: any}>} */
+export function buildAnswerMessages(context, { incremental = false } = {}) {
+  let packed = incremental ? packIncrementalAsk(context) : packBranchContext(context);
   const attachments = imageAttachments(context);
   if (attachments.length) {
     if (attachments.every((attachment) => attachment.source === "pasted_image")) {
@@ -72,12 +67,12 @@ export function buildConversationBaselineMessages(context) {
   ];
 }
 
-/** @param {AnswerContext} context @param {number} tokenBudget */
-function packIncrementalAsk(context, tokenBudget) {
+/** @param {AnswerContext} context */
+function packIncrementalAsk(context) {
   const selectedText = normalizePromptText(context.selected_text || context.selectedText || "");
   const blockId = context.anchor?.block?.block_id || context.block_id;
   const source = blockId ? selectedVisualSource(context.parent_markdown || "", blockId) : "";
-  return trimToBudget([
+  return [
     "Continue from the source article in the inherited conversation. Answer only this new Ask.",
     `Lens: ${context.lens || "none"}`,
     "Preset instruction:", context.instruction || "(none)",
@@ -85,7 +80,7 @@ function packIncrementalAsk(context, tokenBudget) {
     ...(blockId ? [`Selection location: visual block ${blockId}`, ...(source ? ["Selected visual source:", source] : [])] : []),
     "Human question:", context.question || "Explain the selected content or the source article.",
     "Start with TITLE: on the first line, then markdown.",
-  ].join("\n"), Math.max(2000, tokenBudget) * APPROX_CHARS_PER_TOKEN);
+  ].join("\n");
 }
 
 /** @param {string} markdown @param {string} blockId */
@@ -113,10 +108,8 @@ function imageAttachments(context) {
   return source.filter((attachment) => attachment?.kind === "image" && attachment.data_url);
 }
 
-/** @param {AnswerContext} context @param {{ tokenBudget?: number, baseline?: boolean }} [options] */
-function packBranchContext(context, { tokenBudget = DEFAULT_TOKEN_BUDGET, baseline = false } = {}) {
-  const budget = Math.max(2000, Number(tokenBudget) || DEFAULT_TOKEN_BUDGET);
-  const charBudget = budget * APPROX_CHARS_PER_TOKEN;
+/** @param {AnswerContext} context @param {{ baseline?: boolean }} [options] */
+function packBranchContext(context, { baseline = false } = {}) {
   const rootTitle = normalizePromptText(context?.root_title || context?.rootTitle || "Untitled");
   const rootQuestion = normalizePromptText(context?.root_question || "");
   const parentTitle = normalizePromptText(context?.parent_title || context?.parentTitle || "Untitled");
@@ -127,7 +120,7 @@ function packBranchContext(context, { tokenBudget = DEFAULT_TOKEN_BUDGET, baseli
   const presetInstruction = normalizePromptText(context?.instruction || "");
   const lensLine = lens ? `${lens} (${lensLabel(lens) || lens})` : "none";
   const noteLines = summarizeNotes(context?.notes || [], context);
-  let notesSection = noteLines ? `\nNotes:\n${noteLines}\n\n` : "";
+  const notesSection = noteLines ? `\nNotes:\n${noteLines}\n\n` : "";
   const ancestorLines = summarizeAncestors(context?.ancestors || []);
 
   const header = [
@@ -151,39 +144,22 @@ function packBranchContext(context, { tokenBudget = DEFAULT_TOKEN_BUDGET, baseli
   ].join("\n");
 
   const parentPrefix = "Parent document markdown:\n";
-  const ancestorPrefix = "\n\nAncestor chain (root to parent, title + excerpt):\n";
+  const ancestorPrefix = "\n\nAncestor chain (root to parent, title + content):\n";
   const instruction = baseline ? "" : [
     "",
     "Answer the human's question. Start with TITLE: on the first line, then markdown.",
   ].join("\n");
 
-  const fixed = header + parentPrefix + ancestorPrefix + instruction;
-  const parentBudget = Math.max(1000, charBudget - fixed.length - ancestorLines.length - 200);
-  const parentMarkdown = trimToBudget(normalizePromptText(context?.parent_markdown || context?.parentMarkdown || ""), parentBudget);
-  let packed = header + notesSection + parentPrefix + parentMarkdown + ancestorPrefix + ancestorLines + instruction;
-
-  if (packed.length > charBudget) {
-    const remainingForNotes = Math.max(0, charBudget - (header + parentPrefix + parentMarkdown + ancestorPrefix + ancestorLines + instruction).length);
-    notesSection = budgetNoteSection(noteLines, remainingForNotes);
-    packed = header + notesSection + parentPrefix + parentMarkdown + ancestorPrefix + ancestorLines + instruction;
-  }
-  if (packed.length > charBudget) {
-    const remainingForAncestors = Math.max(0, charBudget - (header + notesSection + parentPrefix + parentMarkdown + ancestorPrefix + instruction).length);
-    packed = header + notesSection + parentPrefix + parentMarkdown + ancestorPrefix + trimToBudget(ancestorLines, remainingForAncestors) + instruction;
-  }
-  if (packed.length > charBudget) {
-    const parentOnlyBudget = Math.max(800, charBudget - (header + notesSection + parentPrefix + ancestorPrefix + instruction).length);
-    packed = header + notesSection + parentPrefix + trimToBudget(parentMarkdown, parentOnlyBudget) + ancestorPrefix + instruction;
-  }
-  return packed;
+  const parentMarkdown = normalizePromptText(context?.parent_markdown || context?.parentMarkdown || "");
+  return header + notesSection + parentPrefix + parentMarkdown + ancestorPrefix + ancestorLines + instruction;
 }
 
 /** @param {unknown} notes @param {AnswerContext} context */
 function summarizeNotes(notes, context) {
   const list = Array.isArray(notes) ? notes : [];
   return list.map((entry) => {
-    const selectedText = truncate(normalizePromptText(entry?.on_selected_text || "").replace(/\s+/g, " "), 200);
-    const content = truncate(normalizePromptText(entry?.content || "").replace(/\s+/g, " "), 200);
+    const selectedText = normalizePromptText(entry?.on_selected_text || "");
+    const content = normalizePromptText(entry?.content || "");
     const onNodeId = normalizePromptText(entry?.on_node_id || "");
     const onTitle = noteParentTitle(onNodeId, context);
     const prefix = selectedText ? `Anchored to "${selectedText}": ` : (onTitle ? `On "${onTitle}": ` : "");
@@ -203,28 +179,13 @@ function noteParentTitle(nodeId, context) {
   return normalizePromptText(ancestor?.title || "");
 }
 
-/** @param {string} noteLines @param {number} budget */
-function budgetNoteSection(noteLines, budget) {
-  const prefix = "\nNotes:\n", suffix = "\n\n";
-  const contentBudget = budget - prefix.length - suffix.length;
-  return contentBudget > 0 ? prefix + trimToBudget(noteLines, contentBudget) + suffix : "";
-}
-
 /** @param {unknown} ancestors */
 function summarizeAncestors(ancestors) {
   const list = Array.isArray(ancestors) ? ancestors : [];
   if (!list.length) return "(none)";
   return list.map((entry, index) => {
     const title = normalizePromptText(entry?.title || `Ancestor ${index + 1}`);
-    const excerpt = truncate(normalizePromptText(entry?.markdown || entry?.excerpt || "").replace(/\s+/g, " "), 200);
+    const excerpt = normalizePromptText(entry?.markdown || entry?.excerpt || "");
     return `${index + 1}. ${title}${excerpt ? ` - ${excerpt}` : ""}`;
   }).join("\n");
-}
-
-/** @param {unknown} value @param {number} budget */
-function trimToBudget(value, budget) {
-  const source = String(value ?? "");
-  if (source.length <= budget) return source;
-  if (budget <= 1) return "";
-  return `${source.slice(0, Math.max(0, budget - 1)).trimEnd()}…`;
 }

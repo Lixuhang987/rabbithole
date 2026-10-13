@@ -209,7 +209,7 @@ process.stdin.on("data", (chunk) => {
       const text = params.input?.map((part) => part.text || "").join("\n") || "";
       const search = process.env.FAKE_CODEX_WEB_SEARCH !== "disabled" && text.includes("SEARCH");
       const branch = text.includes("SEARCH branch");
-      const answer = text.includes("SEARCH")
+      const answer = text.includes("ECHO_LARGE") ? text : text.includes("SEARCH")
         ? `${branch ? "TITLE: Search branch" : "# Search answer"}\nFound online citeturn0search0. Missing citeturn0search1.`
         : "OK";
       if (search) {

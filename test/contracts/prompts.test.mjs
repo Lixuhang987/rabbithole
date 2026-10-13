@@ -53,21 +53,17 @@ assert.match(noteMessages[0].content, /Each note is attributed to the human or a
 assert.match(noteMessages[1].content, /Human question:\nWhy\?\n\nNotes:\n- Human: Compare this globally\.\n- Human: Anchored to "the exact clause": This caveat matters\.\n- Agent: On "Parent": This applies to the whole parent\.\n\nParent document markdown:/);
 assert.equal(noteMessages[1].content.includes('Anchored to "null"'), false, "anchor-less parented notes must never stringify a null anchor");
 
-const tightContext = {
+const longContext = {
   ...context,
-  parent_markdown: `PARENT_KING ${"p".repeat(20000)}`,
+  parent_markdown: `PARENT_START ${"p".repeat(60000)} PARENT_TAIL`,
+  notes: [{ content: `NOTE_START ${"n".repeat(1000)} NOTE_TAIL`, on_selected_text: `ANCHOR_START ${"a".repeat(1000)} ANCHOR_TAIL` }],
+  ancestors: [{ title: "Ancestor", markdown: `ANCESTOR_START ${"a".repeat(1000)} ANCESTOR_TAIL` }],
 };
-const tightWithoutNotes = buildAnswerMessages(tightContext, { tokenBudget: 2000 })[1].content;
-const tightWithNotes = buildAnswerMessages({
-  ...tightContext,
-  notes: [{ content: `NOTE_START ${"n".repeat(1000)} NOTE_TAIL`, on_selected_text: "budget anchor" }],
-}, { tokenBudget: 2000 })[1].content;
-const parentSection = (value) => value.slice(value.indexOf("Parent document markdown:"));
-assert.equal(parentSection(tightWithNotes), parentSection(tightWithoutNotes), "note pressure must not consume the parent-document budget");
-assert.match(tightWithNotes, /Notes:/);
-assert.match(tightWithNotes, /NOTE_START/);
-assert.equal(tightWithNotes.includes("NOTE_TAIL"), false, "note excerpts trim before parent markdown under a tight budget");
-assert.match(tightWithNotes, /PARENT_KING/);
+const longMessages = buildAnswerMessages(longContext)[1].content;
+assert.ok(longMessages.includes(longContext.parent_markdown), "complete parent content reaches the provider");
+assert.ok(longMessages.includes(longContext.notes[0].content), "complete note content reaches the provider");
+assert.ok(longMessages.includes(longContext.notes[0].on_selected_text), "complete note anchor reaches the provider");
+assert.ok(longMessages.includes(longContext.ancestors[0].markdown), "complete ancestor content reaches the provider");
 
 const transcription = buildTranscribeMessages({ pages: [{ n: 7, data_url: dataUrl }], tail: "x".repeat(700) });
 assert.equal(transcription[0].content.at(-1).image_url.url, dataUrl);
@@ -82,4 +78,4 @@ assert.match(AUTHORING_VOCABULARY_V1, /mindmap, architecture, and Mermaid-side K
 assert.match(AUTHORING_VOCABULARY_V1, /```show id=<slug>/);
 assert.match(AUTHORING_VOCABULARY_V1, /```check with strict JSON/);
 
-console.log("ok prompts: PDF attachments, note context and budget priority, byte-identical text-only messages, and Mermaid guidance");
+console.log("ok prompts: PDF attachments, complete note and article context, byte-identical text-only messages, and Mermaid guidance");
