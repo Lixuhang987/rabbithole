@@ -7,8 +7,6 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const uiDir = path.join(rootDir, "src/ui");
 const coreDir = path.join(rootDir, "src/core");
 const nodeDir = path.join(rootDir, "src/node");
-const mcpDir = path.join(nodeDir, "mcp");
-const bridgeDir = path.join(nodeDir, "bridge");
 const webDir = path.join(rootDir, "src/web");
 const designDir = path.join(rootDir, "src/design");
 const builtins = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
@@ -22,7 +20,6 @@ for (const file of await listJs(coreDir)) {
 }
 for (const file of await listJs(nodeDir)) {
   await checkHostFile(file, nodeDir, webDir, "node", "web");
-  await checkNodeProductBoundary(file);
 }
 for (const file of await listJs(webDir)) {
   await checkWebFile(file);
@@ -96,38 +93,10 @@ async function checkHostFile(file, ownDir, forbiddenDir, ownName, forbiddenName)
   }
 }
 
-async function checkNodeProductBoundary(file) {
-  const fileInMcp = isInside(path.relative(mcpDir, file));
-  const fileInBridge = isInside(path.relative(bridgeDir, file));
-  if (!fileInMcp && !fileInBridge) return;
-  const forbiddenDir = fileInMcp ? bridgeDir : mcpDir;
-  const forbiddenName = fileInMcp ? "bridge" : "mcp";
-  const source = await fs.readFile(file, "utf8");
-  for (const specifier of importSpecifiers(source)) {
-    if (!specifier.startsWith(".")) continue;
-    const resolved = resolveImport(file, specifier);
-    if (isInside(path.relative(forbiddenDir, resolved))) {
-      failures.push(`${rel(file)} crosses the Node product boundary into src/node/${forbiddenName} via ${specifier}`);
-    }
-  }
-}
-
 async function checkNodeOwnership() {
   const files = await listJs(nodeDir);
   const sources = await Promise.all(files.map(async (file) => ({ file, source: await fs.readFile(file, "utf8") })));
-  const retiredCollections = [
-    "pendingByRequest", "generationByRequest", "cancelledRequests", "completedRequests",
-    "answerWatchdogs", "inFlightBranchRequests", "delegatedRequests", "nonBlockingRequests",
-    "convertRequests", "regionFiles",
-  ];
   for (const { file, source } of sources) {
-    for (const name of retiredCollections) {
-      if (new RegExp(`\\b${name}\\b`).test(source)) failures.push(`${rel(file)} revives retired request collection ${name}`);
-    }
-    if (!file.endsWith("mcp/hole-session/request-table.js") && !file.endsWith("mcp/hole-session/crops.js")
-      && /(?:request\w*|\w*Request\w*)\s*=\s*new\s+(?:Map|Set)\b/.test(source)) {
-      failures.push(`${rel(file)} declares a request-keyed collection outside request-table.js`);
-    }
     if (!file.endsWith("shared/deadline.js") && /\b300_?000\b/.test(source)) {
       failures.push(`${rel(file)} declares the shared 300-second agent budget again`);
     }
@@ -141,10 +110,6 @@ async function checkNodeOwnership() {
     const count = joined.match(pattern)?.length || 0;
     if (count !== 1) failures.push(`src/node must define ${label} exactly once (found ${count})`);
   }
-  try {
-    await fs.access(path.join(mcpDir, "schema.js"));
-    failures.push("src/node/mcp/schema.js must stay deleted; tools use zod directly");
-  } catch {}
   const settingsSource = await fs.readFile(path.join(webDir, "settings/model-settings.js"), "utf8");
   for (const name of ["bridgeStream", "bridgeStreamKey", "bridgeReconnectTimer", "bridgeReconnectDelay", "bridgeReconnectPending", "bridgeImmediateReconnectAvailable", "bridgeProbeTimer", "bridgeProbeGeneration", "bridgeProbeInFlight"]) {
     if (new RegExp(`\\blet\\s+${name}\\b`).test(settingsSource)) failures.push(`src/web/settings/model-settings.js owns ${name}; bridge-connection.js must own it`);

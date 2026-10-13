@@ -6,10 +6,10 @@ carry format-upgrade paths.
 
 ## Persisted holes
 
-Filesystem and IndexedDB records use `schema_version: 2`. The runtime authority
+IndexedDB records use `schema_version: 2`. The runtime authority
 is `src/core/schema.js`:
 
-- `toPersistedHole` creates the canonical record written by either store.
+- `toPersistedHole` creates the canonical record written by the browser store.
 - `parsePersistedHole` clones and validates untrusted records and normalizes the
   documented PDF selection rectangle.
 - `validatePersistedHole` enforces the current document and node shape.
@@ -55,7 +55,7 @@ Snapshot HTML is self-contained and carries the same portable envelope in one
 inert `application/vnd.rabbithole+json` script element. Snapshot projection:
 
 - includes only referenced assets;
-- clears every node's personal `extensions` bag to `{}`;
+- clears personal extensions, retaining PDF, note and canvas page shape;
 - includes the shareable canvas view;
 - contains no credentials, settings, live transport, or external assets.
 - embeds the pinned Mermaid runtime only when a node contains a Mermaid fence,
@@ -70,26 +70,19 @@ current stores are `holes`, `hole-summaries`, `assets`, `staging`, and `meta`.
 Whimsical `hole_id` values are device-local URL locators, not network share
 tokens.
 
-Preferences use `rh-web-settings`. Remembered provider keys use the
-`rh-web-api-keys` map; session-only keys remain in memory. Credentials and
-preferences are separate from document storage and are excluded from portable
-files, snapshots, MCP hydration, and stored holes.
+Model choices and bridge pairing use `rh-web-settings`, separate from document
+storage. The local `backend_conversation` extension stores backend, sessionId and
+scopeId only after successful generation. Portable projections remove it without
+mutating live state. Settings and session references have no migrations.
 
-## MCP surface
+## Generation protocol
 
-The server exposes `open_rabbithole`, `answer_branch`, `read_rabbithole`,
-`send_to_rabbithole`, and `list_rabbitholes`. Tool inputs are validated and
-capped before filesystem or session mutation. The browser transport uses the event vocabulary in
-`src/core/contracts/engine.d.ts`; the agent loop receives branch requests,
-conversion requests, and terminal session status. Branch requests carry a
-compact tree-and-note map, add full note deltas, and include an undelivered
-lineage thread when needed; saved pending asks remain ordinary branch requests.
-
-The `delegated` flag is live coordination state: `true` records external ownership and `false` reclaims it; it never enters persisted holes, portable files, or snapshots.
-Terminal `session_closed` reasons are `done`, `server_error`, `agent_exited`, `superseded` (the same hole was opened again), and `session_closed`.
-
-stdout is reserved for MCP protocol messages. Application logs always go to
-stderr.
+The authenticated loopback `/bridge/generate` endpoint accepts backend, model,
+reasoning, optional sourceSession and semantic input. Tasks are explain, author,
+ask and transcribe. The bridge owns product instructions. Every request creates a
+persistent session or forks its source; completion carries the new session apart
+from article text. Text, search, completed and error are native SSE event types.
+EOF alone fails. Missing history, scope and backend mismatch fail explicitly.
 
 ## Security and resource limits
 
@@ -103,10 +96,7 @@ The contract suites covering these boundaries are:
 - `test/contracts/data-boundaries.test.mjs`
 - `test/contracts/artifact-roundtrip.test.mjs`
 - `test/contracts/compatibility-security.test.mjs`
-- `test/contracts/filesystem-store.test.mjs`
 - `test/contracts/indexeddb-store.test.mjs`
-- `test/contracts/mcp-markdown-wire.test.mjs`
-- `test/e2e/cross-host-journey.test.mjs`
 
 ## Changing a format
 

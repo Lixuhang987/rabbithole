@@ -44,7 +44,6 @@ export class DirectHostBase {
     /** @type {Promise<any>} */ this.savingChain = Promise.resolve();
     this.abortByNode = new Map();
     this.noteConversions = new Map();
-    this.conversationBaselines = new Map();
     this.lastEventId = 0;
     this.disposed = false;
     this.subscriptions = new Set();

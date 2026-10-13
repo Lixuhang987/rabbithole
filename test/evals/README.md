@@ -1,19 +1,15 @@
 # Golden Ask Evals
 
-Run:
+Run against your paired Codex bridge:
 
 ```bash
-EVAL_BASE_URL=https://openrouter.ai/api/v1 \
-EVAL_API_KEY=... \
-EVAL_MODEL=anthropic/claude-sonnet-5 \
+EVAL_BASE_URL=http://127.0.0.1:41414 \
+EVAL_BRIDGE_TOKEN=... \
+EVAL_MODEL=your-codex-model \
 npm run eval
 ```
 
-The runner uses the real web Brain answer prompt and OpenAI-compatible streaming
-transport. It prints a pass/fail scorecard for the golden asks and exits nonzero
-on any hard rubric failure or provider error.
-
-To promote a model in `src/web/brain/tested-models.js`, run the eval with that
-exact provider/model string, record the passing date in the registry entry, and
-change `status` from `untested` to `passed` in the same commit as the eval note.
-Do not mark models as tested from structure-only checks.
+The runner uses semantic article Asks and native bridge streaming. Every Ask
+creates its own Codex session with the source article and current intent.
+It prints a rubric scorecard and exits nonzero on a hard rubric failure or
+backend error. Deterministic fixtures do not establish live model quality.

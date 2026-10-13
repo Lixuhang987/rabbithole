@@ -1,5 +1,5 @@
 ---
-status: shipped
+status: superseded
 date: 2026-08-20
 ---
 

@@ -1,58 +1,25 @@
-import { providerFor } from "./provider-registry.js";
-import { discoverLocalModels } from "./local-model-catalog.js";
-
-export const PDF_TRANSCRIPTION_HELP = "Uses a vision model to turn PDF pages into searchable Markdown.";
-
-export function localVisionModels(models) {
-  return (Array.isArray(models) ? models : []).filter((model) => model?.vision === true);
-}
-
+import { addressSpaceHint } from './network.js';
+export const PDF_TRANSCRIPTION_HELP = 'Uses your selected model to turn PDF pages into searchable Markdown.';
 export function pdfTranscriptionCapability(settings, { models = null, discoveryError = false } = {}) {
-  const preset = providerFor(settings?.preset);
-  const configuredModel = String(settings?.transcribe_model || preset.transcribe_model || "").trim();
-  if (preset.id !== "local") {
-    return configuredModel
-      ? { available: true, status: "available", model: configuredModel, reason: "" }
-      : { available: false, status: "model_required", model: "", reason: "Choose a PDF transcription model in Model settings." };
-  }
-  if (discoveryError) {
-    return { available: false, status: "unverified", model: configuredModel, reason: "PDF transcription is disabled because Rabbithole couldn't verify a local vision model. Check the local endpoint in Model settings." };
-  }
-  if (!Array.isArray(models)) {
-    return { available: false, status: "checking", model: configuredModel, reason: "Checking the local endpoint for a vision model…" };
-  }
-  if (!models.length) {
-    return { available: false, status: "no_models", model: configuredModel, reason: "PDF transcription is disabled because no local models are installed." };
-  }
-  const visionModels = localVisionModels(models);
-  const unknownModels = models.filter((model) => model?.vision == null);
-  if (!visionModels.length) {
-    const reason = unknownModels.length
-      ? "PDF transcription is disabled because Rabbithole couldn't confirm that an installed local model supports vision."
-      : "Install a local model that supports vision to enable PDF transcription.";
-    return { available: false, status: unknownModels.length ? "unverified" : "no_vision", model: configuredModel, reason };
-  }
-  const selected = visionModels.find((model) => model.id === configuredModel);
-  if (selected) return { available: true, status: "available", model: selected.id, reason: "", visionModels };
-  const recommended = visionModels.find((model) => model.id === settings?.model) || visionModels[0];
-  return {
-    available: false,
-    status: "model_required",
-    model: configuredModel,
-    recommendedModel: recommended.id,
-    visionModels,
-    reason: "Choose an installed vision model for PDF transcription in Model settings.",
-  };
+  const model = String(settings.model || '');
+  if (!model || !settings.token) return { available: false, model, status: 'model_required', reason: 'Connect Codex and choose a model in Model settings.' };
+  const entry = models?.find((value) => value.id === model);
+  const available = entry?.images === true || entry?.vision === true;
+  return { available, model, status: available ? 'available' : discoveryError ? 'unverified' : models ? 'no_vision' : 'checking',
+    reason: available ? '' : discoveryError ? 'Could not verify model vision support. Check the bridge connection.' : models ? 'The selected model does not support PDF images. Choose a vision model.' : 'Checking model vision support…' };
 }
-
 /** @param {any} settings @param {{signal?: AbortSignal}} [options] */
 export async function detectPdfTranscriptionCapability(settings, { signal } = {}) {
-  if (providerFor(settings?.preset).id !== "local") return pdfTranscriptionCapability(settings);
+  if (!settings.token || !settings.model) return pdfTranscriptionCapability(settings);
+  const url = `${String(settings.base_url || '').replace(/\/+$/, '')}/bridge/models`;
   try {
-    const models = await discoverLocalModels(settings?.base_url, { signal });
-    return { ...pdfTranscriptionCapability(settings, { models }), models };
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${settings.token}` }, signal, ...addressSpaceHint(url) });
+    if (!response.ok) throw new Error('Model discovery failed');
+    const { models } = await response.json();
+    if (!Array.isArray(models)) throw new Error('Invalid model catalog');
+    return pdfTranscriptionCapability(settings, { models });
   } catch (error) {
-    if (error?.name === "AbortError") throw error;
+    if (error.name === 'AbortError') throw error;
     return pdfTranscriptionCapability(settings, { discoveryError: true });
   }
 }

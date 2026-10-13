@@ -3,8 +3,7 @@
  *
  * Theme and global reading size describe the eyes and the monitor in front of
  * the page — not the thing being read. Stable web origins keep them in
- * localStorage; ephemeral MCP origins compose a machine-backed store under
- * the same string encoding. They never enter the hole document, the
+ * localStorage. They never enter the hole document, the
  * node_update wire, exports, or the portable format. Per-node `font_scale` is
  * the authorial counterpart and stays in the doc; the two compose (see fontPx
  * in core.js).
@@ -34,8 +33,6 @@ let autoTidyGraceCache = null;
 let swapFrame = 0;
 let askPresetsCache = null;
 let reactionPromptsCache = null;
-let configuredBacking = null;
-let configuredValues = null;
 
 /*
  * A frozen snapshot is often opened from a file or a data document where
@@ -46,7 +43,6 @@ let configuredValues = null;
 const memory = Object.create(null);
 
 function readStored(key) {
-  if (configuredValues) return configuredValues[key] === undefined ? "" : configuredValues[key];
   // A value only lands in memory when the store refused it, so it is always
   // the more recent intent.
   if (memory[key] !== undefined) return memory[key];
@@ -57,13 +53,6 @@ function readStored(key) {
 }
 
 function writeStored(key, value) {
-  if (configuredValues) {
-    configuredValues[key] = value;
-    try {
-      configuredBacking.write(key, value);
-    } catch (error) {}
-    return;
-  }
   try {
     localStorage.setItem(key, value);
     delete memory[key];
@@ -73,71 +62,12 @@ function writeStored(key, value) {
 }
 
 function removeStored(key) {
-  if (configuredValues) {
-    delete configuredValues[key];
-    try {
-      configuredBacking.write(key, null);
-    } catch (error) {}
-    return;
-  }
   try {
     localStorage.removeItem(key);
     delete memory[key];
   } catch (error) {
     memory[key] = "";
   }
-}
-
-function resetDerivedCaches() {
-  readingScaleCache = null;
-  autoTidyEnabledCache = null;
-  autoTidyGraceCache = null;
-  askPresetsCache = null;
-  reactionPromptsCache = null;
-}
-
-export function configurePreferenceBacking(backing) {
-  const seed = backing && backing.seed && typeof backing.seed === "object" ? backing.seed : {};
-  configuredBacking = backing && typeof backing.write === "function" ? backing : { write: function () {} };
-  configuredValues = Object.create(null);
-  Object.keys(seed).forEach(function (key) {
-    if (typeof seed[key] === "string") configuredValues[key] = seed[key];
-  });
-  resetDerivedCaches();
-}
-
-export function resetPreferenceBacking() {
-  configuredBacking = null;
-  configuredValues = null;
-  resetDerivedCaches();
-}
-
-function preferenceKind(key) {
-  if (key === THEME_KEY) return "theme";
-  if (key === READING_SCALE_KEY) return "reading-scale";
-  if (key === ASK_PRESETS_KEY) return "ask-presets";
-  if (key === REACTION_PROMPTS_KEY) return "reaction-prompts";
-  if (key === AUTO_TIDY_KEY || key === AUTO_TIDY_GRACE_KEY) return "auto-tidy";
-  return null;
-}
-
-export function applyPreferencePatch(values) {
-  if (!configuredValues || !values || typeof values !== "object" || Array.isArray(values)) return false;
-  const kinds = new Set();
-  Object.keys(values).forEach(function (key) {
-    const value = values[key];
-    if (value === null) delete configuredValues[key];
-    else if (typeof value === "string") configuredValues[key] = value;
-    else return;
-    const kind = preferenceKind(key);
-    if (kind) kinds.add(kind);
-  });
-  resetDerivedCaches();
-  kinds.forEach(function (kind) {
-    if (kind === "theme") applyTheme();
-    notify(kind);
-  });
-  return true;
 }
 
 export function onPreferenceChange(handler) {

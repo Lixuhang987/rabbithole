@@ -1,15 +1,15 @@
 /** Browser mock of the external bridge stream and native search lifecycle. */
 const BRIDGE_EVENTS_URL = "http://127.0.0.1:41414/bridge/events";
-const BRIDGE_CHAT_URL = "http://127.0.0.1:41414/v1/chat/completions";
+const BRIDGE_GENERATE_URL = "http://127.0.0.1:41414/bridge/generate";
 const BRIDGE_PING_URL = "http://127.0.0.1:41414/bridge/ping";
 
 export async function installBridgeFetchStub(context) {
-  await context.addInitScript(({ eventsUrl, chatUrl, pingUrl, restartUrl }) => {
+  await context.addInitScript(({ eventsUrl, generateUrl, pingUrl, restartUrl }) => {
     const realFetch = window.fetch.bind(window);
     const encoder = new TextEncoder();
     const streams = new Set();
     const requests = [];
-    const chatQueue = [];
+    const generationQueue = [];
     const restartQueue = [];
     let conversationCounter = 0;
     let denyNextConnection = false;
@@ -55,7 +55,7 @@ export async function installBridgeFetchStub(context) {
         document.dispatchEvent(new Event("visibilitychange"));
       },
       denyNextConnection() { denyNextConnection = true; },
-      queueChat(...items) { chatQueue.push(...items); },
+      queueGeneration(...items) { generationQueue.push(...items); },
       queueRestart(...items) { restartQueue.push(...items); },
       finishSearch() { finishSearch?.(); },
       setPing(value) { pingUp = Boolean(value); },
@@ -99,23 +99,13 @@ export async function installBridgeFetchStub(context) {
         push(currentState);
         return new Response(JSON.stringify({ ok: true, state: currentState }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
-      if (url === chatUrl) {
+      if (url === generateUrl) {
         const body = JSON.parse(typeof options.body === "string" ? options.body : "{}");
-        requests.push({ kind: "chat", authorization: authorization(options), body });
-        const conversation = body.rabbithole_conversation ? {
-          nodeId: body.rabbithole_conversation.nodeId,
-          conversation: { version: 1, threadId: `browser-thread-${++conversationCounter}`, scopeId: "browser-scope" },
-        } : null;
-        if (body.rabbithole_conversation?.operation === "baseline") {
-          return new Response(JSON.stringify({ rabbithole_conversation: conversation }), {
-            status: 200, headers: { "Content-Type": "application/json" },
-          });
-        }
-        const completion = [
-          ...(conversation ? [{ object: "rabbithole.conversation", ...conversation }] : []),
-          { choices: [{ delta: {}, finish_reason: "stop" }] },
-        ].map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") + "data: [DONE]\n\n";
-        const item = chatQueue.shift() || { text: "Subscription response." };
+        requests.push({ kind: "generate", authorization: authorization(options), body });
+        const completion = `data: ${JSON.stringify({ type: "completed", session: {
+          backend: "codex", sessionId: `browser-session-${++conversationCounter}`, scopeId: "browser-scope",
+        } })}\n\n`;
+        const item = generationQueue.shift() || { text: "Subscription response." };
         if (item.beforeState) {
           push(item.beforeState);
           await new Promise((resolve) => setTimeout(resolve, 30));
@@ -129,20 +119,20 @@ export async function installBridgeFetchStub(context) {
         if (item.search) {
           return new Response(new ReadableStream({ start(controller) {
             const send = (value) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(value)}\n\n`));
-            send({ object: "rabbithole.search", type: "search", id: "ui-search", status: "searching", action: "search" });
+            send({ type: "search", id: "ui-search", status: "searching", action: "search" });
             finishSearch = () => {
-              send({ object: "rabbithole.search", type: "search", id: "ui-search", status: "completed", action: "search" });
-              send({ choices: [{ delta: { content: item.text } }] });
+              send({ type: "search", id: "ui-search", status: "completed", action: "search" });
+              send({ type: "text", delta: item.text });
               controller.enqueue(encoder.encode(completion));
               controller.close();
               finishSearch = null;
             };
           } }), { status: 200, headers: { "Content-Type": "text/event-stream" } });
         }
-        const sse = `data: ${JSON.stringify({ choices: [{ delta: { content: item.text } }] })}\n\n${completion}`;
+        const sse = `data: ${JSON.stringify({ type: "text", delta: item.text })}\n\n${completion}`;
         return new Response(sse, { status: 200, headers: { "Content-Type": "text/event-stream" } });
       }
       return realFetch(input, options);
     };
-  }, { eventsUrl: BRIDGE_EVENTS_URL, chatUrl: BRIDGE_CHAT_URL, pingUrl: BRIDGE_PING_URL, restartUrl: "http://127.0.0.1:41414/bridge/restart" });
+  }, { eventsUrl: BRIDGE_EVENTS_URL, generateUrl: BRIDGE_GENERATE_URL, pingUrl: BRIDGE_PING_URL, restartUrl: "http://127.0.0.1:41414/bridge/restart" });
 }

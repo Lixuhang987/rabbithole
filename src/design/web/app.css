@@ -671,7 +671,7 @@ body.blank-dragging .composer-card {
   filter: brightness(1.05);
 }
 
-/* Setup gates this button while an endpoint is still being typed, so it has to read as
+/* Setup gates this button until bridge pairing completes, so it has to read as
    unavailable rather than merely refusing clicks. */
 .web-primary:disabled {
   opacity: 0.45;
@@ -809,197 +809,6 @@ body.blank-dragging .composer-card {
   visibility: visible;
 }
 
-/*
- * The flat provider list: five exclusive rows, the selected one expands in
- * place. Rows sit bare on the sheet's pane — same 56px rhythm and type ramp
- * as every other settings row; the dot column, not a box, is what says
- * "radio group". The hover pill overhangs the pane gutter so the copy keeps
- * the same left edge as the rows around it.
- */
-.provider-row {
-  display: grid;
-  grid-template-columns: 15px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  width: calc(100% + 20px);
-  margin-inline: -10px;
-  box-sizing: border-box;
-  min-height: 56px;
-  border: 0;
-  border-radius: var(--radius-control-lg);
-  background: transparent;
-  color: inherit;
-  padding: 8px 10px;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-standard);
-}
-
-.provider-item:not(.selected) .provider-row:hover {
-  background: var(--hl);
-}
-
-.provider-row:focus-visible {
-  outline: var(--focus-ring);
-  outline-offset: -2px;
-}
-
-.provider-dot {
-  position: relative;
-  box-sizing: border-box;
-  width: 15px;
-  height: 15px;
-  border: 1.5px solid color-mix(in srgb, var(--fg) 34%, transparent);
-  border-radius: 50%;
-  transition: border-color var(--duration-fast) var(--ease-standard);
-}
-
-.provider-row:hover .provider-dot {
-  border-color: color-mix(in srgb, var(--fg) 50%, transparent);
-}
-
-/* 15px ring − 1.5px borders = 12px box; a 6px dot with 3px insets keeps every
-   edge on a whole pixel, so the dot stays optically concentric at any DPR. */
-.provider-dot::after {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  background: var(--accent);
-  transform: scale(0);
-  transition: transform var(--duration-fast) var(--ease-out);
-}
-
-.provider-item.selected .provider-dot {
-  border-color: var(--accent);
-}
-
-.provider-item.selected .provider-dot::after {
-  transform: scale(1);
-}
-
-.provider-copy {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.provider-copy strong {
-  color: var(--fg);
-  font: var(--weight-medium) var(--text-body)/1.25 var(--font-ui);
-  transition: color var(--duration-fast) var(--ease-standard);
-}
-
-.provider-item.selected .provider-copy strong {
-  color: var(--fg-bold);
-}
-
-.provider-copy small {
-  color: var(--fg-faint);
-  font: var(--text-ui)/var(--leading-ui) var(--font-ui);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.provider-chip {
-  color: var(--fg-faint);
-  font: var(--weight-medium) var(--text-sm)/1.25 var(--font-ui);
-  white-space: nowrap;
-}
-
-.provider-chip.ok {
-  color: color-mix(in srgb, var(--success) 86%, var(--fg));
-}
-
-.provider-chip.warn {
-  color: var(--warn);
-}
-
-.provider-chip.ok::before {
-  content: "";
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-  margin-inline-end: 6px;
-  vertical-align: 1.5px;
-}
-
-/* Interruptible expand/collapse: grid-template-rows retargets mid-flight. */
-.provider-body {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--duration-legacy-200) var(--ease-out);
-}
-
-.provider-item.selected .provider-body {
-  grid-template-rows: 1fr;
-}
-
-.provider-body-slot {
-  min-height: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition: opacity var(--duration-enter) var(--ease-standard);
-}
-
-.provider-item.selected .provider-body-slot {
-  opacity: 1;
-}
-
-/* Section internals are unchanged; inside a row they lose their dividers
-   (the dot column provides the grouping) and align to the title's leading
-   edge (15px dot + 10px gap past the pane gutter). Controls end on the
-   gutter, where every sheet row ends its controls. */
-.provider-body .settings-section {
-  border-top: 0;
-  padding: 4px 0 16px 25px;
-}
-
-.provider-body .settings-section + .settings-section {
-  border-top: 0;
-}
-
-.provider-body .settings-recovery {
-  margin: 4px 0 10px 25px;
-  padding: 10px 11px;
-}
-
-.provider-body .endpoint-section {
-  padding-bottom: 6px;
-}
-
-.provider-body .endpoint-section + .key-section {
-  padding-top: 6px;
-}
-
-.provider-body .model-section > .settings-row {
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-.provider-body .settings-advanced {
-  border-top: 0;
-}
-
-.provider-body .settings-advanced summary {
-  padding: 8px 0 8px 25px;
-}
-
-.provider-body .settings-advanced-grid {
-  padding: 2px 0 16px 25px;
-}
-
-.provider-body .settings-complete-section {
-  padding-top: 2px;
-}
-
-.provider-body .bridge-agent-body {
-  min-height: 0;
-}
-
 .reasoning-choice {
   display: grid;
   grid-auto-flow: column;
@@ -1046,17 +855,6 @@ body.blank-dragging .composer-card {
   overflow: hidden;
 }
 
-.bridge-setup-section h3,
-.bridge-agent-state p {
-  margin: 0 0 10px;
-  color: var(--fg);
-  font: var(--weight-semibold) var(--text-body)/1.45 var(--font-ui);
-}
-
-.bridge-agent-body {
-  min-height: 118px;
-}
-
 .bridge-command {
   display: flex;
   align-items: center;
@@ -1078,156 +876,6 @@ body.blank-dragging .composer-card {
   overflow-wrap: anywhere;
 }
 
-.bridge-setup-section .field-hint,
-.bridge-agent-state .field-hint {
-  display: block;
-  margin-top: 8px;
-}
-
-.bridge-setup-why {
-  margin: 0 0 14px;
-  color: var(--fg-dim);
-  font: var(--text-sm)/1.55 var(--font-ui);
-}
-
-.bridge-setup-live {
-  color: color-mix(in srgb, var(--success) 82%, var(--fg));
-  font-weight: var(--weight-medium);
-}
-
-.bridge-check {
-  margin-inline-end: 2px;
-}
-
-.bridge-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin: 0 0 4px;
-}
-
-.bridge-step {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  gap: 10px;
-}
-
-.bridge-step-marker {
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin-top: -1px;
-  border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent);
-  border-radius: 50%;
-  color: var(--fg-dim);
-  font: var(--weight-semibold) 11px/1 var(--font-ui);
-}
-
-.bridge-step-body {
-  min-width: 0;
-}
-
-.bridge-step-body p {
-  margin: 0 0 8px;
-  color: var(--fg);
-  font: var(--text-sm)/1.45 var(--font-ui);
-}
-
-.bridge-step-upcoming {
-  opacity: 0.55;
-}
-
-.bridge-step-upcoming .bridge-step-body p {
-  margin-bottom: 0;
-}
-
-.bridge-setup-section .field-hint.bridge-step-wait {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.bridge-step-wait .ollama-spinner {
-  display: inline-block;
-  flex: none;
-  width: 11px;
-  height: 11px;
-  margin: 0;
-  border-width: 1.5px;
-}
-
-.bridge-starting {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.bridge-starting .ollama-spinner {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  margin: 0;
-}
-
-.bridge-starting p {
-  margin: 0;
-}
-
-.bridge-step-lead {
-  margin: 0 0 10px;
-  color: var(--fg);
-  font: var(--text-sm)/1.45 var(--font-ui);
-}
-
-.bridge-paste-fallback {
-  margin-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.bridge-paste-fallback summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 0 0;
-  color: var(--fg-dim);
-  font: var(--weight-semibold) var(--text-sm)/1.25 var(--font-ui);
-  cursor: pointer;
-  list-style: none;
-}
-
-.bridge-paste-fallback summary::-webkit-details-marker {
-  display: none;
-}
-
-/* Same disclosure chevron as .settings-advanced — collapsed content with no
-   cue may as well not exist. */
-.bridge-paste-fallback summary::after {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-  transition: transform var(--duration-fast) var(--ease-standard);
-}
-
-.bridge-paste-fallback[open] summary::after {
-  transform: rotate(45deg);
-}
-
-.bridge-paste-fallback summary:hover {
-  color: var(--fg);
-}
-
-.bridge-paste-fallback[open] summary {
-  margin-bottom: 10px;
-}
-
-.bridge-paste-fallback .settings-advanced-grid {
-  padding: 0;
-}
-
 .bridge-pair-grid {
   display: grid;
   gap: 10px;
@@ -1236,37 +884,6 @@ body.blank-dragging .composer-card {
 .bridge-pair-grid .web-primary {
   justify-self: start;
   padding-inline: 18px;
-}
-
-.bridge-pair-grid .key-status:not(.visible) {
-  display: none;
-}
-
-.settings-recovery {
-  margin: 0 18px 14px;
-  padding: 10px 11px;
-  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
-  border-radius: var(--radius-control-lg);
-  background: color-mix(in srgb, var(--warn) 8%, transparent);
-  color: var(--warn);
-  font: 12px/1.45 var(--font-ui);
-}
-
-.settings-text-action {
-  border: 0;
-  background: transparent;
-  color: var(--accent);
-  padding: 0;
-  font-weight: var(--weight-semibold);
-  font-size: inherit;
-  line-height: inherit;
-  font-family: inherit;
-  cursor: pointer;
-  transition: color var(--duration-fast) var(--ease-standard);
-}
-
-.settings-text-action:hover {
-  color: color-mix(in srgb, var(--accent) 75%, var(--fg-bold));
 }
 
 .settings-complete-section .web-primary {
@@ -1478,87 +1095,6 @@ body.blank-dragging .composer-card {
   font: 12px/1.45 var(--font-ui);
 }
 
-/* Shares the label's line box so the row is exactly one line of type tall. */
-.key-get {
-  color: var(--fg-dim);
-  font: var(--weight-semibold) var(--text-sm)/1.25 var(--font-ui);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.key-get:hover {
-  color: var(--accent);
-}
-
-/* A label-only row carries no control, so the 26px row minimum would sit as slack between
-   the label and its input — 14px where every other field uses 8px. Baseline alignment keeps
-   the label and the "Get a key" link on one line of type despite their different sizes. */
-.key-row {
-  min-height: 0;
-  align-items: baseline;
-}
-
-.key-input-wrap {
-  position: relative;
-  border-radius: var(--radius-control-lg);
-  transition: box-shadow var(--duration-fast) var(--ease-standard);
-}
-
-.key-input-wrap:focus-within {
-  box-shadow: var(--focus-field-shadow);
-}
-
-.key-input-wrap input {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control-lg);
-  background: color-mix(in srgb, var(--bg) 55%, transparent);
-  color: var(--fg);
-  padding-block: 8px;
-  padding-inline: 10px 36px;
-  font: 12px/1.5 var(--font-mono);
-  transition: border-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
-}
-
-.key-input-wrap input::placeholder {
-  color: var(--fg-faint);
-}
-
-.key-input-wrap input:focus {
-  outline: none;
-  border-color: var(--border-focus);
-}
-
-.key-input-wrap button {
-  position: absolute;
-  top: 50%;
-  inset-inline-end: 5px;
-  transform: translateY(-50%);
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--fg-faint);
-  padding: 0;
-  cursor: pointer;
-  transition: color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
-}
-
-.key-input-wrap button:hover {
-  background: var(--hl);
-  color: var(--fg-bold);
-}
-
-.remember-row {
-  margin-top: 16px;
-  cursor: pointer;
-}
-
 .switch {
   position: relative;
   display: inline-flex;
@@ -1635,9 +1171,7 @@ body.blank-dragging .composer-card {
   letter-spacing: 0.01em;
 }
 
-/* Same radius and inline padding as .key-input-wrap input — in the custom-endpoint
-   panel these fields stack as one visual block, so their edges must match. */
-.endpoint-section input,
+/* Pairing fields use the shared settings spacing. */
 .settings-advanced-grid input,
 .settings-advanced-grid select {
   width: 100%;
@@ -1665,12 +1199,10 @@ body.blank-dragging .composer-card {
   padding-right: 32px;
 }
 
-.endpoint-section input::placeholder,
 .settings-advanced-grid input::placeholder {
   color: var(--fg-faint);
 }
 
-.endpoint-section input:focus,
 .settings-advanced-grid input:focus,
 .settings-advanced-grid select:focus {
   outline: none;
@@ -1678,9 +1210,7 @@ body.blank-dragging .composer-card {
   box-shadow: var(--focus-field-shadow);
 }
 
-.endpoint-section input:focus-visible,
-.settings-advanced-grid input:focus-visible,
-.key-input-wrap input:focus-visible {
+.settings-advanced-grid input:focus-visible {
   outline: var(--focus-ring);
   outline-offset: var(--focus-offset);
 }
@@ -1704,23 +1234,6 @@ body.blank-dragging .composer-card {
   cursor: pointer;
   list-style: none;
   transition: color var(--duration-fast) var(--ease-standard);
-}
-
-.local-model-section .field-hint {
-  display: block;
-  margin-top: 8px;
-}
-
-.transcription-model-section .field-hint {
-  display: block;
-  margin-top: 8px;
-}
-
-.transcription-status.no_models,
-.transcription-status.no_vision,
-.transcription-status.unverified,
-.transcription-status.model_required {
-  color: var(--warn);
 }
 
 #blank-start-setup[aria-expanded="true"] + #blank-start-status {
@@ -1765,50 +1278,6 @@ body.blank-dragging .composer-card {
   color: var(--fg-dim);
   font-family: var(--font-mono);
   font-size: var(--doc-size-compact);
-}
-
-.key-status {
-  min-height: 16px;
-  color: var(--fg-dim);
-  font: var(--text-sm)/1.45 var(--font-ui);
-}
-
-.key-status.idle {
-  color: var(--fg-dim);
-}
-
-.key-status.valid::before {
-  content: "";
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-  margin-inline-end: 6px;
-  vertical-align: 1.5px;
-}
-
-.key-status.valid {
-  color: color-mix(in srgb, var(--success) 86%, var(--fg));
-}
-
-.key-status.invalid {
-  color: var(--warn);
-}
-
-.key-status.busy {
-  color: var(--fg);
-}
-
-.shake-once {
-  animation: key-shake var(--duration-enter) var(--ease-standard);
-}
-
-@keyframes key-shake {
-  20% { transform: translateX(-3px); }
-  45% { transform: translateX(3px); }
-  70% { transform: translateX(-2px); }
-  100% { transform: translateX(0); }
 }
 
 .web-toast {
@@ -1868,287 +1337,6 @@ body.blank-dragging .composer-card {
   font-family: var(--font-ui);
 }
 
-/* Ollama recovery */
-.ollama-recovery-modal {
-  position: fixed;
-  inset: 0;
-  z-index: var(--layer-popover);
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background:
-    radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 38%),
-    color-mix(in srgb, var(--bg) 72%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(1.15);
-  backdrop-filter: blur(16px) saturate(1.15);
-  animation: settings-scrim-in var(--duration-fast) var(--ease-out) both;
-}
-
-.ollama-recovery-card {
-  --recovery-pad-x: 24px;
-  display: grid;
-  align-content: start;
-  width: min(440px, 100%);
-  max-height: min(88vh, 640px);
-  overflow: auto;
-  border: 1px solid color-mix(in srgb, var(--border-focus) 55%, var(--border));
-  border-radius: 16px;
-  outline: none;
-  background: color-mix(in srgb, var(--card-bg) 96%, var(--bg));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg-bold) 4%, transparent), var(--shadow-modal);
-  animation: ollama-card-in var(--duration-enter) var(--ease-out) both;
-}
-
-@keyframes ollama-card-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.97); }
-}
-
-.ollama-recovery-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 16px 0 var(--recovery-pad-x);
-}
-
-.ollama-recovery-header h1 {
-  margin: 0;
-  color: var(--fg-bold);
-  font: var(--weight-semibold) var(--text-body)/1.2 var(--font-ui);
-  letter-spacing: -0.01em;
-}
-
-.ollama-recovery-close {
-  display: inline-grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border: 0;
-  border-radius: var(--radius-control-lg);
-  background: transparent;
-  color: var(--fg-faint);
-  padding: 0 0 2px;
-  font: 20px/1 var(--font-ui);
-  cursor: pointer;
-  transition: var(--transition-color), transform var(--duration-fast) var(--ease-out);
-}
-
-.ollama-recovery-close:hover { background: var(--hl); color: var(--fg-bold); }
-.ollama-recovery-close:active { transform: scale(0.94); }
-
-.ollama-recovery-steps {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: baseline;
-  gap: 8px 12px;
-  padding: 16px var(--recovery-pad-x) 0;
-  font: var(--weight-medium) var(--text-sm)/1 var(--font-ui);
-}
-
-.ollama-recovery-steps > span:first-child { color: var(--fg); }
-.ollama-recovery-steps > span:nth-child(2) { color: var(--fg-faint); font-variant-numeric: tabular-nums; }
-.ollama-recovery-steps > div { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(4, 1fr); gap: 5px; }
-.ollama-recovery-steps i { height: 3px; border-radius: var(--radius-pill); background: var(--border); transition: background-color var(--duration-legacy-240) var(--ease-standard); }
-.ollama-recovery-steps i.done { background: var(--accent); }
-.ollama-recovery-steps i.active { background: color-mix(in srgb, var(--accent) 45%, var(--border)); }
-
-.ollama-recovery-content { display: grid; overflow: hidden; }
-
-.ollama-recovery-stage {
-  display: grid;
-  justify-items: start;
-  align-content: start;
-  padding: 22px var(--recovery-pad-x) 24px;
-  text-align: left;
-  animation: ollama-stage-in var(--duration-legacy-180) var(--ease-out) both;
-}
-
-@keyframes ollama-stage-in {
-  from { opacity: 0; transform: translateY(4px); }
-}
-
-.ollama-recovery-stage h2 {
-  margin: 0;
-  color: var(--fg-bold);
-  font: var(--weight-semibold) 18px/1.25 var(--font-ui);
-  letter-spacing: -0.02em;
-}
-
-.ollama-recovery-stage[data-tone="warn"] h2::before {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin: 0 8px 3px 0;
-  border-radius: 50%;
-  background: var(--warn);
-  vertical-align: middle;
-}
-
-.ollama-recovery-stage > p {
-  max-width: 42ch;
-  margin: 6px 0 0;
-  color: var(--fg-dim);
-  font: var(--text-body)/1.55 var(--font-ui);
-}
-
-.ollama-recovery-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  margin-top: 20px;
-}
-
-.ollama-recovery-actions .web-primary {
-  display: inline-flex;
-  min-height: var(--control-h-md);
-  box-sizing: border-box;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-control-lg);
-  padding: 0 16px;
-  transition: var(--transition-color), transform var(--duration-enter) var(--ease-out);
-}
-
-.ollama-recovery-actions .web-primary:active { transform: scale(0.98); }
-
-.ollama-btn-label {
-  display: inline-block;
-  transition: opacity var(--duration-fast) var(--ease-standard), filter var(--duration-fast) var(--ease-standard);
-}
-
-.ollama-btn-label.is-swapping { opacity: 0; filter: blur(2px); }
-
-.ollama-secondary {
-  display: inline-flex;
-  min-height: var(--control-h-md);
-  box-sizing: border-box;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control-lg);
-  background: transparent;
-  color: var(--fg);
-  padding: 0 14px;
-  font: var(--weight-semibold) var(--text-body)/1 var(--font-ui);
-  text-decoration: none;
-  cursor: pointer;
-  transition: var(--transition-color), transform var(--duration-enter) var(--ease-out);
-}
-
-.ollama-secondary:hover { border-color: var(--border-focus); background: var(--hl); color: var(--fg-bold); }
-.ollama-secondary:active { transform: scale(0.98); }
-
-.ollama-command {
-  width: 100%;
-  box-sizing: border-box;
-  margin-top: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--code-bg);
-  padding: 12px 14px;
-  text-align: left;
-}
-
-.ollama-command code {
-  display: block;
-  color: var(--fg);
-  font: var(--text-ui)/1.7 var(--font-mono);
-}
-
-.ollama-command-line {
-  display: block;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  padding-left: 1.4em;
-  text-indent: -1.4em;
-}
-
-.ollama-model-card {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  width: 100%;
-  box-sizing: border-box;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  border-radius: var(--radius-card);
-  background: color-mix(in srgb, var(--accent) 5%, var(--card-bg));
-  padding: 12px 14px;
-  text-align: left;
-}
-
-.ollama-model-glyph {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: var(--radius-control-lg);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-  font-size: var(--text-body);
-}
-
-.ollama-model-card strong { display: block; color: var(--fg-bold); font: var(--weight-semibold) var(--text-body)/1.3 var(--font-mono); letter-spacing: -0.01em; }
-.ollama-model-card small { display: block; margin-top: 2px; color: var(--fg-dim); font: var(--text-sm)/1.4 var(--font-ui); }
-.ollama-model-size { color: var(--fg-faint); font: var(--weight-medium) var(--text-ui)/1 var(--font-ui); font-variant-numeric: tabular-nums; }
-
-.ollama-progress {
-  position: relative;
-  width: 100%;
-  height: 4px;
-  overflow: hidden;
-  margin-top: 20px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--fg) 10%, transparent);
-}
-
-.ollama-progress span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--accent); transition: width var(--duration-legacy-260) var(--ease-out); }
-.ollama-progress:not([aria-valuenow]) span { width: 40%; animation: ollama-indeterminate var(--duration-legacy-1100) var(--ease-standard) infinite; transition: none; }
-@keyframes ollama-indeterminate { from { transform: translateX(-110%); } to { transform: translateX(260%); } }
-
-.ollama-progress-meta {
-  display: flex;
-  width: 100%;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 10px;
-  color: var(--fg-dim);
-  font: var(--text-ui)/1.4 var(--font-ui);
-  font-variant-numeric: tabular-nums;
-}
-
-.ollama-progress-percent { color: var(--fg); font-weight: var(--weight-medium); }
-
-.ollama-recovery-checking { align-content: center; justify-items: center; min-height: 124px; text-align: center; }
-.ollama-recovery-checking h2 { font: var(--weight-medium) var(--text-base)/1.3 var(--font-ui); color: var(--fg); letter-spacing: -0.01em; }
-.ollama-checking-note { margin: 6px 0 0; color: var(--fg-faint); font: var(--text-ui)/1.4 var(--font-ui); }
-.ollama-spinner { width: 16px; height: 16px; margin-bottom: 12px; border: 2px solid color-mix(in srgb, var(--fg) 16%, transparent); border-top-color: var(--accent); border-radius: 50%; animation: ollama-spin var(--duration-legacy-600) linear infinite; }
-@keyframes ollama-spin { to { transform: rotate(360deg); } }
-
-.ollama-recovery-success { align-content: center; justify-items: center; min-height: 124px; text-align: center; }
-.ollama-recovery-success p { margin-top: 6px; }
-
-.ollama-success-check {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  margin-bottom: 12px;
-  border-radius: 50%;
-  background: var(--success);
-  color: var(--bg);
-  font: var(--weight-bold) 15px/1 var(--font-ui);
-  animation: ollama-check-pop var(--duration-legacy-320) var(--ease-spring) both;
-}
-
-@keyframes ollama-check-pop {
-  from { opacity: 0; transform: scale(0.55); }
-}
-
 .web-primary:focus-visible,
 .provider-retry:focus-visible,
 .web-toast button:focus-visible,
@@ -2164,11 +1352,7 @@ body.blank-dragging .composer-card {
 .settings-text-action:focus-visible,
 .settings-select:focus-visible,
 .model-option:focus-visible,
-.key-get:focus-visible,
-.key-input-wrap button:focus-visible,
 .settings-advanced summary:focus-visible,
-.ollama-recovery-close:focus-visible,
-.ollama-secondary:focus-visible,
 .switch input:focus-visible + .switch-track {
   outline: var(--focus-ring);
   outline-offset: var(--focus-offset);
@@ -2189,11 +1373,7 @@ body.blank-dragging .composer-card {
   .blank-start,
   .settings-select svg,
   .settings-advanced summary::after,
-  .provider-row,
-  .provider-dot,
-  .provider-dot::after,
-  .provider-body,
-  .provider-body-slot {
+  .settings-select {
     animation: none;
     transition: none;
   }
@@ -2202,20 +1382,6 @@ body.blank-dragging .composer-card {
     opacity: 1;
     transform: none;
   }
-
-  .ollama-recovery-modal,
-  .ollama-recovery-card,
-  .ollama-recovery-stage,
-  .ollama-recovery-steps i,
-  .ollama-success-check,
-  .ollama-btn-label,
-  .ollama-spinner,
-  .ollama-progress span {
-    animation: none;
-    transition: none;
-  }
-
-  .ollama-progress:not([aria-valuenow]) span { width: 100%; opacity: 0.35; }
 
   .ingest-status.busy::after {
     animation: none;
@@ -2237,31 +1403,6 @@ body.blank-dragging .composer-card {
     font-size: var(--text-base);
   }
 
-  .key-get {
-    display: inline-flex;
-    min-height: var(--control-h-lg);
-    align-items: center;
-  }
-
-  .key-input-wrap input {
-    min-height: 48px;
-    padding-block: 10px;
-    padding-inline: 12px 48px;
-    /* iOS zooms the whole page when a smaller input receives focus. */
-    font-size: var(--text-lg);
-    line-height: 1.35;
-  }
-
-  .key-input-wrap button {
-    inset-inline-end: 2px;
-    width: var(--control-h-lg);
-    height: var(--control-h-lg);
-  }
-
-  .remember-row {
-    margin-top: 12px;
-  }
-
   .settings-info-trigger {
     width: 32px;
     height: 32px;
@@ -2272,7 +1413,5 @@ body.blank-dragging .composer-card {
     padding-top: 76px;
   }
 
-  .ollama-recovery-modal { align-items: start; padding: 16px; padding-top: 44px; }
-  .ollama-recovery-card { --recovery-pad-x: 20px; }
 
 }

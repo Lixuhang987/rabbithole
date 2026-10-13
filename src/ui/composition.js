@@ -178,7 +178,7 @@ export function createRabbitholeUi({ hydration, host, capabilities } = {}) {
     own(disposeBranchSurfaces);
     if (typeof host.start === "function") host.start();
     initChrome({
-      connectSse: host.connect || null,
+      connectTransport: host.connect || null,
       post: post,
       refreshStatus: host.refreshStatus || noop,
     });

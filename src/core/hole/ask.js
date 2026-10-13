@@ -54,9 +54,7 @@ export function branchTypeOfNode(node) {
 
 /**
  * Derive the canonical Ask from a schema-v2 node. The persisted `origin`
- * spelling remains unchanged so old Rabbitholes and MCP clients keep working;
- * all new domain logic can use this one shape instead of reinterpreting seven
- * legacy flags independently.
+ * fields project into one domain shape shared by browser actions and rendering.
  *
  * @param {HoleNode} node
  * @returns {import("../contracts/engine.js").Ask | null}
@@ -94,7 +92,6 @@ export function askOfNode(node) {
     produces: String(node.id),
     state: status,
     run: null,
-    delegated: /** @type {any} */ (node).delegated === true,
     error,
   };
 }
@@ -116,7 +113,6 @@ export function validateAsk(value) {
   if (typeof ask.produces !== "string" || !ask.produces) throw new Error(`Ask ${ask.id} produces must be a non-empty string`);
   if (!["requested", "streaming", "settled", "failed"].includes(ask.state)) throw new Error(`Ask ${ask.id} state is invalid`);
   if (ask.run !== null && (!ask.run || typeof ask.run.id !== "string" || !Number.isFinite(ask.run.seq))) throw new Error(`Ask ${ask.id} run is invalid`);
-  if (typeof ask.delegated !== "boolean") throw new Error(`Ask ${ask.id} delegated must be a boolean`);
   if (ask.error !== null && !normalizeAskError(ask.error)) throw new Error(`Ask ${ask.id} error is invalid`);
   return /** @type {import("../contracts/engine.js").Ask} */ (value);
 }
@@ -170,7 +166,6 @@ export function makeTranscribeAsk(node, state) {
     produces: node.id,
     state,
     run: null,
-    delegated: false,
     error: null,
   };
 }

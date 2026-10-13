@@ -36,7 +36,7 @@ function printBanner({ url, pairUrl, opened, out = process.stdout }) {
   const bold = (text) => (tty ? `\u001B[1m${text}\u001B[0m` : text);
   const dim = (text) => (tty ? `\u001B[2m${text}\u001B[0m` : text);
   out.write(`\n  ${bold("Rabbithole bridge")} ${dim(`· ${url}`)}\n`
-    + `  ${dim("Answers on rabbithole.ing come from Claude Code / Codex on this computer.")}\n\n`
+    + `  ${dim("Answers on rabbithole.ing come from Codex on this computer.")}\n\n`
     + `  ${bold("→")} Open this link to connect your browser:\n\n`
     + `    ${bold(pairUrl)}\n`
     + (opened ? `\n    ${dim("Opening it for you…")}\n` : "")

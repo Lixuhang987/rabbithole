@@ -1,67 +1,34 @@
-/** @protects prompts capability contracts. */
-import assert from "node:assert/strict";
-import { buildAnswerMessages } from "../../src/core/prompts/answering-v1.js";
-import { buildTranscribeMessages } from "../../src/core/prompts/transcribe-v1.js";
+/** @protects complete semantic Ask input, images, visual sources and PDF transcription. */
+import assert from 'node:assert/strict';
+import { buildExplainerInput } from '../../src/core/prompts/explainer-v1.js';
+import { buildAnswerInput, selectedVisualSource } from '../../src/core/prompts/answering-v1.js';
+import { buildTranscribeInput, TRANSCRIBE_V1_RULES } from '../../src/core/prompts/transcribe-v1.js';
+const context = { article: { title: 'Parent', markdown: 'Body' }, selected_text: 'x', question: 'Why?', lens: null };
+const plain = buildAnswerInput(context);
+assert.equal(buildAnswerInput(structuredClone(context)).text, plain.text);
+assert.match(plain.text, /Source article:\nBody/);
+const image = 'data:image/jpeg;base64,/9j/2Q==';
+const withImage = buildAnswerInput({ ...context, attachments: [{ data_url: image, source: 'selection_crop' }] });
+assert.deepEqual(withImage.images, [image]);
+assert.match(withImage.text, /Selection region images are attached/);
+assert.equal(buildAnswerInput(context).text, plain.text);
+const styled = buildAnswerInput({ ...context, question: 'Focus on the failure mode.', lens: 'deeper', instruction: 'Use a systems lens.' });
+assert.match(styled.text, /Preset instruction:\nUse a systems lens\.[\s\S]*Human question:\nFocus on the failure mode\./);
+const fork = buildAnswerInput({ ...context, visual_source: '```show id=selected\n<div>one</div>\n```' }, { fork: true });
+assert.match(fork.text, /Selected visual source:/);
+const longBody = `START ${'p'.repeat(60000)} TAIL`;
+assert.ok(buildAnswerInput({ ...context, article: { markdown: longBody } }).text.includes(longBody));
+assert.equal(selectedVisualSource('```show id=selected\n<div>one</div>\n```', 'selected'), '```show id=selected\n<div>one</div>\n```');
+const pasted = buildAnswerInput({ ...context, attachments: [{ data_url: image, source: 'pasted_image' }] });
+assert.match(pasted.text, /Pasted images are attached/);
+const transcription = buildTranscribeInput({ pages: [{ n: 7, data_url: image }], tail: 'x'.repeat(700) });
+assert.deepEqual(transcription.images, [image]);
+for (const rule of [/GitHub-flavored Markdown/, /LaTeX/, /GFM tables/, /figure:page-NNN:x,y,w,h/, /running headers/, /no TITLE sentinel/i]) assert.match(TRANSCRIBE_V1_RULES, rule);
+assert.ok(transcription.text.includes('x'.repeat(500)));
+assert.ok(!transcription.text.includes('x'.repeat(501)));
 
-const context = { root_title: "Root", parent_title: "Parent", parent_markdown: "Body", ancestors: [], selected_text: "x", question: "Why?", lens: null };
-const without = buildAnswerMessages(context);
-const baseline = JSON.stringify(without);
-assert.equal(typeof without[1].content, "string");
-assert.equal(JSON.stringify(buildAnswerMessages({ ...context })), baseline, "no-attachment messages must remain byte-identical");
-
-const dataUrl = "data:image/jpeg;base64,/9j/2Q==";
-const withImage = buildAnswerMessages({ ...context, attachment: { kind: "image", data_url: dataUrl, page: 7 } });
-assert.deepEqual(withImage[1].content.map((part) => part.type), ["text", "image_url"]);
-assert.equal(withImage[1].content[1].image_url.url, dataUrl);
-assert.equal(JSON.stringify(buildAnswerMessages(context)), baseline, "attachment assembly must not mutate its source context");
-
-const inherited = buildAnswerMessages({ ...context, attachment: { kind: "image", data_url: dataUrl, page: 7, source: "parent_crop" } });
-assert.equal(inherited[1].content[1].image_url.url, dataUrl);
-
-const styled = buildAnswerMessages({ ...context, question: "Focus on the failure mode.", lens: "deeper", instruction: "Use a systems lens." });
-assert.match(styled[1].content, /Preset instruction:\nUse a systems lens\.[\s\S]*Human question:\nFocus on the failure mode\./,
-  "preset instruction and human question remain separate prompt slots");
-const implicit = buildAnswerMessages({ ...context, question: "", instruction: "Explain plainly." });
-assert.match(implicit[1].content, /Human question:\n\(the selected content\)/,
-  "an empty preset question keeps the selected content as its implicit subject");
-
-const pasted = buildAnswerMessages({ ...context, attachments: [
-  { kind: "image", data_url: "data:image/png;base64,AAAA", source: "pasted_image" },
-  { kind: "image", data_url: "data:image/jpeg;base64,BBBB", source: "pasted_image" },
-] });
-assert.deepEqual(pasted[1].content.map((part) => part.type), ["text", "image_url", "image_url"]);
-assert.equal(pasted[1].content[0].text.includes("page undefined"), false);
-assert.deepEqual(pasted[1].content.slice(1).map((part) => part.image_url.url), [
-  "data:image/png;base64,AAAA", "data:image/jpeg;base64,BBBB",
-]);
-
-const noteContext = {
-  ...context,
-  parent_id: "parent",
-  notes: [
-    { note_id: "standalone", on_node_id: null, on_selected_text: null, content: "Compare this globally." },
-    { note_id: "anchored", on_node_id: "parent", on_selected_text: "the exact clause", content: "This caveat matters." },
-    { note_id: "followup-note", on_node_id: "parent", on_selected_text: null, content: "This applies to the whole parent.", author: "agent" },
-  ],
-};
-const noteMessages = buildAnswerMessages(noteContext);
-assert.match(noteMessages[1].content, /Human question:\nWhy\?\n\nNotes:\n- Human: Compare this globally\.\n- Human: Anchored to "the exact clause": This caveat matters\.\n- Agent: On "Parent": This applies to the whole parent\.\n\nParent document markdown:/);
-assert.equal(noteMessages[1].content.includes('Anchored to "null"'), false, "anchor-less parented notes must never stringify a null anchor");
-
-const longContext = {
-  ...context,
-  parent_markdown: `PARENT_START ${"p".repeat(60000)} PARENT_TAIL`,
-  notes: [{ content: `NOTE_START ${"n".repeat(1000)} NOTE_TAIL`, on_selected_text: `ANCHOR_START ${"a".repeat(1000)} ANCHOR_TAIL` }],
-  ancestors: [{ title: "Ancestor", markdown: `ANCESTOR_START ${"a".repeat(1000)} ANCESTOR_TAIL` }],
-};
-const longMessages = buildAnswerMessages(longContext)[1].content;
-assert.ok(longMessages.includes(longContext.parent_markdown), "complete parent content reaches the provider");
-assert.ok(longMessages.includes(longContext.notes[0].content), "complete note content reaches the provider");
-assert.ok(longMessages.includes(longContext.notes[0].on_selected_text), "complete note anchor reaches the provider");
-assert.ok(longMessages.includes(longContext.ancestors[0].markdown), "complete ancestor content reaches the provider");
-
-const transcription = buildTranscribeMessages({ pages: [{ n: 7, data_url: dataUrl }], tail: "x".repeat(700) });
-assert.equal(transcription[0].content.at(-1).image_url.url, dataUrl);
-assert.equal(transcription[0].content[0].text.includes("x".repeat(500)), true); assert.equal(transcription[0].content[0].text.includes("x".repeat(501)), false);
-
-console.log("ok prompts: PDF attachments, complete note and article context, and byte-identical text-only messages");
+for (const instructions of [plain.instructions, buildExplainerInput({ question: 'Why?' }).instructions]) {
+  assert.match(instructions, /Explain the mechanisms, reasoning, or evidence essential to the current question/);
+  assert.match(instructions, /unfamiliar concepts and the questions they raise are valuable entry points/);
+  assert.doesNotMatch(instructions, /Distinguish between levels of understanding/);
+}

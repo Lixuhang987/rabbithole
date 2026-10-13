@@ -8,18 +8,14 @@ import { renderMarkdownToHtml } from "../../src/core/markdown.js";
 import { createHoleState, reduceHoleEvent } from "../../src/core/hole/reduce.js";
 import { ProviderError, normalizeProviderError } from "../../src/web/provider/errors.js";
 import { adaptBranchGeneration, adaptTextGeneration } from "../../src/web/provider/generation-events.js";
-import { OpenAICompatibleProvider, parseOpenAISseEvent, streamOpenAICompatible, streamOpenAIEvents } from "../../src/web/provider/openai-compatible.js";
+import { BridgeProvider, streamBridgeEvents } from "../../src/web/provider/bridge-provider.js";
+import { sse } from "../support/provider-mock.mjs";
 import { TitleSentinelParser } from "../../src/web/provider/title-sentinel.js";
 import { DirectRabbitholeHost, createHoleFromMarkdown, createPendingHoleFromQuestion, generationDocEvents } from "../../src/web/transport/direct-host.js";
 
 const previousDir = process.env.RABBITHOLE_DIR;
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-generation-lifecycle-"));
 process.env.RABBITHOLE_DIR = dir;
-const [{ GenerationIngress }, { RabbitholeSession }] = await Promise.all([
-  import("../../src/node/transport/generation-ingress.js"),
-  import("../../src/node/transport/session.js"),
-]);
-
 try {
 async function collect(iterable) {
   const out = [];
@@ -48,68 +44,24 @@ function responseFromChunks(chunks) {
   }), { status: 200 });
 }
 
-const openAiWire = [
-  'data: {"choices":[{"delta":{"content":"alpha"}}]}',
-  'data: {"choices":[{"delta":{"content":" beta"}}]}',
-  "data: [DONE]",
-].join("\r\n\r\n") + "\r\n\r\n";
+const session = { backend: "codex", sessionId: "session", scopeId: "scope" };
+const conversationBody = { backend: "codex", model: "test", input: { kind: "explain", question: "Why?" } };
+const conversationEvent = { type: "conversation", conversation: session };
+const wire = `data: ${JSON.stringify({ type: "text", delta: "alpha β" })}\r\n\r\ndata: ${JSON.stringify({ type: "completed", session })}\r\n\r\n`;
 const originalFetch = globalThis.fetch;
 try {
-  for (let offset = 0; offset <= openAiWire.length; offset += 1) {
-    globalThis.fetch = async () => responseFromChunks(chunksOf(openAiWire, [offset]));
-    assert.deepEqual(await collect(streamOpenAICompatible({ url: "https://example.test/chat/completions", body: {} })), ["alpha", " beta"]);
+  for (let offset = 0; offset <= wire.length; offset += 1) {
+    globalThis.fetch = async () => responseFromChunks(chunksOf(wire, [offset]));
+    assert.deepEqual(await collect(streamBridgeEvents({ url: "http://bridge", body: conversationBody })), [{ type: "text", delta: "alpha β" }, conversationEvent]);
   }
-} finally {
-  globalThis.fetch = originalFetch;
-}
-try {
-  globalThis.fetch = async () => new Response(JSON.stringify({
-    error: {
-      code: "agent_signed_out",
-      message: "Claude Code is signed out.",
-    },
-  }), { status: 503, headers: { "Content-Type": "application/json" } });
-  const bridgeError = await collect(streamOpenAICompatible({
-    url: "http://127.0.0.1:41414/v1/chat/completions",
-    body: {},
-  })).catch((error) => error);
-  assert.equal(bridgeError.code, "agent_signed_out", "bridge recovery codes survive the OpenAI-compatible adapter");
-  assert.equal(bridgeError.message, "Claude Code is signed out.", "agent failures do not acquire generic provider copy");
-} finally {
-  globalThis.fetch = originalFetch;
-}
-const conversationBody = { rabbithole_conversation: { version: 1, operation: "create", nodeId: "article" } };
-const conversationEvent = { type: "conversation", nodeId: "article", conversation: { version: 1, threadId: "local-thread", scopeId: "local-scope" } };
-const conversationWire = [
-  'data: {"choices":[{"delta":{"content":"answer"}}]}',
-  `data: ${JSON.stringify({ object: "rabbithole.conversation", nodeId: conversationEvent.nodeId, conversation: conversationEvent.conversation })}`,
-  'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
-  'data: [DONE]',
-].join("\r\n\r\n") + "\r\n\r\n";
-try {
-  for (let offset = 0; offset <= conversationWire.length; offset += 1) {
-    globalThis.fetch = async () => responseFromChunks(chunksOf(conversationWire, [offset]));
-    assert.deepEqual(await collect(streamOpenAIEvents({ url: "https://example.test", body: conversationBody })),
-      [{ type: "text", delta: "answer" }, conversationEvent]);
+  for (const broken of [wire.split('data: {"type":"completed"')[0], wire.trimEnd()]) {
+    globalThis.fetch = async () => responseFromChunks(chunksOf(broken, [12]));
+    await assert.rejects(() => collect(streamBridgeEvents({ url: "http://bridge", body: conversationBody })), (/** @type {any} */ error) => error.code === "conversation_incomplete");
   }
-  for (const wire of [
-    conversationWire.replace('data: [DONE]', ''),
-    conversationWire.replace('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}', ''),
-    openAiWire,
-  ]) {
-    globalThis.fetch = async () => responseFromChunks(chunksOf(wire, [12]));
-    await assert.rejects(() => collect(streamOpenAIEvents({ url: "https://example.test", body: conversationBody })),
-      (/** @type {any} */ error) => error.code === "conversation_incomplete");
-  }
-  globalThis.fetch = async () => responseFromChunks(chunksOf(conversationWire.replace('"nodeId":"article"', '"nodeId":"other"'), []));
-  await assert.rejects(() => collect(streamOpenAIEvents({ url: "https://example.test", body: conversationBody })),
-    (/** @type {any} */ error) => error.code === "conversation_invalid");
-} finally {
-  globalThis.fetch = originalFetch;
-}
-assert.equal(parseOpenAISseEvent('data: {"choices":[{"message":{"content":"one"}}]}\ndata: {"choices":[{"delta":{"content":" two"}}]}'), "one two");
-assert.equal(parseOpenAISseEvent("data: [DONE]"), "");
-console.log("ok generation lifecycle: OpenAI SSE arbitrary fragmentation, multi-event chunks, CRLF, and DONE");
+  globalThis.fetch = async () => Response.json({ error: { code: "agent_signed_out", message: "Codex is signed out." } }, { status: 503 });
+  await assert.rejects(() => collect(streamBridgeEvents({ url: "http://bridge", body: conversationBody })), (/** @type {any} */ error) => error.code === "agent_signed_out");
+} finally { globalThis.fetch = originalFetch; }
+console.log("ok generation lifecycle: native SSE fragmentation, CRLF, terminal metadata and errors");
 
 function parseTitle(chunks, fallbackTitle = "Fallback") {
   const parser = new TitleSentinelParser({ fallbackTitle });
@@ -226,27 +178,19 @@ for (const events of [
 }
 console.log("ok generation lifecycle: pure branch and author adapters preserve exact text bytes");
 
-const openAiProvider = new OpenAICompatibleProvider({ baseUrl: "https://example.test", model: "fixture" });
+const bridgeProvider = new BridgeProvider({ backend: "codex", model: "test", baseUrl: "http://bridge", token: "paired" });
 try {
   globalThis.fetch = async (_url, options) => {
-    const messages = JSON.parse(options.body).messages;
-    const isBranch = messages[0].content.includes("TITLE: <short node title>");
-    const text = isBranch ? "TITLE: Provider title\nBody" : rawAuthor;
-    const wire = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`;
-    return responseFromChunks(chunksOf(wire, [1, 7, 19]));
+    const input = JSON.parse(options.body).input;
+    return responseFromChunks(chunksOf(sse([input.kind === "ask" ? "TITLE: Branch\nBranch body." : "# Root\nRoot body."]), [12]));
   };
-  const branch = await collect(openAiProvider.answerBranch({ fallbackTitle: "Fallback" }, new AbortController().signal));
-  assert.deepEqual(branch, [{ type: "title", title: "Provider title" }, { type: "text", delta: "Body" }]);
-  for (const events of [
-    await collect(openAiProvider.authorExplainer({ question: "why" }, new AbortController().signal)),
-    await collect(openAiProvider.authorDocument({ markdown: "source" }, new AbortController().signal)),
-  ]) {
-    assert.equal(events.some((event) => event.type === "title"), false);
-    assert.equal(events.map((event) => event.delta).join(""), rawAuthor);
-  }
-} finally {
-  globalThis.fetch = originalFetch;
-}
+  const authored = await collect(bridgeProvider.authorDocument({ markdown: "Source" }, new AbortController().signal, { nodeId: "root" }));
+  assert.equal(authored.filter((event) => event.type === "text").map((event) => event.delta).join(""), "# Root\nRoot body.");
+  const explained = await collect(bridgeProvider.authorExplainer({ question: "Why?", nodeId: "root" }, new AbortController().signal));
+  assert.equal(explained.at(-1).type, "conversation");
+  const branch = await collect(bridgeProvider.answerBranch({ parent_markdown: "Source", question: "Why?", node_id: "child" }, new AbortController().signal));
+  assert.equal(branch.find((event) => event.type === "title").title, "Branch");
+} finally { globalThis.fetch = originalFetch; }
 
 const run = new Run({ id: "run-a", initialMarkdown: "Start ", fallbackTitle: "Fallback" });
 assert.deepEqual(run.accept({ type: "text", delta: "one" }, { nodeId: "node-a" }), {
@@ -293,30 +237,6 @@ manual.push(manualRun.complete({ nodeId: "wired-node", answeredFields: { parent_
 assert.deepEqual(wired, manual);
 console.log("ok generation lifecycle: browser branch wiring matches hand-driven Run DocEvents");
 
-const mcpIngress = new GenerationIngress({ id: "mcp-run", nodeId: "mcp-node", fallbackTitle: "Fallback" });
-assert.deepEqual(mcpIngress.acceptChunk("one"), {
-  type: "node_progress", node_id: "mcp-node", markdown: "one", run: { id: "mcp-run", seq: 1 },
-});
-assert.deepEqual(mcpIngress.acceptChunk(" two"), {
-  type: "node_progress", node_id: "mcp-node", markdown: "one two", run: { id: "mcp-run", seq: 2 },
-});
-assert.deepEqual(mcpIngress.acceptChunk("one two three", { final: true, title: "Agent title" }), {
-  type: "node_answered", node_id: "mcp-node", title: "Agent title", markdown: "one two three",
-});
-const tailIngress = new GenerationIngress({ id: "tail-run", nodeId: "tail-node" });
-tailIngress.acceptChunk("one");
-assert.equal(tailIngress.acceptChunk(" two", { final: true, title: "Tail" }).markdown, "one two");
-let mcpMinted = 0;
-const mcpSession = new RabbitholeSession({
-  nodes: [],
-  mintRunId: () => `fresh-${++mcpMinted}`,
-});
-assert.notEqual(
-  mcpSession.createGenerationIngress({ id: "node", title: "Fallback" }).run.id,
-  mcpSession.createGenerationIngress({ id: "node", title: "Fallback" }).run.id,
-);
-console.log("ok generation lifecycle: MCP ingress normalizes tail/repeat chunks, tags progress, carries title, and isolates fresh runs");
-
 let minted = 0;
 const mintHost = new DirectRabbitholeHost({
   store: { saveHole: async () => {} },
@@ -354,47 +274,7 @@ assert.deepEqual(disposalEvents, [], "disposed hosts must detach browser subscri
 assert.equal(lifecycleHost.subscriptions.size, 0);
 console.log("ok generation lifecycle: direct-host subscriptions close and host disposal is idempotent");
 
-const notesContextHost = new DirectRabbitholeHost({
-  store: { saveHole: async () => {} },
-  hole: {
-    hole_id: "web-notes-context",
-    root_id: "root",
-    title: "Root",
-    nodes: [
-      { id: "root", parent_id: null, title: "Root", markdown: "Root body", created_at: "2026-08-11T00:00:00.000Z" },
-      { id: "parent", parent_id: "root", title: "Parent", markdown: "Parent body", created_at: "2026-08-11T00:00:01.000Z" },
-      { id: "ask", parent_id: "parent", title: "Ask", markdown: "", status: "pending", origin: { question: "Why?", selected_text: "Parent" } },
-      { id: "standalone-ask", parent_id: null, title: "Standalone ask", markdown: "", status: "pending", origin: { question: "What follows globally?", selected_text: "" } },
-      { id: "anchored", parent_id: "root", title: "Note", markdown: "Remember the root.", created_at: "2026-08-11T00:00:02.000Z", origin: { kind: "note", selected_text: "Root body" } },
-      { id: "standalone", parent_id: null, title: "Note", markdown: "Whole-canvas thought.", created_at: "2026-08-11T00:00:03.000Z", origin: { kind: "note" } },
-    ],
-  },
-});
-assert.deepEqual(notesContextHost.buildBranchContext(notesContextHost.state.nodes.get("ask")).notes, [
-  { note_id: "standalone", on_node_id: null, on_selected_text: null, content: "Whole-canvas thought.", created_at: "2026-08-11T00:00:03.000Z" },
-  { note_id: "anchored", on_node_id: "root", on_selected_text: "Root body", content: "Remember the root.", created_at: "2026-08-11T00:00:02.000Z" },
-]);
-const standaloneContext = notesContextHost.buildBranchContext(notesContextHost.state.nodes.get("standalone-ask"));
-assert.deepEqual({
-  parent_id: standaloneContext.parent_id,
-  parent_title: standaloneContext.parent_title,
-  parent_markdown: standaloneContext.parent_markdown,
-  ancestors: standaloneContext.ancestors,
-  selected_text: standaloneContext.selected_text,
-}, {
-  parent_id: "root",
-  parent_title: "Root",
-  parent_markdown: "Root body",
-  ancestors: [],
-  selected_text: "",
-}, "BYOK prompt context uses the root document for a parentless ask without inventing graph lineage");
-assert.deepEqual(standaloneContext.notes, [
-  { note_id: "standalone", on_node_id: null, on_selected_text: null, content: "Whole-canvas thought.", created_at: "2026-08-11T00:00:03.000Z" },
-  { note_id: "anchored", on_node_id: "root", on_selected_text: "Root body", content: "Remember the root.", created_at: "2026-08-11T00:00:02.000Z" },
-]);
-console.log("ok generation lifecycle context: direct-host parented and standalone asks use shared root-aware note relevance");
-
-async function verifyAttachmentFallbackToast(source, expectedToasts) {
+async function verifyAttachmentFailure(source) {
   let attempts = 0;
   const toasts = [];
   const host = new DirectRabbitholeHost({
@@ -414,15 +294,15 @@ async function verifyAttachmentFallbackToast(source, expectedToasts) {
   host.attachBranchImage = async (_node, context) => {
     context.attachments = [{ kind: "image", data_url: "data:image/png;base64,AA==", source }];
   };
-  await host.runAnswer("branch", new AbortController());
-  assert.equal(attempts, 2);
-  assert.deepEqual(toasts, expectedToasts);
+  await assert.rejects(() => host.runAnswer("branch", new AbortController()),
+    (/** @type {any} */ error) => error.code === "payload_too_large");
+  assert.equal(attempts, 1, "images must never be silently dropped and retried");
+  assert.deepEqual(toasts, []);
+  await host.dispose();
 }
-await verifyAttachmentFallbackToast("pasted_image", [
-  "Answered without the pasted image(s) — the request was too large for this model.",
-]);
-await verifyAttachmentFallbackToast("selection_crop", []);
-console.log("ok generation lifecycle: attachment retry toasts only when pasted images are dropped, not PDF crops");
+await verifyAttachmentFailure("pasted_image");
+await verifyAttachmentFailure("selection_crop");
+console.log("ok generation lifecycle: image failures preserve the current request without implicit retry");
 
 const pendingNode = { id: "branch", status: /** @type {const} */ ("pending"), markdown: "", title: "Fallback" };
 const oldRun = mintHost.createRun(pendingNode);
@@ -471,17 +351,15 @@ const rootQuestionRequests = [];
 const rootQuestionHost = new DirectRabbitholeHost({
   hole: createPendingHoleFromQuestion(originalQuestion),
   store: { saveHole: async (hole) => rootQuestionSaves.push(structuredClone(hole)) },
-  provider: openAiProvider,
+  provider: bridgeProvider,
 });
 rootQuestionHost.onEvent = (event) => rootQuestionEvents.push(event);
 try {
   globalThis.fetch = async (_url, options) => {
-    const messages = JSON.parse(options.body).messages;
-    rootQuestionRequests.push(messages);
-    const text = messages[0].content.includes("TITLE: <short node title>")
-      ? "TITLE: Follow-up\nA deeper answer."
-      : "# Gravity\nObjects attract each other.";
-    return responseFromChunks(chunksOf(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`, [10]));
+    const request = JSON.parse(options.body);
+    rootQuestionRequests.push(request);
+    const text = request.input.kind === "ask" ? "TITLE: Follow-up\nA deeper answer." : "# Gravity\nObjects attract each other.";
+    return responseFromChunks(chunksOf(sse([text]), [10]));
   };
   await rootQuestionHost.runRootAnswer(rootQuestionHost.state.root_id, originalQuestion, new AbortController());
   const answeredRoot = rootQuestionHost.state.nodes.get(rootQuestionHost.state.root_id);
@@ -496,14 +374,14 @@ try {
   assert.ok(rootQuestionEvents.filter((event) => event.type === "node_progress").every((event) => event.markdown.startsWith("> **Original question**\n")));
   assert.equal(answeredRoot.origin.web_root_question, originalQuestion);
   const restored = new DirectRabbitholeHost({
-    hole: rootQuestionSaves.at(-1), store: { saveHole: async () => {} }, provider: openAiProvider,
+    hole: rootQuestionSaves.at(-1), store: { saveHole: async () => {} }, provider: bridgeProvider,
   });
   try {
     let parentId = restored.state.root_id;
     for (const id of ["first-followup", "deeper-followup"]) {
       restored.dispatch({ type: "branch_request", node_id: id, parent_id: parentId, origin: { question: "Why?" } });
       await restored.runAnswer(id, new AbortController());
-      assert.ok(rootQuestionRequests.at(-1)[1].content.includes(`Original canvas question:\n${originalQuestion}`), "every branch request retains the full original question after reload");
+      assert.ok(rootQuestionRequests.at(-1).sourceSession, "follow-ups inherit native history after reload");
       parentId = id;
     }
   } finally { await restored.dispose(); }

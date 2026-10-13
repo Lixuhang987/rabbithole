@@ -50,56 +50,6 @@ function waitForExit(child) {
   });
 }
 
-async function waitForInitialize(child) {
-  let stdout = "";
-  let stderr = "";
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
-  child.stdout.on("data", (chunk) => {
-    stdout += chunk;
-  });
-  child.stderr.on("data", (chunk) => {
-    stderr += chunk;
-  });
-
-  const response = await withTimeout(
-    new Promise((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code, signal) => reject(new Error(
-        `server exited before initialize response (code=${code}, signal=${signal}, stderr=${stderr})`
-      )));
-      child.stdout.on("data", () => {
-        const lines = stdout.split("\n");
-        if (lines.length < 2) return;
-        try {
-          resolve(JSON.parse(lines[0]));
-        } catch (error) {
-          reject(new Error(`stdout was not newline-delimited JSON: ${error.message}\n${stdout}`));
-        }
-      });
-    }),
-    "MCP initialize"
-  );
-
-  assert.equal(response.jsonrpc, "2.0");
-  assert.equal(response.id, 1);
-  assert.equal(typeof response.result?.protocolVersion, "string");
-  assert.equal(response.result?.serverInfo?.name, "rabbithole");
-  assert.equal(typeof response.result?.capabilities, "object");
-
-  child.stdin.end();
-  const exit = await withTimeout(waitForExit(child), "clean server shutdown").catch((error) => {
-    child.kill("SIGTERM");
-    throw error;
-  });
-  assert.deepEqual(exit, { code: 0, signal: null });
-
-  const outputLines = stdout.trim().split("\n").filter(Boolean);
-  assert.equal(outputLines.length, 1, `unexpected extra stdout: ${stdout}`);
-  for (const line of outputLines) assert.doesNotThrow(() => JSON.parse(line));
-  return response;
-}
-
 async function waitForBridge(child) {
   let stdout = "";
   let stderr = "";
@@ -168,7 +118,6 @@ try {
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
-    "bin/mcp-server.js",
     "bin/rabbithole.js",
     ...(await filesBelow("src/node")),
     ...(await filesBelow("src/core")),
@@ -189,11 +138,8 @@ try {
     { cwd: projectDir, maxBuffer: 10 * 1024 * 1024 }
   );
 
-  const binPath = path.join(projectDir, "node_modules", ".bin", "rabbithole-mcp");
   const bridgeBinPath = path.join(projectDir, "node_modules", ".bin", "rabbithole");
-  await fs.access(binPath, fs.constants.X_OK);
   await fs.access(bridgeBinPath, fs.constants.X_OK);
-
   const unknownResult = await execFileAsync(bridgeBinPath, ["unknown"], {
     cwd: projectDir,
   }).catch((error) => error);
@@ -201,102 +147,21 @@ try {
   assert.equal(unknownResult.stdout, "", "usage must not be written to stdout");
   assert.match(unknownResult.stderr, /^Usage: rabbithole /);
 
-  child = spawn(bridgeBinPath, [], {
-    cwd: projectDir,
-    env: {
-      ...process.env,
-      RABBITHOLE_DIR: dataDir,
-      RABBITHOLE_NO_BROWSER: "1",
-    },
+  child = spawn(bridgeBinPath, ["bridge", "--port", "0", "--no-open"], {
+    cwd: projectDir, env: { ...process.env, RABBITHOLE_DIR: dataDir,
+      RABBITHOLE_BRIDGE_CODEX_BIN: path.join(ROOT, "test/integration/fixtures/fake-codex.mjs"), RABBITHOLE_BRIDGE_EGO_BIN: "/absent/ego" },
     stdio: ["pipe", "pipe", "pipe"],
-  });
-  child.stdin.write(`${JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "initialize",
-    params: {
-      protocolVersion: "2025-03-26",
-      capabilities: {},
-      clientInfo: { name: "packaging-smoke-no-args", version: "1.0.0" },
-    },
-  })}\n`);
-  const noArgsInitialize = await waitForInitialize(child);
-  process.stdout.write(`acceptance G ${JSON.stringify({
-    jsonrpc: noArgsInitialize.jsonrpc,
-    id: noArgsInitialize.id,
-    protocolVersion: noArgsInitialize.result.protocolVersion,
-    serverName: noArgsInitialize.result.serverInfo.name,
-  })}\n`);
-  child = undefined;
-
-  child = spawn(binPath, [], {
-    cwd: projectDir,
-    env: {
-      ...process.env,
-      RABBITHOLE_DIR: dataDir,
-      RABBITHOLE_NO_BROWSER: "1",
-    },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  child.stdin.write(`${JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "initialize",
-    params: {
-      protocolVersion: "2025-03-26",
-      capabilities: {},
-      clientInfo: { name: "packaging-smoke", version: "1.0.0" },
-    },
-  })}\n`);
-  await waitForInitialize(child);
-  child = undefined;
-
-  child = spawn(bridgeBinPath, ["mcp"], {
-    cwd: projectDir,
-    env: {
-      ...process.env,
-      RABBITHOLE_DIR: dataDir,
-      RABBITHOLE_NO_BROWSER: "1",
-    },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  child.stdin.write(`${JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "initialize",
-    params: {
-      protocolVersion: "2025-03-26",
-      capabilities: {},
-      clientInfo: { name: "packaging-smoke-dispatcher", version: "1.0.0" },
-    },
-  })}\n`);
-  await waitForInitialize(child);
-  child = undefined;
-
-  child = spawn(bridgeBinPath, ["bridge", "--port", "0"], {
-    cwd: projectDir,
-    env: {
-      ...process.env,
-      RABBITHOLE_DIR: dataDir,
-      RABBITHOLE_BRIDGE_CLAUDE_BIN: path.join(ROOT, "test/integration/fixtures/fake-claude.mjs"),
-      RABBITHOLE_BRIDGE_CODEX_BIN: path.join(ROOT, "test/integration/fixtures/fake-codex.mjs"),
-    },
-    stdio: ["ignore", "pipe", "pipe"],
   });
   const bridgeOutput = await waitForBridge(child);
   const modelsResponse = await withTimeout(
-    fetch(`http://127.0.0.1:${bridgeOutput.port}/v1/models`, {
+    fetch(`http://127.0.0.1:${bridgeOutput.port}/bridge/models`, {
       headers: { Authorization: `Bearer ${bridgeOutput.token}` },
     }),
     "installed bridge models"
   );
   assert.equal(modelsResponse.status, 200);
   const modelList = await modelsResponse.json();
-  assert.equal(modelList.object, "list");
-  assert.ok(modelList.data.some((model) => model.id === "claude/sonnet"));
-  assert.ok(modelList.data.some((model) => model.id === "codex/gpt-fake"));
-  // Bridge stdout is the human banner (stderr keeps the parseable log lines);
-  // only the no-arg MCP mode must keep stdout protocol-clean.
+  assert.ok(modelList.models.some((model) => model.id === "gpt-fake"));
   assert.match(bridgeOutput.stdout(), /Open this link to connect your browser/, "bridge stdout must lead with the pairing instruction");
   assert.match(
     bridgeOutput.stdout(),
@@ -311,7 +176,7 @@ try {
   assert.match(bridgeOutput.stderr(), /Received SIGTERM, shutting down bridge/);
   child = undefined;
 
-  console.log(`ok packaging: asserted ${requiredPaths.length} paths, checked dispatcher default/usage/MCP, initialized rabbithole-mcp, and probed authenticated bridge models`);
+  console.log(`ok packaging: asserted ${requiredPaths.length} paths, checked CLI usage and authenticated native model discovery`);
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {
     child.kill("SIGTERM");

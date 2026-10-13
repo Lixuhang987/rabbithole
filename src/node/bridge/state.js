@@ -69,8 +69,7 @@ export class BridgeStateStore {
     this.value = {
       bridge: version,
       agents: [
-        backends.claude.initialState(),
-        backends.codex.initialState(),
+        ...Object.values(backends).map((backend) => backend.initialState()),
       ].map(assertAgentState),
     };
   }
@@ -93,8 +92,7 @@ export class BridgeStateStore {
     if (this.closed) return this.value;
     if (this.refreshPromise) return this.refreshPromise;
     this.refreshPromise = Promise.all([
-      this.backends.claude.probe(),
-      this.backends.codex.probe(),
+      ...Object.values(this.backends).map((backend) => backend.probe()),
     ]).then((agents) => {
       const next = {
         bridge: this.version,
@@ -123,7 +121,7 @@ export class BridgeStateStore {
     this.backends = backends;
     this.value = {
       bridge: this.version,
-      agents: [backends.claude.initialState(), backends.codex.initialState()].map(assertAgentState),
+      agents: Object.values(backends).map((backend) => backend.initialState()).map(assertAgentState),
     };
     for (const listener of this.listeners) listener(this.value);
     return this.refresh();

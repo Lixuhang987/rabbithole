@@ -14,8 +14,10 @@ and cross-backend branching fail explicitly rather than synthesizing history.
 This trades endpoint flexibility and automatic recovery for a smaller execution
 path with explicit context ownership.
 
-This supersedes the MCP and settings-migration clauses (4 and 7) in
-[the earlier constraints](0001-load-bearing-constraints.md) for the intended
-replacement architecture. Diagnostics continue to use standard error.
-The implementation scope and deferred backends belong to
-[the session-unification spec](../proposals/backend-session-unification.md).
+Diagnostics continue to use standard error. The implementation scope and deferred
+backends belong to [the session-unification spec](../proposals/backend-session-unification.md).
+
+This decision supersedes clauses 1, 4, 7 and the two-host interpretation of
+[0001](0001-load-bearing-constraints.md): live browser assets may load from their
+origin, CLI stdout is a banner, settings have no migration, and only the browser
+owns documents. Frozen snapshots remain self-contained.

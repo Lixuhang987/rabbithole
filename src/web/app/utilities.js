@@ -44,7 +44,7 @@ export function formatRelativeDate(value) {
 }
 
 export function isAuthLikeError(error) {
-  return error?.status === 401 || error?.status === 403 || error?.code === "missing_key" || /api key|401|403|unauthorized|forbidden/i.test(error?.message || String(error));
+  return error?.status === 401 || error?.status === 403 || error?.code === "unauthorized" || /401|403|unauthorized|forbidden/i.test(error?.message || String(error));
 }
 
 export function autoGrowTextarea(textarea, maxHeight) {

@@ -5,7 +5,7 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { ensureWebDist } from "../support/build.mjs";
 import { serveStatic } from "../support/static-server.mjs";
-import { corsHeaders, sse } from "../support/provider-mock.mjs";
+import { seedConfiguredBridge, routeProvider } from "../support/provider-mock.mjs";
 import { ATTENTION_PDF_PAGE_COUNT, ATTENTION_PDF_SHA256, ATTENTION_PAGE_VIEW, readAttentionPdf } from "../support/attention-pdf.mjs";
 import { assertSelectionPopoverUsable, selectVisibleText } from "../support/visible-selection.mjs";
 
@@ -17,14 +17,7 @@ const server = await serveStatic(WEB_DIST, { spaFallback: true });
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch();
 const context = await browser.newContext({ deviceScaleFactor: 2 });
-await context.addInitScript(() => localStorage.setItem("rh-web-settings", JSON.stringify({
-  preset: "custom",
-  base_url: "http://localhost:11434/v1",
-  model: "llama3.2",
-  transcribe_model: "llama3.2-vision",
-  session_only: true,
-  generation_setup: { version: 1, preset: "custom", base_url: "http://localhost:11434/v1", model: "llama3.2" },
-})));
+await seedConfiguredBridge(context);
 const page = await context.newPage();
 const pageErrors = [];
 const answerBodies = [];
@@ -32,13 +25,8 @@ page.on("pageerror", (error) => pageErrors.push(error.stack || error.message));
 page.emit("pageerror", new Error("page-error-capture-probe"));
 assert.equal(pageErrors.some((message) => message.includes("page-error-capture-probe")), true);
 pageErrors.length = 0;
-await page.route("http://localhost:11434/v1/models", (route) => route.fulfill({ status: 200, headers: { ...corsHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ data: [{ id: "llama3.2" }, { id: "llama3.2-vision" }] }) }));
-await page.route("http://localhost:11434/api/show", (route) => route.fulfill({ status: 200, headers: { ...corsHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ capabilities: ["completion", "vision"] }) }));
-await page.route("http://localhost:11434/v1/chat/completions", async (route) => {
-  if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders(), body: "" });
-  answerBodies.push(route.request().postDataJSON());
-  return route.fulfill({ status: 200, headers: { ...corsHeaders(), "Content-Type": "text/event-stream" }, body: sse(["# Precise answer\n\nCoordinate-safe response."]) });
-});
+await routeProvider(page, { onProviderCall: (body) => answerBodies.push(body),
+  streams: Array.from({ length: 30 }, () => ["# Precise answer\n\nCoordinate-safe response."]) });
 
 try {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
@@ -477,8 +465,8 @@ try {
   for (let i = 0; i < 4; i++) assert(Math.abs(actualBounds[i] - desiredBounds[i]) <= 0.35, `CropBox coordinate ${i} drifted: ${actualBounds[i]} vs ${desiredBounds[i]}`);
   assert.deepEqual(Object.keys(regionState.assets), [root.extensions.pdf.source.asset], "selections and regions must never add persistent crop assets");
 
-  const regionRequest = answerBodies.find((body) => JSON.stringify(body.messages).includes("Crop box exact region"));
-  const dataUrl = regionRequest?.messages?.at(-1)?.content?.find((part) => part.type === "image_url")?.image_url?.url;
+  const regionRequest = answerBodies.find((body) => JSON.stringify(body.input).includes("Crop box exact region"));
+  const dataUrl = regionRequest?.input?.attachments?.find((part) => part.kind === "image")?.data_url;
   assert.match(dataUrl || "", /^data:image\/png;base64,/);
   const dimensions = pngDimensions(Buffer.from(dataUrl.split(",", 2)[1], "base64"));
   assert(dimensions.width >= 1749 && dimensions.width <= 1751, `Figure 2 crop must render its exact 420-point padded width at 300dpi: ${JSON.stringify(dimensions)}`);

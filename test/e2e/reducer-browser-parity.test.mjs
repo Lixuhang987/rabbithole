@@ -76,7 +76,7 @@ try {
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
     const painted = await page.evaluate(async (hole) => {
       const runtime = globalThis.ReducerUnderTest.createRabbitholeUi({
-        hydration: { root_id: hole.root_id, nodes: hole.nodes, frozen: true, agent_attached: false },
+        hydration: { root_id: hole.root_id, nodes: hole.nodes, frozen: true },
       });
       const cards = [...document.querySelectorAll("#world .card[data-id]")].map((card) => ({
         id: card.dataset.id,

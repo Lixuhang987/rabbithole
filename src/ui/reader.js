@@ -498,16 +498,11 @@ function pendingStatusHtml(k) {
     frozen: '<span class="si-muted">unanswered in this snapshot</span>',
     closed: '<span class="si-muted">saved — answered when you reopen</span>',
     away: '<span class="si-muted">saved — waiting for the agent</span>',
-    live:
-      k && k.queued
-        ? '<span class="shimmer-text">Waiting for previous answer</span>'
-        : k && k.delegated
-          ? '<span class="shimmer-text">Working in sub-agent…</span>'
-          : k?._searchStatus
-            ? `<span class="shimmer-text">${k._searchStatus === "reading" ? "Reading page…" : "Searching the web…"}</span>`
-            : k && k.html
-              ? '<span class="shimmer-text">Writing…</span>'
-              : '<span class="shimmer-text">Thinking…</span>',
+    live: k?._searchStatus
+      ? `<span class="shimmer-text">${k._searchStatus === "reading" ? "Reading page…" : "Searching the web…"}</span>`
+      : k && k.html
+        ? '<span class="shimmer-text">Writing…</span>'
+        : '<span class="shimmer-text">Thinking…</span>',
   };
   return copy[sessionPhase()];
 }

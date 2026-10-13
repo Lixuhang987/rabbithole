@@ -42,7 +42,6 @@ Values are read from `src/design/tokens.css`; repeated theme overrides remain vi
 | `--space-11` | `28px` |
 | `--control-h-xs` | `24px` |
 | `--control-h-sm` | `28px` |
-| `--control-h-md` | `36px` |
 | `--control-h-lg` | `44px` |
 | `--taskbar-pill-pad-block` | `7px` |
 | `--control-pad-x-compact` | `8px` |
@@ -74,14 +73,8 @@ Values are read from `src/design/tokens.css`; repeated theme overrides remain vi
 | `--duration-legacy-150` | `150ms` |
 | `--duration-enter` | `160ms` |
 | `--duration-legacy-180` | `180ms` |
-| `--duration-legacy-200` | `200ms` |
 | `--duration-legacy-220` | `220ms` |
-| `--duration-legacy-240` | `240ms` |
-| `--duration-legacy-260` | `260ms` |
-| `--duration-legacy-320` | `320ms` |
 | `--duration-slow` | `340ms` |
-| `--duration-legacy-600` | `600ms` |
-| `--duration-legacy-1100` | `1100ms` |
 | `--duration-legacy-1150` | `1150ms` |
 | `--duration-legacy-1350` | `1350ms` |
 | `--duration-legacy-1450` | `1450ms` |

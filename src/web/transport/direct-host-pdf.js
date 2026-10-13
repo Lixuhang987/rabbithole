@@ -5,16 +5,14 @@ import { materializePdfFigures } from "../../core/pdf/figures.js";
 import { normalizeProviderError } from "../provider/errors.js";
 import { cropPdfSourceToBlob, cropPdfSourceToDataUrl } from "../pdf-crop.js";
 import { DirectHostBase } from "./direct-host-base.js";
-import { rawPdfExtension } from "./direct-host-values.js";
+import { rawPdfExtension, requireReadableArticle } from "./direct-host-values.js";
 
 /** PDF transcription, figures, and extension lifecycle. */
 export class DirectHostPdf extends DirectHostBase {
   async handleBranchRequest(payload) {
     const parentId = payload.parent_id === null ? null : String(payload.parent_id || "");
     const parent = this.state.nodes.get(parentId ?? this.state.root_id);
-    // Raw flag on purpose — normalization fails against the mid-run streamed
-    // body, and the lock must hold precisely then.
-    if (rawPdfExtension(parent)?.converting) throw new Error("This PDF is being converted. Wait for conversion to finish before branching.");
+    requireReadableArticle(parent);
     const nodeId = String(payload.node_id || "");
     const replacedNote = this.state.nodes.get(nodeId);
     if (isNoteNode(replacedNote)) this.noteConversions.set(nodeId, replacedNote);
@@ -50,8 +48,8 @@ export class DirectHostPdf extends DirectHostBase {
     }
     if (pdf.converting || this.abortByNode.has(nodeId)) throw new Error("Conversion is already running.");
     const capability = this.getPdfTranscriptionCapability?.();
-    if (capability?.available === false) throw new Error(capability.reason || "Set up a vision-capable PDF transcription model before converting.");
-    if (!this.provider?.transcribePages) throw new Error("Set up a transcription model before converting.");
+    if (capability?.available === false) throw new Error(capability.reason || "Choose a vision-capable model before converting.");
+    if (!this.provider?.transcribePages) throw new Error("Choose a model before converting.");
     const controller = new AbortController(); this.abortByNode.set(nodeId, controller);
     const original = node.markdown;
     this.patchPdf(nodeId, { ...pdf, converting: true, converted: false, original_markdown: original });

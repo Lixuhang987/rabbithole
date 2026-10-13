@@ -3,7 +3,7 @@ import { StringDecoder } from "node:string_decoder";
 export const MAX_NDJSON_LINE_CHARS = 1024 * 1024;
 
 /**
- * Incremental UTF-8 NDJSON reader shared by bridge agents and transcript tails.
+ * Incremental UTF-8 NDJSON reader shared by the native backend protocol.
  * @param {{onRecord: (record: any, line: string) => void, onLine?: (line: string) => void, onMalformed?: (line: string, error: unknown) => void, maxLineChars?: number}} options
  */
 export function createNdjsonReader({

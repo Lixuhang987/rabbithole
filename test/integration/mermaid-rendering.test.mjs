@@ -5,9 +5,6 @@ import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
 import { buildSnapshotHtml } from "../../src/core/snapshot-html.js";
-import { buildCanvasHtml } from "../../src/node/html/canvas.js";
-import { answerBranch } from "../../src/node/rabbithole.js";
-import { createSession, closeAllSessions } from "../../src/node/sessions.js";
 import { ensureWebDist } from "../support/build.mjs";
 import { serveStatic } from "../support/static-server.mjs";
 
@@ -27,160 +24,12 @@ const browser = await chromium.launch();
 try {
   const snapshot = await verifyWebApp();
   await verifyOfflineSnapshot(snapshot);
-  const blockSnapshot = await verifySelfContainedMcpPage();
-  await verifyOfflineBlockAsks(blockSnapshot);
   verifyConditionalSnapshotAssembly();
   console.log("ok Mermaid: fullscreen controls, strict rendering, theme refresh, and offline snapshots");
 } finally {
   await browser.close();
-  await closeAllSessions("mermaid_test_complete");
   await new Promise((resolve) => server.close(resolve));
   await fs.rm(tmp, { recursive: true, force: true });
-}
-
-async function verifySelfContainedMcpPage() {
-  const oversizedShowSelection = "Show selection target " + "x".repeat(2100);
-  const rootMarkdown = [
-    "```mermaid id=flow1",
-    "flowchart LR",
-    "  Start --> Safe",
-    "```",
-    "",
-    "```show id=show1",
-    `<div><strong>${oversizedShowSelection}</strong></div>`,
-    "```",
-  ].join("\n");
-  const session = await createSession({
-    holeId: "mermaid-mcp-live",
-    title: "Mermaid MCP live",
-    rootId: "root",
-    nodes: [node("root", null, "Root", rootMarkdown, 0)],
-    assetNames: new Set(),
-    isResume: false,
-    renderPage: (hydration) => buildCanvasHtml(hydration),
-  });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  const requests = [];
-  await page.on("request", (request) => requests.push(request.url()));
-  await page.goto(session.url, { waitUntil: "load" });
-  // The inline diagram contract below describes the reader column — expand the
-  // current card into the reader first (canvas is the landing surface).
-  await page.evaluate(() => document.querySelector(".card.current [aria-label='Expand document']").click());
-  await page.waitForFunction(() => !document.body.classList.contains("mode-canvas") && !document.body.classList.contains("mode-flight"));
-  await page.waitForFunction(() => !!document.querySelector("#reader-main .viz-mermaid")?.shadowRoot?.querySelector("svg"));
-  const peerPage = await context.newPage();
-  await peerPage.goto(session.url, { waitUntil: "load" });
-  await peerPage.evaluate(() => document.querySelector(".card.current [aria-label='Expand document']").click());
-  await peerPage.waitForFunction(() => !document.body.classList.contains("mode-canvas") && !document.body.classList.contains("mode-flight"));
-  await peerPage.waitForFunction(() => !!document.querySelector("#reader-main .viz-mermaid")?.shadowRoot?.querySelector("svg"));
-  assert(requests.some((url) => url.startsWith(session.url)), "MCP request capture must observe the canvas");
-  assert.equal(requests.filter((url) => /\/mermaid\.js(?:\?|$)/.test(url)).length, 0, "MCP canvas must not fetch an external Mermaid asset");
-  assert.equal(await page.locator('#rabbithole-mermaid-runtime[type="application/vnd.rabbithole+mermaid"]').count(), 1);
-
-  await page.bringToFront();
-  await selectVisualText(page, "flow1", "Safe");
-  await page.waitForSelector("#ask.visible");
-  assert.equal(await page.locator(".rh-lightbox").count(), 0, "drag-selecting Mermaid text must not open fullscreen");
-  await clickMermaidVisual(page, "flow1");
-  await page.waitForSelector("#ask:not(.visible)", { state: "attached" });
-  assert.equal(await page.locator(".rh-lightbox").count(), 0,
-    "the first diagram click outside a selection popover must dismiss it without opening fullscreen");
-  await selectVisualText(page, "flow1", "Safe");
-  await page.waitForSelector("#ask.visible");
-  await page.click('#ask .lens[data-lens="explain"]');
-  await page.waitForFunction(() => {
-    const mount = document.querySelector('.viz-mermaid[data-block-id="flow1"]');
-    return mount?.shadowRoot?.querySelector(".rh-viz-mark")?.textContent === "1";
-  });
-  const flowAsk = [...session.nodes.values()].find((entry) => entry.origin?.anchor?.block?.block_id === "flow1");
-  const flowRequest = [...session.requests.records()].find((entry) => entry.nodeId === flowAsk.id);
-  const answerAbort = new AbortController();
-  setTimeout(() => answerAbort.abort(), 100);
-  await answerBranch({
-    sessionId: session.id,
-    requestId: flowRequest.requestId,
-    title: "Flow answer",
-    content: "Answered from the connected peer test.",
-    signal: answerAbort.signal,
-  });
-  await peerPage.waitForFunction((id) => !!document.querySelector(`.card[data-id="${id}"]`), flowAsk.id, { timeout: 2000 });
-  assert.equal(await peerPage.evaluate(() => document.querySelector('.viz-mermaid[data-block-id="flow1"]')?.shadowRoot?.querySelector(".rh-viz-mark")?.textContent || ""), "1",
-    "a connected peer that received the branch must refresh the visual's chip without remounting it");
-
-  await selectVisualText(page, "show1", oversizedShowSelection);
-  await page.waitForSelector("#ask.visible");
-  await clickShowVisual(page, "show1");
-  await page.waitForSelector("#ask:not(.visible)", { state: "attached" });
-  assert.equal(await page.locator(".rh-lightbox").count(), 0,
-    "the first HTML visual click outside a selection popover must dismiss it without opening fullscreen");
-  await clickShowVisual(page, "show1");
-  await page.waitForSelector(".rh-lightbox .rh-lightbox-show");
-  await selectVisualText(page, "show1", oversizedShowSelection, { lightbox: true });
-  await page.waitForSelector("#ask.visible");
-  await page.fill("#ask-text", "Why is this target important?");
-  await page.click('#ask .ask-commit[data-commit="ask"]');
-  await page.waitForSelector(".rh-lightbox", { state: "detached" });
-  await page.waitForFunction(() => {
-    const mount = document.querySelector('.viz-show[data-block-id="show1"]');
-    return mount?.shadowRoot?.querySelector(".rh-viz-mark")?.textContent === "1";
-  });
-
-  const blockAsks = [...session.nodes.values()].filter((entry) => entry.parent_id === "root" && entry.origin?.anchor?.block);
-  assert.deepEqual(blockAsks.map((entry) => ({
-    block: entry.origin.anchor.block,
-    question: entry.origin.question,
-    lens: entry.origin.lens,
-    instruction: typeof entry.origin.instruction === "string" && entry.origin.instruction.length > 0,
-  })), [
-    { block: { block_id: "flow1", selected_text: "Safe" }, question: "", lens: "explain", instruction: true },
-    { block: { block_id: "show1", selected_text: oversizedShowSelection.slice(0, 2000) }, question: "Why is this target important?", lens: null, instruction: false },
-  ], "visual asks persist block identity while preset instructions remain separate from typed human questions");
-  assert.equal(await page.locator(`.card[data-id="${blockAsks[1].id}"] .origin-quote`).innerText(),
-    "“Why is this target important?”",
-    "an answer window must quote the human's question instead of the selected source text");
-
-  for (const blockId of ["flow1", "show1"]) {
-    assert.equal(await visualExpandOpacity(page, blockId), "0",
-      `${blockId} expand control must stay hidden until its visual is hovered`);
-    await hoverVisual(page, blockId);
-    await page.waitForFunction((id) => {
-      const host = document.querySelector(`#reader-main [data-block-id="${id}"]`);
-      const button = host?.shadowRoot?.querySelector(".rh-show-expand, .rh-mermaid-expand");
-      return button && getComputedStyle(button).opacity === "1";
-    }, blockId);
-    await page.mouse.move(0, 0);
-    await page.waitForFunction((id) => {
-      const host = document.querySelector(`#reader-main [data-block-id="${id}"]`);
-      const button = host?.shadowRoot?.querySelector(".rh-show-expand, .rh-mermaid-expand");
-      return button && getComputedStyle(button).opacity === "0";
-    }, blockId);
-  }
-  const exported = await fetch(`${session.url}/export`);
-  assert.equal(exported.status, 200);
-  const html = await exported.text();
-  assert(html.includes('id="rabbithole-mermaid-runtime"'), "MCP export should carry its Mermaid runtime offline");
-  await context.close();
-  return html;
-}
-
-async function verifyOfflineBlockAsks(snapshot) {
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await page.setContent(snapshot, { waitUntil: "load" });
-  await page.waitForFunction(() => {
-    const ids = ["flow1", "show1"];
-    return ids.every((id) => {
-      const mount = document.querySelector(`[data-block-id="${id}"]`);
-      return mount?.shadowRoot?.querySelector(".rh-viz-mark")?.textContent === "1";
-    });
-  });
-  await selectVisualText(page, "flow1", "Safe");
-  await page.waitForTimeout(50);
-  assert.equal(await page.locator("#ask.visible").count(), 0, "a frozen visual keeps its branch chip without exposing an ask surface");
-  await page.evaluate(() => document.querySelector('.viz-show[data-block-id="show1"]')?.shadowRoot?.querySelector(".rh-viz-mark")?.click());
-  await page.waitForFunction(() => document.querySelector("#reader-main .reader-context")?.textContent.includes("Show selection target"));
-  await context.close();
 }
 
 async function selectVisualText(page, blockId, needle, options = {}) {

@@ -10,8 +10,8 @@ export const DOC_EVENT = vocabulary([
 ]);
 
 export const WIRE_EVENT = vocabulary([
-  "node_progress", "node_answered", "node_deleted", "node_work_state", "node_search_status", "node_error",
-  "node_extensions_patch", "pdf_convert_progress", "agent_state", "context_usage", "preferences", "session_closed",
+  "node_progress", "node_answered", "node_deleted", "node_search_status", "node_error",
+  "node_extensions_patch", "pdf_convert_progress",
 ]);
 
 export const HOST_COMMAND = vocabulary([
@@ -19,12 +19,6 @@ export const HOST_COMMAND = vocabulary([
   "node_extensions_patch", "convert_pdf", "convert_cancel", "delete_node", "view_state", "done",
 ]);
 
-export const MCP_HOST_COMMAND = vocabulary(["preferences_patch"]);
-
-export const MCP_HOST_COMMANDS = Object.freeze([
-  ...Object.values(HOST_COMMAND).filter((value) => value !== HOST_COMMAND.RETRY_BRANCH),
-  ...Object.values(MCP_HOST_COMMAND),
-]);
 export const WEB_HOST_COMMANDS = Object.freeze(Object.values(HOST_COMMAND));
 
 /**

@@ -2,9 +2,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { systemClock } from "../../core/clock.js";
 
-import { ClaudeBackend } from "./agents/claude.js";
 import { CodexBackend } from "./agents/codex.js";
 import { applyCors, isAllowedOrigin } from "./cors.js";
 import { openEventStream } from "./events.js";
@@ -14,9 +12,7 @@ import {
   errorBody,
   isAbortError,
 } from "./errors.js";
-import { conversationRequest } from "./conversation.js";
-import { countImageParts } from "./messages.js";
-import { routeModelId } from "./models.js";
+import { generationRequest } from "./input.js";
 import { BridgeStateStore } from "./state.js";
 import { readOrCreateBridgeToken, tokenMatches } from "./token.js";
 import {
@@ -25,8 +21,6 @@ import {
 } from "../shared/http.js";
 import { assertHttpRequest } from "../shared/http-guard.js";
 import { errorCode, errorStatusCode } from "../shared/errno.js";
-import { shortId } from "../shared/ids.js";
-
 const HOST = "127.0.0.1";
 
 function sendJson(res, statusCode, body) {
@@ -49,10 +43,6 @@ function sendBridgeError(res, error) {
   sendJson(res, payload.statusCode, payload.body);
 }
 
-function completionId() {
-  return `chatcmpl-${shortId()}`;
-}
-
 function sseData(res, value) {
   if (!res.destroyed && !res.writableEnded) {
     res.write(`data: ${typeof value === "string" ? value : JSON.stringify(value)}\n\n`);
@@ -61,17 +51,6 @@ function sseData(res, value) {
 
 function isJsonContentType(value) {
   return /^application\/json(?:\s*;|$)/i.test(String(value || ""));
-}
-
-function hasMessageContent(messages) {
-  return messages.some((message) => {
-    if (typeof message?.content === "string") return Boolean(message.content.trim());
-    if (!Array.isArray(message?.content)) return false;
-    return message.content.some((part) => (
-      (part?.type === "text" && typeof part.text === "string" && Boolean(part.text.trim()))
-      || part?.type === "image_url"
-    ));
-  });
 }
 
 /** @param {unknown} error */
@@ -97,14 +76,11 @@ export async function createBridge({
     env,
     regenerate: newToken,
   });
-  const claudeCwd = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-bridge-claude-"));
   const codexCwd = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-bridge-codex-"));
-  await Promise.all([fs.chmod(claudeCwd, 0o700), fs.chmod(codexCwd, 0o700)]);
+  await fs.chmod(codexCwd, 0o700);
 
-  let claude;
   let codex;
   try {
-    claude = ClaudeBackend.create({ env, cwd: claudeCwd });
     codex = await CodexBackend.create({
       env,
       cwd: codexCwd,
@@ -112,7 +88,6 @@ export async function createBridge({
     });
   } catch (error) {
     await Promise.allSettled([
-      fs.rm(claudeCwd, { recursive: true, force: true }),
       fs.rm(codexCwd, { recursive: true, force: true }),
     ]);
     throw error;
@@ -120,7 +95,7 @@ export async function createBridge({
 
   const state = new BridgeStateStore({
     version,
-    backends: { claude, codex },
+    backends: { codex },
     logger,
     ...(stateRefreshMs ? { refreshMs: stateRefreshMs } : {}),
   });
@@ -137,17 +112,15 @@ export async function createBridge({
     }
     restartPromise = (async () => {
       // Construct replacements before closing the working backends.
-      const nextClaude = ClaudeBackend.create({ env, cwd: claudeCwd });
       const nextCodex = await CodexBackend.create({ env, cwd: codexCwd, bridgeVersion: version });
       await state.refreshPromise;
       if (closing) {
-        await Promise.allSettled([nextClaude.close(), nextCodex.close()]);
+        await Promise.allSettled([nextCodex.close()]);
         throw new BridgeError("Bridge is shutting down.", "bridge_restarting", 503);
       }
-      await Promise.allSettled([claude.close(), codex.close()]);
-      claude = nextClaude;
+      await Promise.allSettled([codex.close()]);
       codex = nextCodex;
-      return state.replaceBackends({ claude, codex });
+      return state.replaceBackends({ codex });
     })().finally(() => { restartPromise = null; });
     return restartPromise;
   }
@@ -160,16 +133,10 @@ export async function createBridge({
 
   async function models() {
     assertAvailable();
-    const settled = await Promise.allSettled([
-      claude.listModels(),
-      codex.listModels(),
-    ]);
-    return settled
-      .filter((result) => result.status === "fulfilled")
-      .flatMap((result) => result.value);
+    return codex.listModels();
   }
 
-  async function handleChat(req, res, body) {
+  async function handleGenerate(req, res, body) {
     assertAvailable();
     let streamStarted = false;
     let clientAborted = false;
@@ -199,120 +166,40 @@ export async function createBridge({
     };
 
     try {
-      if (!body || typeof body !== "object" || Array.isArray(body)) {
-        throw new BridgeError("Request body must be a JSON object.", "turn_failed", 400);
-      }
-      const route = routeModelId(body.model);
-      if (!route) {
-        throw new BridgeError(
-          "Model must use the claude/<alias> or codex/<model> namespace.",
-          "model_unknown",
-          400
-        );
-      }
-      if (!Array.isArray(body.messages) || !hasMessageContent(body.messages)) {
-        throw new BridgeError(
-          "messages must contain text or image input.",
-          "turn_failed",
-          400
-        );
-      }
-
-      const conversation = conversationRequest(body.rabbithole_conversation, route.backend, body.stream);
-      const backend = route.backend === "claude" ? claude : codex;
-
+      const generation = generationRequest(body);
+      const backend = state.backends[generation.backend];
       const catalog = await backend.listModels();
-      const modelEntry = catalog.find((entry) => entry.id === body.model);
-      if (!modelEntry) {
-        throw new BridgeError(`Unknown model "${body.model}".`, "model_unknown", 400);
+      const modelEntry = catalog.find((entry) => entry.id === generation.model);
+      if (!modelEntry) throw new BridgeError(`Unknown model "${generation.model}".`, "model_unknown", 400);
+      if (generation.input.some((part) => part.type === "image") && modelEntry.images !== true) {
+        throw new BridgeError(`Model "${generation.model}" cannot accept images.`, "model_no_images", 400);
       }
-      if (countImageParts(body.messages) > 0 && modelEntry.images !== true) {
-        throw new BridgeError(
-          `Model "${body.model}" cannot accept image input.`,
-          "model_no_images",
-          400
-        );
-      }
-      const effort = body.reasoning_effort || modelEntry.reasoning.default;
+      const effort = generation.reasoning || modelEntry.reasoning.default;
       if (!modelEntry.reasoning.options.includes(effort)) {
-        throw new BridgeError(
-          `Model "${body.model}" does not support that reasoning effort.`,
-          "turn_failed",
-          400
-        );
+        throw new BridgeError("Unsupported reasoning effort.", "input_invalid", 400);
       }
-
-      const stream = body.stream === true;
-      const id = completionId();
-      const created = Math.floor(systemClock.now() / 1000);
       const result = await backend.generate({
-        model: route.model,
-        messages: body.messages,
+        model: generation.model,
+        input: generation.input,
+        instructions: generation.instructions,
+        sourceSession: generation.sourceSession,
         reasoningEffort: effort,
         signal: controller.signal,
-        ...(conversation ? { conversation } : {}),
-        onSearch(event) {
-          if (!stream) return;
-          startStream();
-          sseData(res, { object: "rabbithole.search", ...event });
-        },
-        onDelta(text) {
-          if (!stream || !text) return;
-          startStream();
-          sseData(res, {
-            id,
-            object: "chat.completion.chunk",
-            created,
-            model: body.model,
-            choices: [{
-              index: 0,
-              delta: { content: text },
-              finish_reason: null,
-            }],
-          });
-        },
+        onSearch(event) { startStream(); sseData(res, { type: "search", ...event }); },
+        onDelta(delta) { if (delta) { startStream(); sseData(res, { type: "text", delta }); } },
       });
-
-      if (stream) {
-        startStream();
-        if (conversation && result.conversation) {
-          sseData(res, { object: "rabbithole.conversation", nodeId: conversation.nodeId, conversation: result.conversation });
-        }
-        sseData(res, {
-          id,
-          object: "chat.completion.chunk",
-          created,
-          model: body.model,
-          choices: [{
-            index: 0,
-            delta: {},
-            finish_reason: result.finishReason || "stop",
-          }],
-          ...(result.usage ? { usage: result.usage } : {}),
-        });
-        sseData(res, "[DONE]");
-        res.end();
-      } else {
-        sendJson(res, 200, {
-          id,
-          object: "chat.completion",
-          created,
-          model: body.model,
-          choices: [{
-            index: 0,
-            message: { role: "assistant", content: result.text || "" },
-            finish_reason: result.finishReason || "stop",
-          }],
-          ...(result.usage ? { usage: result.usage } : {}),
-          ...(conversation ? { rabbithole_conversation: { nodeId: conversation.nodeId, conversation: result.conversation } } : {}),
-        });
+      if (controller.signal.aborted) throw controller.signal.reason;
+      if (!result.session || result.finishReason === "length") {
+        throw new BridgeError("The backend did not complete its session.", "conversation_incomplete", 500);
       }
+      startStream();
+      sseData(res, { type: "completed", session: result.session, ...(result.usage ? { usage: result.usage } : {}) });
+      res.end();
     } catch (error) {
       if (clientAborted || isAbortError(error)) return;
       const normalized = requestError(error);
       if (streamStarted) {
-        sseData(res, errorBody(normalized).body);
-        sseData(res, "[DONE]");
+        sseData(res, { type: "error", ...errorBody(normalized).body.error });
         res.end();
       } else {
         sendBridgeError(res, normalized);
@@ -379,15 +266,14 @@ export async function createBridge({
 
       if (req.method === "GET" && url.pathname === "/bridge/events") {
         openEventStream(req, res, state);
-      } else if (req.method === "GET" && url.pathname === "/v1/models") {
+      } else if (req.method === "GET" && url.pathname === "/bridge/models") {
         sendJson(res, 200, {
-          object: "list",
-          data: await models(),
+          models: await models(),
         });
       } else if (req.method === "POST" && url.pathname === "/bridge/restart") {
         sendJson(res, 200, { ok: true, state: await restart() });
-      } else if (req.method === "POST" && url.pathname === "/v1/chat/completions") {
-        await handleChat(req, res, body);
+      } else if (req.method === "POST" && url.pathname === "/bridge/generate") {
+        await handleGenerate(req, res, body);
       } else {
         sendJson(res, 404, {
           error: {
@@ -439,12 +325,11 @@ export async function createBridge({
       503
     );
     for (const controller of activeControllers) controller.abort(shutdownError);
-    await Promise.allSettled([claude.close(), codex.close()]);
+    await Promise.allSettled([codex.close()]);
     if (server.listening) {
       await new Promise((resolve) => closeServerGracefully(server, { onClosed: () => resolve(undefined) }));
     }
     await Promise.allSettled([
-      fs.rm(claudeCwd, { recursive: true, force: true }),
       fs.rm(codexCwd, { recursive: true, force: true }),
     ]);
   }

@@ -81,7 +81,7 @@ function oversizeStream() {
 function policyListsStayDistinct() {
   assert.deepEqual([...ALLOWED_HOSTS], [...FETCH_PROXY_ALLOWED_HOSTS]);
   assert(WEB_CONNECT_SOURCES.includes("https:"));
-  assert(WEB_CONNECT_SOURCES.includes("http:"));
+  assert(WEB_CONNECT_SOURCES.includes("http://127.0.0.1:*"));
   assert(!FETCH_PROXY_ALLOWED_HOSTS.includes("localhost"));
   assert.notDeepEqual(WEB_CONNECT_SOURCES, FETCH_PROXY_ALLOWED_HOSTS);
   const csp = webContentSecurityPolicy({

@@ -5,16 +5,11 @@ import { webkit } from "playwright";
 import { extractSnapshotPayload } from "../../src/core/portable-import.js";
 import { serializeForInlineScript } from "../../src/core/utils.js";
 import { assertCodeCopy } from "../support/code-copy.mjs";
-import { MOCK_MODEL, corsHeaders, routeProvider, seedConfiguredOpenRouter } from "../support/provider-mock.mjs";
+import { BRIDGE_URL, MOCK_MODEL, MOCK_TOKEN, corsHeaders, routeProvider, seedConfiguredBridge } from "../support/provider-mock.mjs";
 import { ROOT, bootWebApp } from "../support/web-app-harness.mjs";
 import { assertSelectionPopoverUsable, panCanvasBy, selectVisibleText } from "../support/visible-selection.mjs";
 
-const MOCK_KEY = `sk-or-v1-${"x".repeat(64)}`;
-const BAD_KEY = `sk-or-v1-${"y".repeat(64)}`;
-const PROVIDER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const KEY_URL = "https://openrouter.ai/api/v1/key";
-const MODEL_URL = "https://openrouter.ai/api/v1/models";
-const LOCAL_MODEL_URL = "http://localhost:11434/v1/models";
+const PROVIDER_URL = `${BRIDGE_URL}/bridge/generate`;
 
 const hostilePayloadValue = { text: "</script><>&\u2028\u2029" };
 const hostilePayloadJson = serializeForInlineScript(hostilePayloadValue);
@@ -455,7 +450,7 @@ async function verifyMobileSelectionSurface(browserEngine, engineName) {
     hasTouch: true,
     isMobile: true,
   });
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   try {
     const canvasPage = await context.newPage();
     await routeProvider(canvasPage, {
@@ -578,7 +573,7 @@ async function verifyMobileSelectionSurface(browserEngine, engineName) {
 
 async function verifyAnchoredNotes() {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   try {
     await routeProvider(page, {
@@ -747,7 +742,7 @@ async function verifyAnchoredNotes() {
    of them again after a reload. */
 async function verifyDockedNotes() {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   await routeProvider(page);
   try {
@@ -1218,7 +1213,7 @@ async function verifyDockedNotes() {
    two pixels: this catches the visible reflow, not just a container width. */
 async function verifyDockedNoteTextGeometry() {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   await routeProvider(page);
   try {
@@ -1337,7 +1332,7 @@ async function measureTextGeometry(page, surfaceSelector, paragraphNeedle) {
    at the long-note clamp — and an Enter save leaves no focus ring behind. */
 async function verifyNotePopoverWysiwyg() {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   await routeProvider(page);
   try {
@@ -1450,7 +1445,7 @@ async function verifyNotePopoverWysiwyg() {
    open dialog the very same dot back, still tracking. */
 async function verifyNotePopoverAnchorStability() {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   await routeProvider(page);
   try {
@@ -1650,7 +1645,7 @@ async function verifyNotePopoverAnchorStability() {
 
 async function verifyStandaloneNotesAndEditing() {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   await page.addInitScript(() => localStorage.setItem("rh-film", "1"));
   let providerCalls = 0;
@@ -2352,7 +2347,7 @@ async function verifyStandaloneNotesAndEditing() {
 
 async function verifyStandaloneImagePaste() {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   const providerBodies = [];
   await page.addInitScript(() => {
@@ -2482,10 +2477,10 @@ async function verifyStandaloneImagePaste() {
     await page.waitForFunction(() => document.querySelector(".card .origin-attachment-strip img"));
     await page.waitForTimeout(30);
     assert.equal(providerBodies.length, 1);
-    const userContent = providerBodies[0].messages.find((message) => message.role === "user").content;
-    assert.deepEqual(userContent.map((part) => part.type), ["text", "image_url"],
-      "the BYOK provider request should contain the pasted image part");
-    assert.match(userContent[1].image_url.url, /^data:image\/png;base64,/);
+    const userContent = providerBodies[0].input.attachments;
+    assert.deepEqual(userContent.map((part) => part.kind), ["image"],
+      "the bridge request should contain the pasted image part");
+    assert.match(userContent[0].data_url, /^data:image\/png;base64,/);
     await imageAsk.filter({ hasText: "The pasted image reached the provider." }).waitFor();
     assert.equal(await imageAsk.locator(".origin-quote .origin-attachment-strip img").count(), 1,
       "the question thumbnail should remain after the ask is answered");
@@ -2516,7 +2511,7 @@ async function verifyStandaloneImagePaste() {
 
 async function verifyNoteToAskConversion() {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   const providerBodies = [];
   let rejectProvider = false;
@@ -2829,8 +2824,8 @@ async function verifyNoteToAskConversion() {
     const storedStandalone = await page.evaluate(async (id) => (await window.__rabbitholeTest.readStoredHole()).nodes.find((node) => node.id === id), standalone.id);
     assert.equal(storedStandalone.parent_id, null, "a standalone note should remain parentless after conversion");
     assert.equal(storedStandalone.origin.branch_type, "followup");
-    const standalonePrompt = providerBodies[2].messages.at(-1).content;
-    assert.match(typeof standalonePrompt === "string" ? standalonePrompt : standalonePrompt[0].text,
+    const standalonePrompt = providerBodies[2].input.article.markdown;
+    assert.match(standalonePrompt,
       /Conversion root context sentinel/, "a parentless converted ask should still receive the root document as context");
 
     editor = await openNoteEditor(imageNote.card);
@@ -2840,8 +2835,8 @@ async function verifyNoteToAskConversion() {
     await editor.press("Control+Enter");
     await imageNote.card.locator(".origin-attachment-strip img").waitFor();
     await imageNote.card.locator(".doc-content", { hasText: "The converted note delivered its pasted image." }).waitFor();
-    const imageUserContent = providerBodies[3].messages.find((message) => message.role === "user").content;
-    assert.deepEqual(imageUserContent.map((part) => part.type), ["text", "image_url"],
+    const imageUserContent = providerBodies[3].input.attachments;
+    assert.deepEqual(imageUserContent.map((part) => part.kind), ["image"],
       "converted note images should use the existing provider attachment contract");
     const storedImageAsk = await page.evaluate(async (id) => (await window.__rabbitholeTest.readStoredHole()).nodes.find((node) => node.id === id), imageNote.id);
     assert.deepEqual(storedImageAsk.origin.attachment_assets, [imageAsset]);
@@ -2888,11 +2883,10 @@ async function pasteSyntheticImage(editor, fileName, color) {
 
 async function verifyLogicalMarkGrouping() {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   let providerCalls = 0;
   await routeProvider(page, {
-    keyStatus: () => 200,
     onProviderCall: () => { providerCalls += 1; },
     streams: [
       ["TITLE: Grouped mark branch\n", "The answer reached from every fragment of the grouped mark."],
@@ -3135,7 +3129,7 @@ async function verifyNonFirstFragmentCanvasNavigation(page, childId) {
 async function verifyCardMenu() {
   const context = await browser.newContext();
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl });
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   await routeProvider(page, {
     streams: [
@@ -3455,13 +3449,12 @@ async function verifyCardMenu() {
 
 async function verifyCanvasBranching() {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   const requests = [];
   let providerCalls = 0;
   page.on("request", (request) => requests.push(request.url()));
   await routeProvider(page, {
-    keyStatus: () => 200,
     onProviderCall: () => { providerCalls += 1; },
     streams: [
       [
@@ -3758,40 +3751,14 @@ async function verifyCanvasBranching() {
   });
   assert(Math.abs(gearOffset.dx) < 0.25 && Math.abs(gearOffset.dy) < 0.25,
     `settings gear glyph should be optically centered in its button, off by ${gearOffset.dx.toFixed(2)},${gearOffset.dy.toFixed(2)}px`);
-  await page.waitForFunction(() => /Connected|Stored only in this browser/i.test(document.getElementById("settings-panel")?.innerText || ""));
-  assert.match(await page.locator("#settings-panel").innerText(), /Connected|Stored only in this browser/i);
-  assert.equal(await page.locator("#model-select").count(), 1, "settings should expose one model picker");
-  assert.equal(await page.locator(".settings-advanced").count(), 0, "OpenRouter settings should not duplicate model choices or expose link-relay plumbing");
-  assert.deepEqual(await page.evaluate(() => ["api-key"].map((id) => {
-    const input = document.getElementById(id);
-    const label = document.querySelector(`label[for="${id}"]`);
-    const described = (input.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
-    return { id, named: !!label?.textContent.trim(), described: described.length > 0 && described.every((ref) => !!document.getElementById(ref)) };
-  })), [
-    { id: "api-key", named: true, described: true },
-  ], "OpenRouter key should have a label and connected status");
-  assert.equal(await page.getAttribute("#api-key-status", "aria-live"), "polite", "API key Field status should remain a polite live region");
-  await page.click("#api-key");
-  const pointerFieldFocus = await page.evaluate(() => ({
-    outline: getComputedStyle(document.getElementById("api-key")).outlineStyle,
-    halo: getComputedStyle(document.querySelector(".key-input-wrap")).boxShadow,
-  }));
-  assert.equal(pointerFieldFocus.outline, "none", "pointer-focused fields should not show the keyboard ring");
-  assert.notEqual(pointerFieldFocus.halo, "none", "composite field focus should show the field halo");
-  await page.locator("#api-key-toggle").focus();
-  await page.keyboard.press("Shift+Tab");
-  const keyboardFieldFocus = await page.evaluate(() => ({
-    focused: document.activeElement?.id,
-    outline: getComputedStyle(document.getElementById("api-key")).outlineStyle,
-    halo: getComputedStyle(document.querySelector(".key-input-wrap")).boxShadow,
-  }));
-  assert.equal(keyboardFieldFocus.focused, "api-key");
-  assert.notEqual(keyboardFieldFocus.outline, "none", "keyboard-focused fields should show the focus-visible ring");
-  assert.notEqual(keyboardFieldFocus.halo, "none", "keyboard-focused composite fields should retain the field halo");
-  await page.click("#model-select");
-  await page.waitForSelector("#model-select-listbox");
+  await page.waitForSelector('.bridge-surface[data-state="ready"] #bridge-model');
+  assert.equal(await page.locator("#bridge-model").count(), 1, "settings should expose one model picker");
+  assert.equal(await page.locator("#bridge-model").getAttribute("aria-labelledby"), "bridge-model-label");
+  assert.equal(await page.locator(".reasoning-choice").getAttribute("aria-labelledby"), "reasoning-label");
+  await page.click("#bridge-model");
+  await page.waitForSelector("#bridge-model-listbox");
   await page.keyboard.press("Escape");
-  assert.equal(await page.locator("#model-select-listbox").count(), 0, "first Escape should close only the nested model combobox");
+  assert.equal(await page.locator("#bridge-model-listbox").count(), 0, "first Escape should close only the nested model combobox");
   assert.equal(await page.locator("#settings-sheet").count(), 1, "settings should remain open after its child closes");
   await page.keyboard.press("Escape");
   await page.waitForSelector("#settings-sheet", { state: "detached" });
@@ -3816,9 +3783,6 @@ async function verifyCanvasBranching() {
   await page.click("#t-settings");
   await page.waitForSelector("#settings-sheet");
   await page.click('[data-settings-section="model"]');
-  await page.fill("#api-key", MOCK_KEY);
-  await page.press("#api-key", "Enter");
-  await page.waitForSelector("#api-key-status.valid");
   await page.keyboard.press("Escape");
   await page.waitForSelector("#settings-sheet", { state: "detached" });
 
@@ -4402,8 +4366,8 @@ async function verifyCanvasBranching() {
   const reloadedRaw = await page.evaluate(() => window.__rabbitholeTest.readStoredHole().then((hole) => JSON.stringify(hole)));
   assert(reloadedRaw.includes("Euler identity connects rotation"));
   assert(reloadedRaw.includes("Second branch explains the geometric view"));
-  assert(!reloadedRaw.includes(MOCK_KEY), "IndexedDB hole record must not contain provider key");
-  assert(!page.url().includes(MOCK_KEY), "URL must not contain provider key");
+  assert(!reloadedRaw.includes(MOCK_TOKEN), "IndexedDB hole record must not contain provider key");
+  assert(!page.url().includes(MOCK_TOKEN), "URL must not contain provider key");
 
   await page.waitForSelector("body.mode-canvas");
   const finalBranch = page.locator('.card:not(.root)', { hasText: "Euler identity connects rotation" });
@@ -4440,7 +4404,7 @@ async function verifyCanvasBranching() {
 
   const external = requests.filter((url) => !url.startsWith(baseUrl));
   assert(external.length > 0, "provider and key validation should have been called");
-  assert(external.every((url) => url === PROVIDER_URL || url === KEY_URL || url === MODEL_URL || url === LOCAL_MODEL_URL), `unexpected external request(s): ${external.join(", ")}`);
+  assert(external.every((url) => url.startsWith(BRIDGE_URL + "/bridge/")), `unexpected external request(s): ${external.join(", ")}`);
   await context.close();
 }
 

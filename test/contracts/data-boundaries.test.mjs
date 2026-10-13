@@ -22,7 +22,7 @@ import {
 import { createSnapshotProjection, snapshotProjectionToFrozenHydration } from "../../src/core/snapshot-projection.js";
 import { parsePersistedHole, toPersistedHole, validatePersistedHole } from "../../src/core/schema.js";
 import { assertRabbitholeStore, RABBITHOLE_STORE_METHODS } from "../../src/core/store.js";
-import { FsStore } from "../../src/node/fs-store.js";
+import { browserStore } from "../support/browser-store.mjs";
 import { buildRabbitholeExport, importRabbitholeFile, importSnapshotFile, parseRabbitholeFile } from "../../src/web/portable.js";
 import { persistedHoleFixture, portableArtifactFixture } from "../fixtures/contracts/artifact-fixture.js";
 import { storeFixture } from "../fixtures/contracts/store-fixture.js";
@@ -48,8 +48,7 @@ const portable = (hole = validHole(), assets = {}) => JSON.stringify({
   format: "rabbithole", format_version: 1, hole, assets,
 });
 async function newStore() {
-  process.env.RABBITHOLE_DIR = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-data-boundaries-"));
-  return new FsStore();
+  return browserStore();
 }
 
 assert.equal(assertRabbitholeStore(storeFixture), storeFixture);
@@ -260,7 +259,7 @@ assert.throws(
 console.log("ok data boundaries: future format_version is clearly refused");
 
 await assert.rejects(
-  () => importRabbitholeFile(new FsStore(), portable(validHole({ schema_version: 3 }))),
+  () => importRabbitholeFile(browserStore(), portable(validHole({ schema_version: 3 }))),
   (/** @type {any} */ error) => error?.message === NEWER_SCHEMA_MESSAGE,
 );
 console.log("ok data boundaries: future schema_version is legibly refused");
@@ -379,13 +378,7 @@ const snapshot = (payload, before = "", after = "") =>
   }
 
   const cleanupStore = await newStore();
-  const originalPutAsset = cleanupStore.putAsset.bind(cleanupStore);
-  let puts = 0;
-  cleanupStore.putAsset = async (...args) => {
-    puts += 1;
-    if (puts === 2) throw new Error("synthetic asset failure");
-    return originalPutAsset(...args);
-  };
+  cleanupStore.putAssets = async () => { throw new Error("synthetic asset failure"); };
   await assert.rejects(
     () => importRabbitholeFile(cleanupStore, portable(validHole({ hole_id: "cleanup-failure" }), { "one.png": "AA==", "two.png": "AA==" })),
     /synthetic asset failure/,
@@ -399,7 +392,7 @@ console.log("ok data boundaries: snapshot and portable imports enforce inert ext
   const over = Buffer.alloc(MAX_ASSET_BYTES + 1, 0xa5).toString("base64");
   const exactStore = await newStore();
   const accepted = await importRabbitholeFile(exactStore, portable(validHole({ hole_id: "asset-exact" }), { "limit.png": exact }));
-  assert.equal((await exactStore.getAsset(accepted.hole_id, "limit.png")).byteLength, MAX_ASSET_BYTES);
+  assert.equal((await exactStore.getAsset(accepted.hole_id, "limit.png")).size, MAX_ASSET_BYTES);
   const originalAtob = globalThis.atob;
   let atobCalled = false;
   globalThis.atob = (value) => { atobCalled = true; return originalAtob(value); };

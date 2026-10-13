@@ -1,9 +1,9 @@
 import katex from "katex";
 import { encodeBase64Utf8 } from "../../src/core/markdown.js";
 import { createMarkdownRenderer } from "../../src/core/markdown-renderer.js";
-import { OpenAICompatibleProvider } from "../../src/web/provider/openai-compatible.js";
+import { BridgeProvider } from "../../src/web/provider/bridge-provider.js";
 
-const REQUIRED_ENV = ["EVAL_BASE_URL", "EVAL_API_KEY", "EVAL_MODEL"];
+const REQUIRED_ENV = ["EVAL_BASE_URL", "EVAL_BRIDGE_TOKEN", "EVAL_MODEL"];
 const missing = REQUIRED_ENV.filter((name) => !process.env[name]);
 
 if (missing.length) {
@@ -11,9 +11,10 @@ if (missing.length) {
   process.exit(0);
 }
 
-const provider = new OpenAICompatibleProvider({
+const provider = new BridgeProvider({
+  backend: "codex",
   baseUrl: process.env.EVAL_BASE_URL,
-  apiKey: process.env.EVAL_API_KEY,
+  token: process.env.EVAL_BRIDGE_TOKEN,
   model: process.env.EVAL_MODEL,
 });
 

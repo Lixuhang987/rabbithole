@@ -6,12 +6,11 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 import { abortError, BridgeError } from "../errors.js";
-import { buildCodexInput } from "../messages.js";
 import { codexModelEntry } from "../models.js";
 import { startingAgent } from "../state.js";
 import { resolveExecutable, terminateChild, runCaptured } from "./isolation.js";
 import { createNdjsonReader } from "../../shared/ndjson.js";
-import { openAiUsage, probeAgent } from "./agent.js";
+import { tokenUsage, probeAgent } from "./agent.js";
 import { SearchCitations, searchSources } from "./codex-search.js";
 import { discoverEgoBrowser, egoBrowserInstructions } from "./ego-browser.js";
 
@@ -148,7 +147,7 @@ export function parseCodexEvent(message) {
       type: "usage",
       threadId: params.threadId,
       turnId: params.turnId,
-      usage: openAiUsage(params.tokenUsage?.last),
+      usage: tokenUsage(params.tokenUsage?.last),
     };
   }
   if (method === "turn/completed") {
@@ -268,7 +267,7 @@ export class CodexAppServer {
         const missingHistory = pending.method === "thread/fork"
           && /no rollout found|thread.*(?:not found|does not exist|archived)|(?:not found|archived).*thread|no persisted history/i.test(message.error.message || "");
         pending.reject(missingHistory
-          ? new BridgeError("The article's Codex history is unavailable. Rebuild its context and try again.", "conversation_unavailable", 409)
+          ? new BridgeError("The article's Codex history is unavailable.", "conversation_unavailable", 409)
           : turnError(message.error));
       }
       else pending.resolve(message.result);
@@ -475,58 +474,41 @@ export class CodexAppServer {
 
   async turn({
     model,
-    messages,
+    input,
+    instructions,
     reasoningEffort,
     signal,
     onDelta,
     onSearch = () => {},
-    conversation = null,
+    sourceSession = null,
   }) {
-    const codexInput = buildCodexInput(messages);
-    codexInput.systemPrompt += egoBrowserInstructions(this.egoBrowser);
-    if (codexInput.imagePartCount !== codexInput.imageCount) {
-      throw new BridgeError(
-        "Codex image input must use an embedded base64 data URL.",
-        "turn_failed",
-        400
-      );
-    }
+    const developerInstructions = instructions + egoBrowserInstructions(this.egoBrowser);
 
     const requestCwd = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-codex-turn-"));
     await fs.chmod(requestCwd, 0o700);
     let threadId;
     try {
-      const scopeId = conversation ? await this.historyScope() : null;
-      if (conversation?.operation === "fork" && conversation.source.scopeId !== scopeId) {
+      const scopeId = await this.historyScope();
+      if (sourceSession && sourceSession.scopeId !== scopeId) {
         throw new BridgeError("The article belongs to another Codex history store.", "conversation_unavailable", 409);
       }
       if (signal?.aborted) throw abortError(signal);
-      const fork = conversation?.operation === "fork";
+      const fork = !!sourceSession;
       const threadResult = await this.request(fork ? "thread/fork" : "thread/start", {
-        ...(fork ? { threadId: conversation.source.threadId, excludeTurns: true } : { environments: [], dynamicTools: [], selectedCapabilityRoots: [] }),
+        ...(fork ? { threadId: sourceSession.sessionId, excludeTurns: true } : { environments: [], dynamicTools: [], selectedCapabilityRoots: [] }),
         model,
         cwd: requestCwd,
         approvalPolicy: "never",
         sandbox: "danger-full-access",
-        ephemeral: !conversation,
-        developerInstructions: codexInput.systemPrompt,
+        ephemeral: false,
+        developerInstructions: developerInstructions,
       });
       threadId = threadResult?.thread?.id;
       if (!threadId) {
         throw new BridgeError("Codex could not start the response.", "turn_failed", 500);
       }
       if (signal?.aborted) throw abortError(signal);
-      const reference = conversation ? { version: 1, threadId, scopeId } : null;
-      if (conversation?.operation === "baseline") {
-        await this.request("thread/inject_items", {
-          threadId,
-          items: [{ type: "message", role: "user", content: codexInput.input.map((part) => part.type === "text"
-            ? { type: "input_text", text: part.text }
-            : { type: "input_image", image_url: part.url, detail: part.detail }) }],
-        });
-        if (signal?.aborted) throw abortError(signal);
-        return { text: "", conversation: reference, finishReason: "stop" };
-      }
+      const reference = { backend: "codex", sessionId: threadId, scopeId };
 
       let resolveTurn;
       let rejectTurn;
@@ -571,7 +553,7 @@ export class CodexAppServer {
       try {
         const response = await this.request("turn/start", {
           threadId,
-          input: codexInput.input,
+          input: input,
           cwd: requestCwd,
           environments: [],
           approvalPolicy: "never",
@@ -584,14 +566,14 @@ export class CodexAppServer {
           collaborationMode: this.executionMode({
             model,
             effort: reasoningEffort,
-            developerInstructions: codexInput.systemPrompt,
+            developerInstructions: developerInstructions,
           }),
         });
         turn.turnId = response?.turn?.id || turn.turnId;
         turn.resolveStarted?.();
         if (turn.aborted) void this.interrupt(turn);
         const result = await completion;
-        return { ...result, ...(reference ? { conversation: reference } : {}) };
+        return { ...result, session: reference };
       } finally {
         turn.resolveStarted?.();
         signal?.removeEventListener("abort", onAbort);
@@ -691,10 +673,10 @@ export class CodexBackend {
   // The route (server.js handleChat) validates model, image capability, and
   // reasoning effort against the live catalog it fetches from this backend
   // immediately before calling generate — no re-validation here.
-  async generate({ model, messages, reasoningEffort, signal, onDelta = () => {}, onSearch = () => {}, conversation = null }) {
+  async generate({ model, input, instructions, reasoningEffort, signal, onDelta = () => {}, onSearch = () => {}, sourceSession }) {
     if (signal?.aborted) throw abortError(signal);
     await this.appServer.ensureStarted();
-    return this.appServer.turn({ model, messages, reasoningEffort, signal, onDelta, onSearch, conversation });
+    return this.appServer.turn({ model, input, instructions, reasoningEffort, signal, onDelta, onSearch, sourceSession });
   }
 
   close() {

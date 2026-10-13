@@ -8,14 +8,11 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { ensureWebDist } from "../support/build.mjs";
 import { serveStatic } from "../support/static-server.mjs";
+import { MOCK_TOKEN, MOCK_MODEL, routeProvider, seedConfiguredBridge } from "../support/provider-mock.mjs";
 import { readAttentionPdf } from "../support/attention-pdf.mjs";
 
 const ROOT = path.resolve(new URL("../..", import.meta.url).pathname);
 const WEB_DIST = path.join(ROOT, "web/dist");
-const MOCK_KEY = `sk-or-v1-${"x".repeat(64)}`;
-const PROVIDER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const KEY_URL = "https://openrouter.ai/api/v1/key";
-
 try {
   await fs.access(path.join(WEB_DIST, "index.html"));
 } catch {
@@ -31,57 +28,22 @@ try {
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
   let authorCalls = 0;
-  await page.route(KEY_URL, async (route) => {
-    if (route.request().method() === "OPTIONS") {
-      await route.fulfill({ status: 204, headers: corsHeaders(), body: "" });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ data: { label: "test key" } }),
-    });
-  });
-  // Opening settings warms the OpenRouter model catalog; keep this test offline.
-  await page.route("https://openrouter.ai/api/v1/models", async (route) => {
-    await route.fulfill({
-      status: 200,
-      headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ data: [
-        { id: "anthropic/claude-sonnet-5", name: "Anthropic: Claude Sonnet 5", context_length: 1000000, pricing: { prompt: "0.000003", completion: "0.000015" } },
-      ] }),
-    });
-  });
-  await page.route(PROVIDER_URL, async (route) => {
-    if (route.request().method() === "OPTIONS") {
-      await route.fulfill({ status: 204, headers: corsHeaders(), body: "" });
-      return;
-    }
-    authorCalls += 1;
-    const body = JSON.parse(route.request().postData() || "{}");
-    assert.equal(body.model, "anthropic/claude-sonnet-5");
-    assert.match(JSON.stringify(body.messages), /Source content/);
-    await route.fulfill({
-      status: 200,
-      headers: {
-        ...corsHeaders(),
-        "Content-Type": "text/event-stream; charset=utf-8",
-      },
-      body: sse([
-        "# Authored Structure\n\n",
-        "This document was streamed through the model.\n\n",
-        "```js\nconsole.log('authored');\n```",
-      ]),
-    });
+  await seedConfiguredBridge(context);
+  await routeProvider(page, {
+    streams: [["# Authored Structure\n\n", "This document was streamed through the model.\n\n", "```js\nconsole.log('authored');\n```"]],
+    onProviderCall(body) {
+      authorCalls += 1;
+      assert.equal(body.model, MOCK_MODEL);
+      assert.equal(body.input.kind, "author");
+      assert.match(body.input.source.markdown, /raw notes about a streamed authoring pass/);
+    },
   });
 
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await assertShellPolish(page);
   await page.click("#t-settings");
   await page.click('[data-settings-section="model"]');
-  await page.fill("#api-key", MOCK_KEY);
-  await page.press("#api-key", "Enter");
-  await page.waitForSelector("#api-key-status.valid");
+  await page.waitForSelector("#bridge-model");
   await page.click("#complete-model-setup");
   await page.waitForSelector("#settings-sheet", { state: "detached" });
 
@@ -121,7 +83,7 @@ try {
   assert.equal(path.extname(shareExportPath), ".rabbithole");
 
   const exportText = await fs.readFile(shareExportPath, "utf8");
-  assert(!exportText.includes(MOCK_KEY), "share .rabbithole export must not contain provider key material");
+  assert(!exportText.includes(MOCK_TOKEN), "share .rabbithole export must not contain bridge pairing material");
   const exported = JSON.parse(exportText);
   assert.equal(exported.format, "rabbithole");
   assert.equal(exported.format_version, 1);
@@ -170,21 +132,10 @@ async function assertShellPolish(page) {
   assert.equal(await page.locator(".composer-path").count(), 4, "new Rabbithole should present four clear starting paths");
   await page.click("#t-settings");
   await page.click('[data-settings-section="model"]');
-  const keyLinkCount = await page.locator(`a[href="${"https://openrouter.ai/keys"}"]`).count();
-  assert.equal(keyLinkCount, 1, "OpenRouter key link should appear exactly once in settings");
-  assert.equal(await page.locator("#save-settings, #web-settings-close").count(), 0, "settings should apply live without save or close buttons");
-  assert.deepEqual(
-    await page.locator(".provider-row .provider-copy strong").allTextContents(),
-    ["OpenRouter", "Claude Code", "Codex", "Ollama", "Custom endpoint"],
-  );
-  assert.equal(await page.getAttribute('[data-provider="openrouter"]', "aria-checked"), "true");
-  await page.click('[data-provider="local"]');
-  assert.equal(await page.getAttribute('[data-provider="local"]', "aria-checked"), "true", "provider flow should switch through the shared provider list");
-  assert.equal(await page.locator("#provider-base").count(), 1);
-  await page.locator(".settings-advanced summary").click();
-  assert.equal(await page.locator("#provider-base").isVisible(), true, "Local should keep only its endpoint under Connection settings");
-  await page.click('[data-provider="openrouter"]');
-  assert.equal(await page.locator(".settings-advanced").count(), 0, "OpenRouter should not duplicate model choices or expose link-relay plumbing");
+  await page.waitForSelector("#bridge-model");
+  assert.equal(await page.locator("#bridge-model").count(), 1);
+  assert.equal(await page.locator(".reasoning-choice").count(), 1);
+  assert.match(await page.locator("#settings-panel").innerText(), /Backend\s+Codex/);
   await page.keyboard.press("Escape");
   await page.waitForSelector("#settings-sheet", { state: "detached" });
 }
@@ -224,18 +175,6 @@ function projectHole(hole) {
   };
 }
 
-function sse(chunks) {
-  return chunks.map((content) => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`).join("") + "data: [DONE]\n\n";
-}
-
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, content-type, accept, http-referer, x-title",
-  };
-}
-
 async function dropPdf(page, bytes) {
   await page.setInputFiles("#file-md", { name: "attention-is-all-you-need.pdf", mimeType: "application/pdf", buffer: Buffer.from(bytes) });
 }
@@ -265,7 +204,7 @@ async function verifyPublishOutput() {
   assert(chunks.some((name) => /^settings-runtime-[A-Z0-9]+\.js$/.test(name)), "model setup and recovery should remain outside the landing-page entry chunk");
   const html = await fs.readFile(path.join(publishDir, "index.html"), "utf8");
   assert(html.includes("Rabbithole — an infinite canvas for learning"));
-  assert(html.includes("connect-src 'self' blob: https: http: https://openrouter.ai https://api.github.com"), "web CSP should allow source-PDF blobs, any custom endpoint including one on the local network, and the public GitHub star-count request");
+  assert(html.includes("connect-src 'self' blob: https:"), "web CSP should allow source ingestion and loopback bridge requests");
   assert(/script-src 'self' 'sha256-[^']+'/.test(html), "a broad connect-src is only safe while script-src stays locked to this origin");
   assert(html.includes("http://localhost:*") && html.includes("http://127.0.0.1:*"), "local endpoints stay reachable over plain http");
   assert(!html.includes('<html lang="en" data-theme="light">'), "published HTML must not force a light frame before theme initialization");
@@ -292,13 +231,12 @@ async function verifyPublishOutput() {
   assert(llms.includes("https://rabbithole.ing/about/"), "agent-facing discovery should include the about page");
   assert(llms.includes("#run-the-browser-version-locally"), "agent-facing discovery should include local browser instructions");
   const about = await fs.readFile(path.join(publishDir, "about/index.html"), "utf8");
-  assert(about.includes("Open the browser app"), "about page should lead with the zero-install browser path");
-  assert(about.includes("Install the MCP server"), "about page should name the agent installation path explicitly");
-  assert(about.includes("Run the browser app locally"), "about page should expose self-hosting instructions");
+  assert(about.includes("Open the browser canvas"), "about page should lead with the zero-install browser path");
+  assert(about.includes("Codex bridge"), "about page should describe local Codex setup");
   assert(about.includes("Star on GitHub"), "about page should carry a clear GitHub star action");
   assert(about.includes("data-github-stars"), "about page should show live repository stars in its GitHub actions");
   assert(about.includes("connect-src https://api.github.com"), "about CSP should allow the public GitHub star-count request");
-  assert(about.includes("OpenRouter requests go directly to OpenRouter"), "about copy should state the hosted-provider boundary accurately");
+  assert(about.includes("Generation uses your local Codex provider configuration"), "about copy should state the hosted-provider boundary accurately");
   assert(!about.includes("No account, no API keys, nothing leaves your machine"), "about page must not restore the obsolete privacy claim");
   const aboutVersions = [...about.matchAll(/(?:styles\.css|about\.js|demo-(?:ask|map)(?:-poster\.jpg|\.mp4))\?v=([a-f0-9]{12})/g)].map((match) => match[1]);
   assert.equal(aboutVersions.length, 6, "every mutable about-page asset should carry a content-derived version");

@@ -11,10 +11,10 @@ Use the narrowest tier that can observe a behavior:
 1. Unit tests protect pure transformations and tightly scoped interface logic.
 2. Contract tests protect persisted formats, protocols, trust boundaries, bundle graphs, and storage behavior.
 3. Integration tests protect a capability spanning the shared kernel and a host.
-4. End-to-end tests protect browser journeys, input ownership, accessibility, and cross-host movement.
+4. End-to-end tests protect browser journeys, input ownership, accessibility, and document portability.
 5. Performance tests protect reviewed size and timing ceilings.
 6. Packaging tests protect clean installation and startup behavior.
-7. Isolation-live tests protect Claude and Codex capability isolation against locally installed agent binaries. They are opt-in acceptance checks, never part of `npm test`.
+7. Isolation-live tests protect Codex capability isolation against locally installed agent binaries. They are opt-in acceptance checks, never part of `npm test`.
 
 Browser tests should prefer accessible roles, focus, keyboard operation, persisted outcomes, network scope, and exported artifacts over private DOM structure. Format tests should prove both acceptance of supported data and clear refusal of unsupported data.
 

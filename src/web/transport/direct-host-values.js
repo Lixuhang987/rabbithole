@@ -1,14 +1,26 @@
-import { normalizeCodexConversation } from "../../core/conversation.js";
+import { normalizeBackendConversation } from "../../core/conversation.js";
 import { projectNode } from "../../core/hole/node.js";
 import { Run } from "../../core/hole/run.js";
 import { randomId } from "../../core/utils.js";
 import { truncate } from "../../core/hole/lens.js";
+import { ProviderError } from "../provider/errors.js";
+import { pdfArticleNeedsConversion } from "../../core/pdf-shared.js";
 
 export const WEB_ROOT_QUESTION = "web_root_question";
 
 /** @param {import("../../core/contracts/engine.js").HoleNode | undefined} node */
 export function rawPdfExtension(node) {
   return /** @type {Record<string, any> | null} */ (node?.source || node?.extensions?.pdf || null);
+}
+
+/** @param {import("../../core/contracts/engine.js").HoleNode | undefined} node */
+export function requireReadableArticle(node) {
+  const pdf = rawPdfExtension(node);
+  if (pdfArticleNeedsConversion(node)) {
+    throw new ProviderError(pdf.converting
+      ? "This PDF is being converted. Wait for conversion to finish before asking."
+      : "Create a text version of this PDF before asking.", { code: "article_unavailable", retryable: false });
+  }
 }
 
 /** @param {import("../../core/contracts/engine.js").HoleNode | undefined} node */
@@ -30,7 +42,7 @@ export async function* generationDocEvents(generation, run, { nodeId, progressFi
   let conversation = null;
   for await (const event of generation) {
     if (event.type === "conversation") {
-      conversation = normalizeCodexConversation(event.conversation);
+      conversation = normalizeBackendConversation(event.conversation);
       if (!conversation || event.nodeId !== nodeId) throw new Error("Invalid conversation completion.");
       continue;
     }
@@ -45,7 +57,7 @@ export async function* generationDocEvents(generation, run, { nodeId, progressFi
   const fields = typeof answeredFields === "function" ? answeredFields() : answeredFields;
   const context = { nodeId, answeredFields: fields };
   const answered = complete ? complete(run, context) : run.complete(context);
-  yield { ...answered, ...(conversation ? { codex_conversation: conversation } : {}) };
+  yield { ...answered, ...(conversation ? { backend_conversation: conversation } : {}) };
 }
 
 export function rootAnsweredFields(node) {
@@ -66,7 +78,7 @@ export function titleFromMarkdown(markdown) {
   return match ? truncate(match[1].trim(), 80) : "";
 }
 export function isAuthError(error) {
-  return error?.status === 401 || error?.status === 403 || error?.code === "401" || error?.code === "403" || error?.code === "missing_key";
+  return error?.status === 401 || error?.status === 403 || error?.code === "401" || error?.code === "403" || error?.code === "unauthorized";
 }
 export function resetMarkdownForRun(node) { return node?.markdown && node.status === "pending" ? String(node.markdown) : ""; }
 export function rootQuestionForNode(node) { return String(node?.origin?.[WEB_ROOT_QUESTION] || "").trim(); }

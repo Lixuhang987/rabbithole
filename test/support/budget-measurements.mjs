@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 import { ensureWebDist } from "./build.mjs";
-import { routeProvider, seedConfiguredOpenRouter } from "./provider-mock.mjs";
+import { routeProvider, seedConfiguredBridge } from "./provider-mock.mjs";
 import { serveStatic } from "./static-server.mjs";
 import { collectSubtreeIds } from "../../src/core/hole/tree.js";
 import { createHoleState, reduceHoleEvent } from "../../src/core/hole/reduce.js";
@@ -216,9 +216,9 @@ async function measureColdOpen(browser, baseUrl) {
 
 async function measureStreamAndSave(browser, baseUrl) {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
-  await routeProvider(page, { streams: [STREAM_CHUNKS], keyLabel: "budget" });
+  await routeProvider(page, { streams: [STREAM_CHUNKS] });
   try {
     await page.goto(`${baseUrl}/?stream-budget=${Date.now()}`, { waitUntil: "networkidle" });
     await page.click("#blank-start-new");

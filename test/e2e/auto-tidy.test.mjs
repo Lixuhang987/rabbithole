@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { routeProvider, seedConfiguredOpenRouter } from "../support/provider-mock.mjs";
+import { routeProvider, seedConfiguredBridge } from "../support/provider-mock.mjs";
 import { bootWebApp } from "../support/web-app-harness.mjs";
 import { assertSelectionPopoverUsable, selectVisibleText } from "../support/visible-selection.mjs";
 
@@ -12,7 +12,7 @@ const longScrollAnswer = Array.from({ length: 90 }, (_, index) => "Paragraph " +
 
 try {
   const context = await app.browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   await context.addInitScript(() => {
     localStorage.setItem("rh-auto-tidy", "on");
     localStorage.setItem("rh-auto-tidy-grace", "5");
@@ -210,7 +210,6 @@ try {
 
   assert(betaId, "the fixture retains the warm branch identity");
   await verifyEnableMidSession(app);
-  await verifyFreshAnswerInvalidation(app);
 } finally {
   await app.close();
 }
@@ -261,7 +260,7 @@ async function setComposerDraft(card, value) {
 async function verifyEnableMidSession(app) {
   const context = await app.browser.newContext();
   try {
-    await seedConfiguredOpenRouter(context);
+    await seedConfiguredBridge(context);
     await context.addInitScript(installAutoTidyClock);
     await context.addInitScript(() => {
       localStorage.setItem("rh-auto-tidy-grace", "5");
@@ -324,92 +323,6 @@ async function waitForStoredStatus(page, id, status) {
     const hole = await window.__rabbitholeTest.readStoredHole();
     return hole.nodes.find((node) => node.id === expected.id)?.status === expected.status;
   }, { id: id, status: status });
-}
-
-async function verifyFreshAnswerInvalidation(app) {
-  const previousDir = process.env.RABBITHOLE_DIR;
-  const previousNoBrowser = process.env.RABBITHOLE_NO_BROWSER;
-  const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-auto-tidy-e2e-"));
-  process.env.RABBITHOLE_DIR = storeDir;
-  process.env.RABBITHOLE_NO_BROWSER = "1";
-  let session = null;
-  let context = null;
-  try {
-    const [{ createSession }, { buildCanvasHtml }, { mergePreferences }] = await Promise.all([
-      import("../../src/node/sessions.js"),
-      import("../../src/node/html/canvas.js"),
-      import("../../src/node/mcp/store/prefs-store.js"),
-    ]);
-    await mergePreferences({ "rh-auto-tidy": "on", "rh-auto-tidy-grace": "5" });
-    const seen = { attention: { seen_at: 100 } };
-    session = await createSession({
-      holeId: "auto-tidy-new-answer",
-      title: "Auto-tidy new answer",
-      rootId: "root",
-      viewState: { mode: "canvas", node_id: "b", scroll: 0 },
-      isResume: true,
-      nodes: [
-        {
-          id: "root", parent_id: null, title: "Root", markdown: "Root answer", origin: null,
-          position: { x: 0, y: 0 }, size: { w: 420, h: 460 }, status: "answered", extensions: seen,
-        },
-        {
-          id: "a", parent_id: "root", title: "Branch A", markdown: "Previously read answer",
-          origin: { question: "A?" }, position: { x: 520, y: 0 }, size: { w: 420, h: 460 },
-          status: "answered", extensions: seen,
-        },
-        {
-          id: "b", parent_id: "root", title: "Branch B", markdown: "Current work",
-          origin: { question: "B?" }, position: { x: 520, y: 560 }, size: { w: 420, h: 460 },
-          status: "answered", extensions: seen,
-        },
-      ],
-      assetNames: new Set(),
-      renderPage: (hydration) => buildCanvasHtml(hydration),
-    });
-    context = await app.browser.newContext();
-    await context.addInitScript(installAutoTidyClock);
-    const page = await context.newPage();
-    await page.goto(session.url, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector('.card[data-id="a"]');
-    const freshAnswer = {
-      type: "node_answered",
-      node_id: "a",
-      parent_id: "root",
-      title: "Branch A refreshed",
-      markdown: "New content must be read again.",
-      origin: { question: "A?" },
-    };
-    session.dispatchHoleEvent(freshAnswer);
-    session.broadcast(freshAnswer);
-    await page.locator('.card[data-id="a"]', { hasText: "New content must be read again." }).waitFor();
-    assert.equal(session.nodes.get("a").extensions.attention, undefined, "node_answered clears the server-side seen ledger");
-    await advanceAutoTidyClock(page, 11_000);
-    assert.equal(
-      await page.locator('.card[data-id="a"]').evaluate((card) => card.classList.contains("collapsed")),
-      false,
-      "a new answer protects a previously seen branch until it is engaged again",
-    );
-    const attentionWritten = page.waitForResponse((response) => {
-      if (!response.url().endsWith("/events") || response.request().method() !== "POST") return false;
-      const payload = response.request().postDataJSON();
-      return payload?.type === "node_extensions_patch" && payload.node_id === "a" && payload.namespace === "attention";
-    });
-    await page.locator('.card[data-id="a"] .card-title').click();
-    await attentionWritten;
-    assert.equal(!!session.nodes.get("a").extensions.attention?.seen_at, true, "re-engagement writes a fresh seen ledger entry");
-    await page.locator('.card[data-id="b"] .card-title').click();
-    await advanceAutoTidyClock(page, 10_000);
-    await page.waitForSelector('.card[data-id="a"].collapsed');
-  } finally {
-    if (context) await context.close();
-    if (session) await session.close("auto_tidy_test_complete");
-    if (previousDir === undefined) delete process.env.RABBITHOLE_DIR;
-    else process.env.RABBITHOLE_DIR = previousDir;
-    if (previousNoBrowser === undefined) delete process.env.RABBITHOLE_NO_BROWSER;
-    else process.env.RABBITHOLE_NO_BROWSER = previousNoBrowser;
-    await fs.rm(storeDir, { recursive: true, force: true });
-  }
 }
 
 async function advanceAutoTidyClock(page, ms) {

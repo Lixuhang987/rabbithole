@@ -4,7 +4,6 @@ import { collectRelevantNotes } from "../../src/core/hole/ask.js";
 import { makeNode } from "../../src/core/hole/node.js";
 import { DEFAULT_REACTION_PROMPTS } from "../../src/core/hole/reaction.js";
 import { createPortableProjection } from "../../src/core/portable-projection.js";
-import { buildAnswerMessages } from "../../src/core/prompts/answering-v1.js";
 import { parsePersistedHole, toPersistedHole } from "../../src/core/schema.js";
 import { createSnapshotProjection } from "../../src/core/snapshot-projection.js";
 
@@ -48,20 +47,6 @@ assert.deepEqual(notes, [{
   content: "Keep the crisp example and concrete opening.",
   created_at: "2026-08-31T00:00:00.000Z",
 }], "agent context collects a reaction through the unchanged note path");
-const prompt = buildAnswerMessages({
-  root_title: "Root",
-  parent_id: "root",
-  parent_title: "Root",
-  parent_markdown: root.markdown,
-  ancestors: [],
-  selected_text: "another passage",
-  question: "What now?",
-  notes,
-})[1].content;
-assert.equal(prompt.split("\n").find((line) => line.startsWith("- Human:")),
-  '- Human: Anchored to "marked passage": Keep the crisp example and concrete opening.',
-  "the shared note projection substitutes the configured instruction before prompt assembly");
-
 const legacyReaction = makeNode({
   ...reaction,
   id: "legacy-reaction",

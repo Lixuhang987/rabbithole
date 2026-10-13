@@ -1,13 +1,10 @@
 export const DEFAULT_FETCH_PROXY_URL = "https://rabbithole-fetch-proxy.khemanishlok.workers.dev";
 
-// Browser egress is intentionally broad because a custom provider can live at
-// any user-owned HTTP(S) origin. Script execution remains self-only in CSP.
+// HTTPS supports article ingestion; loopback HTTP supports the paired bridge.
 export const WEB_CONNECT_SOURCES = Object.freeze([
   "'self'",
   "blob:",
   "https:",
-  "http:",
-  "https://openrouter.ai",
   "https://api.github.com",
   "https://arxiv.org",
   "https://www.arxiv.org",

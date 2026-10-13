@@ -54,24 +54,24 @@
 
       <section id="ways" class="section ways">
         <div class="section-heading">
-          <p class="eyebrow">Two ways in</p>
-          <h2>use the AI you choose</h2>
-          <p>Open the hosted app immediately, or connect Rabbithole to the terminal agent already doing your work.</p>
+          <p class="eyebrow">Native Codex</p>
+          <h2>learn with your local Codex</h2>
+          <p>Open the browser canvas and connect it to Codex on your computer.</p>
         </div>
         <div class="path-grid">
           <article class="path-card featured">
-            <div class="path-top"><span class="path-number">01</span><span class="pill">no install</span></div>
+            <div class="path-top"><span class="path-number">01</span><span class="pill">browser canvas</span></div>
             <h3>Use it in your browser</h3>
-            <p>Already pay for Claude or ChatGPT? Run <code>npx @shlokkhemani/rabbithole bridge</code> and click the link it prints — answers come from Claude Code or Codex on your machine, on your plan. Or bring an OpenRouter key, or point Rabbithole at an OpenAI-compatible local model such as Ollama. Your holes and settings stay in this browser.</p>
-            <p class="path-note">Bridge requests stay on your machine. OpenRouter requests go directly to OpenRouter. Local-model requests go only to the endpoint you configure.</p>
+            <p>Run <code>npx @shlokkhemani/rabbithole bridge</code> and open its private pairing link. Choose a Codex model and reasoning, then ask from a question or document. Your documents stay in this browser.</p>
+            <p class="path-note">Generation uses your local Codex provider configuration.</p>
             <a class="text-link" href="/">Open Rabbithole <span aria-hidden="true">→</span></a>
           </article>
           <article class="path-card">
-            <div class="path-top"><span class="path-number">02</span><span class="pill">Claude · Codex · MCP</span></div>
-            <h3>Connect your AI agent</h3>
-            <p>Install the MCP server and let your existing agent answer. Rabbithole supplies the local canvas, branching documents, and durable storage.</p>
-            <p class="path-note">The server and canvas run on your machine. Documents and questions go only to the agent you already use.</p>
-            <a class="text-link" href="#install">See the one-line install <span aria-hidden="true">↓</span></a>
+            <div class="path-top"><span class="path-number">02</span><span class="pill">native sessions</span></div>
+            <h3>Follow independent branches</h3>
+            <p>Each answer owns a native session. Ask on a generated article to fork its history; ask on an imported article to start independently.</p>
+            <p class="path-note">Claude Code and OpenCode support are planned.</p>
+            <a class="text-link" href="#install">Connect the bridge <span aria-hidden="true">↓</span></a>
           </article>
         </div>
       </section>
@@ -95,23 +95,18 @@
 
       <section id="install" class="section install">
         <div class="section-heading">
-          <p class="eyebrow">Agent install</p>
+          <p class="eyebrow">Local bridge</p>
           <h2>connect in about a minute</h2>
-          <p>Requires Node 18+ and a browser. No clone or build is needed for the MCP server.</p>
+          <p>Requires Node 18+, a browser and an installed Codex CLI.</p>
         </div>
         <div class="command-grid">
           <article class="command-card">
-            <div class="command-head"><strong>Claude Code</strong><span>one line</span></div>
-            <div class="code-row"><code id="claude-command">claude mcp add rabbithole -- npx -y github:shlokkhemani/rabbithole</code><button type="button" data-copy-target="claude-command">Copy</button></div>
-          </article>
-          <article class="command-card">
-            <div class="command-head"><strong>Codex</strong><span>one line + timeout</span></div>
-            <div class="code-row"><code id="codex-command">codex mcp add rabbithole -- npx -y github:shlokkhemani/rabbithole</code><button type="button" data-copy-target="codex-command">Copy</button></div>
+            <div class="command-head"><strong>Codex bridge</strong><span>one line</span></div>
+            <div class="code-row"><code id="bridge-command">npx @shlokkhemani/rabbithole bridge</code><button type="button" data-copy-target="bridge-command">Copy</button></div>
           </article>
         </div>
         <div class="install-links">
-          <a href="https://github.com/shlokkhemani/rabbithole#quick-start" target="_blank" rel="noopener noreferrer"><strong>Full MCP instructions</strong><span>Configuration, timeouts, other MCP clients ↗</span></a>
-          <a href="https://github.com/shlokkhemani/rabbithole#run-the-browser-version-locally" target="_blank" rel="noopener noreferrer"><strong>Run the browser app locally</strong><span>Clone, build, self-host, and optional proxy ↗</span></a>
+          <a href="https://github.com/shlokkhemani/rabbithole#quick-start" target="_blank" rel="noopener noreferrer"><strong>Setup instructions</strong><span>Pairing and local configuration ↗</span></a>
         </div>
       </section>
     </main>

@@ -8,6 +8,7 @@ import {
   placeChild as sharedPlaceChild,
   subtreeBounds as sharedSubtreeBounds,
 } from "../core/layout.js";
+import { pdfArticleNeedsConversion } from "../core/pdf-shared.js";
 import { presetFor, refreshAskPresetActions, renderAskPresetActions } from "./ask-presets.js";
 import { createComposerAttachments, noteWithImages } from "./authoring/composer-attachments.js";
 import {
@@ -504,6 +505,7 @@ export function updateSelectionComposerState() {
       phase: sessionPhase(),
       pending: parentPending,
       unavailable: !parent || !!parent.source?.converting,
+      askUnavailable: pdfArticleNeedsConversion(parent),
       disabled: selectionAttachments?.busy,
     },
     {
@@ -552,7 +554,7 @@ function submitAsk(lensKey, source, attachmentNames = []) {
     hideAsk();
     return;
   }
-  if (parent.status === "pending" || parent.source?.converting) return;
+  if (parent.status === "pending" || pdfArticleNeedsConversion(parent)) return;
   const preset = lensKey ? presetFor("selection", lensKey) : null;
   const lens = preset ? lensKey : null;
   const question = askText.value.trim();
@@ -742,6 +744,7 @@ export function updateComposerState() {
       phase: sessionPhase(),
       pending: !!current && current.status === "pending",
       unavailable: !current || !!current.source?.converting,
+      askUnavailable: pdfArticleNeedsConversion(current),
       disabled: readerAttachments?.busy,
     },
     {
@@ -764,7 +767,10 @@ function autoGrowComposer() {
 // Shared follow-up submission: from the reader composer or a card's docked
 // one. Every direct child uses the same Reader branch rail.
 export function sendFollowup(parent, question, lens, instruction = null, attachmentNames = []) {
-  if (parent?.source?.converting) return null;
+  if (pdfArticleNeedsConversion(parent)) {
+    flashHint("Create a text version of this PDF before asking.");
+    return null;
+  }
   const requestId = uuid(),
     childId = uuid();
   const pos = placeChild(parent, BRANCH_FOLLOWUP);
@@ -890,7 +896,12 @@ function readerComposerParent(needsSettled) {
     return null;
   }
   const parent = nodes[currentNodeId];
-  if (!parent || parent.source?.converting || (needsSettled && parent.status === "pending")) return null;
+  if (
+    !parent ||
+    parent.source?.converting ||
+    (needsSettled && (parent.status === "pending" || pdfArticleNeedsConversion(parent)))
+  )
+    return null;
   return parent;
 }
 function submitReaderFollowup(commit, source) {

@@ -5,7 +5,7 @@
  *
  * @param {{
  *   loadSettings: () => any,
- *   isSubscription: (settings: any) => boolean,
+ *   isConfigured: (settings: any) => boolean,
  *   consumeEvents: (baseUrl: string, token: string, options: any) => Promise<{reason?: string}>,
  *   ping: (baseUrl: string) => Promise<boolean>,
  *   nextDelay: (delay: number) => number,
@@ -155,7 +155,7 @@ export function createBridgeConnection(options) {
     if (stream || streamKey !== connectionKey) return;
     const settings = options.loadSettings();
     const token = String(settings.token || "").trim();
-    if (!options.isSubscription(settings) || `${settings.base_url}\n${token}` !== connectionKey) {
+    if (!options.isConfigured(settings) || `${settings.base_url}\n${token}` !== connectionKey) {
       stopStream();
       return;
     }
@@ -182,7 +182,7 @@ export function createBridgeConnection(options) {
 
   function start() {
     const settings = options.loadSettings();
-    if (!options.isSubscription(settings)) {
+    if (!options.isConfigured(settings)) {
       stopStream();
       return;
     }

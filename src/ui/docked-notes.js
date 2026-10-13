@@ -55,7 +55,7 @@ import { mountPdfRectMark, syncTextOverlayMarks, wrapInContainer } from "./text-
  * the wash on the words it marks plus a graphite dot in the card's own right
  * padding, and it reads and edits inside one anchored dialog. "Place on canvas"
  * clears the flag and hands the same node a position — same id, same lineage,
- * same MCP payload; only its shape on the page ever changed.
+ * same persisted document; only its shape on the page ever changed.
  *
  * The grammar is the product's existing one: single click reads, double click
  * edits — on the wash, on the dot, or on the note's own text in the popover.

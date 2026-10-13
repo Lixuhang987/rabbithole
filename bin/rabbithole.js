@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 function usage() {
-  process.stderr.write("Usage: rabbithole <bridge [--port N] [--new-token] [--no-open] | mcp>\n");
+  process.stderr.write("Usage: rabbithole <bridge [--port N] [--new-token] [--no-open]>\n");
 }
 
 function parseBridgeArgs(args) {
@@ -28,17 +28,13 @@ function parseBridgeArgs(args) {
 }
 
 const [command, ...args] = process.argv.slice(2);
-if (!command) {
-  await import("../src/node/mcp/server.js");
-} else if (command === "mcp" && args.length === 0) {
-  await import("../src/node/mcp/server.js");
-} else if (command === "bridge") {
+if (command === "bridge" || !command) {
   const options = parseBridgeArgs(args);
   if (!options) {
     usage();
     process.exitCode = 1;
   } else {
-    const { runBridge } = await import("../src/node/bridge/index.js");
+    const { runBridge } = await import("../src/node/bridge/main.js");
     await runBridge(options).catch((error) => {
       process.stderr.write(`rabbithole bridge: ${error.message}\n`);
       process.exitCode = 1;

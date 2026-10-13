@@ -167,26 +167,14 @@ function headersText() {
 }
 
 function llmsText() {
-  return [
-    "# Rabbithole",
-    "",
-    "Rabbithole is an infinite canvas for learning. Humans can use the hosted browser app or connect Rabbithole to an MCP-compatible AI agent.",
-    "",
-    "Agents install and open Rabbithole through the local MCP server:",
-    "",
-    "```bash",
-    "claude mcp add rabbithole -- npx -y github:shlokkhemani/rabbithole",
-    "```",
-    "",
-    "- Human path: https://rabbithole.ing/",
-    "- About and demos: https://rabbithole.ing/about/",
-    "- Browser models: use OpenRouter or an OpenAI-compatible local endpoint such as Ollama.",
-    "- Agent path: use the MCP command above from Claude Code or an MCP-compatible coding agent.",
-    "- MCP install: https://github.com/shlokkhemani/rabbithole#quick-start",
-    "- Run the browser app locally: https://github.com/shlokkhemani/rabbithole#run-the-browser-version-locally",
-    "- Source: https://github.com/shlokkhemani/rabbithole",
-    "",
-  ].join("\n");
+  return ["# Rabbithole", "", "A browser canvas for learning with a paired local Codex bridge.", "",
+    "Run: npx @shlokkhemani/rabbithole bridge", "Open its private pairing link, choose a model and reasoning, and keep the bridge running.",
+    "Generated article Asks fork native sessions; imported article Asks create independently.",
+    "Documents live in the browser. Native history stays with Codex. Portable exports omit local history references.",
+    "Claude Code and OpenCode execution are TODOs.", "", "- App: https://rabbithole.ing/",
+    "- About: https://rabbithole.ing/about/",
+    "- Source and setup: https://github.com/shlokkhemani/rabbithole",
+    "- Local browser: https://github.com/shlokkhemani/rabbithole#run-the-browser-version-locally", ""].join("\n");
 }
 
 function sitemapText() {

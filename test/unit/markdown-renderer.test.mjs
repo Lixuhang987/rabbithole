@@ -5,9 +5,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { renderMarkdownToHtml } from "../../src/core/markdown.js";
-import { buildCanvasHtml } from "../../src/node/html/canvas.js";
-import { getUiAssets } from "../../src/node/html/built-assets.js";
-import { createSession, closeAllSessions } from "../../src/node/sessions.js";
+import { snapshotFixture } from "../support/snapshot-fixture.mjs";
+import { getUiAssets } from "../../src/node/shared/dist-assets.js";
 
 process.env.RABBITHOLE_NO_BROWSER = "1";
 process.env.RABBITHOLE_DIR = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-markdown-renderer-"));
@@ -229,40 +228,17 @@ async function assertPageAssembly() {
     created_at: new Date().toISOString(),
   };
 
-  const session = await createSession({
-    holeId: "markdown-renderer-test",
-    title: "Markdown Renderer Test",
-    rootId: "root",
-    nodes: [rootNode],
-    isResume: false,
-    renderPage: (hydration) => buildCanvasHtml(hydration),
-  });
-
-  try {
-    const live = await fetch(session.url);
-    assert.equal(live.status, 200);
-    const liveHtml = await live.text();
-    const exported = await fetch(`${session.url}/export`);
-    assert.equal(exported.status, 200);
-    const exportHtml = await exported.text();
-
-    for (const [label, html] of [
-      ["live", liveHtml],
-      ["export", exportHtml],
-    ]) {
-      assert.equal(count(html, KATEX_CSS_SENTINEL), 1, `${label} should include KaTeX CSS once`);
-      assert.equal(count(html, CODE_COPY_CSS_SENTINEL), 1, `${label} should include code-copy CSS once`);
-      assert(html.includes(CODE_COPY_MARKUP_SENTINEL), `${label} should bundle the code-copy control`);
-      assert.equal(count(html, "data:font/woff2;base64,"), 20, `${label} should inline KaTeX woff2 fonts`);
-      assert(!/fonts\/KaTeX_[^)]+\.(?:woff|ttf)/.test(html), `${label} should not reference external KaTeX fonts`);
-      assert(html.includes("Root with $x^2$."), `${label} should carry markdown in hydration`);
-      assert(!html.includes('"contentHtml"'), `${label} hydration should not carry server-rendered HTML`);
-      assert(html.includes("rabbithole-shared-markdown-renderer-v1"), `${label} should bundle the shared renderer`);
-    }
-    assert(liveHtml.includes("new EventSource"), "live page should keep the live SSE transport");
-    assert(!exportHtml.includes("new EventSource"), "frozen export should not include the live SSE transport");
-    assert(!exportHtml.includes("/sse"), "frozen export should not include the live SSE route");
-
+  const exportHtml = await snapshotFixture({ title: "Markdown Renderer Test", root_id: "root", nodes: [rootNode] });
+  const label = "snapshot";
+  const html = exportHtml;
+  assert.equal(count(html, KATEX_CSS_SENTINEL), 1);
+  assert.equal(count(html, CODE_COPY_CSS_SENTINEL), 1);
+  assert(html.includes(CODE_COPY_MARKUP_SENTINEL));
+  assert.equal(count(html, "data:font/woff2;base64,"), 20);
+  assert(!/fonts\/KaTeX_[^)]+\.(?:woff|ttf)/.test(html));
+  assert(html.includes("Root with $x^2$."));
+  assert(html.includes("rabbithole-shared-markdown-renderer-v1"));
+  const liveHtml = html;
     const scriptMatch = liveHtml.match(/<script>\n([\s\S]*)\n<\/script>/);
     assert(scriptMatch, "assembled HTML should contain one inline script");
     const scriptPath = path.join(process.env.RABBITHOLE_DIR, "assembled-client.js");
@@ -273,9 +249,7 @@ async function assertPageAssembly() {
     const stylesheetBytes = Buffer.byteLength((await getUiAssets()).stylesheetText, "utf8");
     const pageBytes = Buffer.byteLength(liveHtml, "utf8");
     console.log(`ok page assembly: UI stylesheet ${stylesheetBytes} bytes, live page ${pageBytes} bytes`);
-  } finally {
-    await closeAllSessions("markdown_renderer_test_complete");
-  }
+
 }
 
 await runMarkdownFixtures();

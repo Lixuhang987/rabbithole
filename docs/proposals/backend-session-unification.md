@@ -84,4 +84,4 @@ Use one frontend request contract and one local bridge for all generation. Imple
 
 ## Further Notes
 
-All product decisions in this spec were confirmed in the conversation. This is the intended replacement design; implementation has not started. It replaces the previous Codex-only opt-in design's baseline and compatibility behavior. Its main causal constraint is native history ownership: a unified frontend format cannot make history portable across backends, so unavailable history is an explicit boundary rather than a fallback.
+All product decisions in this spec were confirmed in the conversation. Implementation and verification are tracked in [the local execution plan](../plans/backend-session-unification.md). It replaces the previous Codex-only opt-in design's baseline and compatibility behavior. Its main causal constraint is native history ownership: a unified frontend format cannot make history portable across backends, so unavailable history is an explicit boundary rather than a fallback.

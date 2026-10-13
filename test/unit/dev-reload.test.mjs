@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createModuleTreeLoader, createSourceReader, devEnabled } from "../../src/node/html/dev-reload.js";
+import { createSourceReader, devEnabled } from "../../src/node/shared/source-reader.js";
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "rabbithole-dev-reload-"));
 const filePath = path.join(workspace, "client.js");
@@ -44,27 +44,5 @@ const readMissing = createSourceReader(path.join(workspace, "absent.js"));
 assert.throws(readMissing, /ENOENT/, "a file that was never read has no last good value");
 console.log("ok dev reload: mid-rebuild reads keep the last good bytes");
 
-// A cache-busting query on the entry alone would leave its dependency cached,
-// so the loader must reflect an edit made to a module the entry imports.
-const treeDir = path.join(workspace, "tree");
-const stageDir = path.join(workspace, "stage");
-fs.mkdirSync(path.join(treeDir, "nested"), { recursive: true });
-write(path.join(treeDir, "nested", "dep.js"), 'export const DEP = "one";\n', 0);
-write(path.join(treeDir, "entry.js"), 'import { DEP } from "./nested/dep.js";\nexport const VALUE = `entry:${DEP}`;\n', 0);
-const loadTree = createModuleTreeLoader({ dir: treeDir, workDir: stageDir, entries: { entry: "entry.js" } });
-
-assert.equal((await loadTree()).entry.VALUE, "entry:one");
-write(path.join(treeDir, "nested", "dep.js"), 'export const DEP = "two";\n', 10);
-assert.equal((await loadTree()).entry.VALUE, "entry:two", "editing a dependency must bust the whole graph");
-console.log("ok dev reload: a dependency edit reloads the whole module graph");
-
-// A half-written source file must not take the page down.
-write(path.join(treeDir, "nested", "dep.js"), "export const DEP = ;\n", 20);
-assert.equal((await loadTree()).entry.VALUE, "entry:two", "a broken tree must fall back to the last good graph");
-write(path.join(treeDir, "nested", "dep.js"), 'export const DEP = "three";\n', 30);
-assert.equal((await loadTree()).entry.VALUE, "entry:three", "the loader must recover after the source parses again");
-console.log("ok dev reload: a broken source keeps the last good module graph");
-
 delete process.env.RABBITHOLE_DEV;
 fs.rmSync(workspace, { recursive: true, force: true });
-console.log("dev reload verification passed");

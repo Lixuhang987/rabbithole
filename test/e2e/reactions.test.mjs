@@ -1,6 +1,6 @@
 /** @protects selection reaction composition, wash-only rendering, deletion, and frozen behavior. */
 import assert from "node:assert/strict";
-import { routeProvider, seedConfiguredOpenRouter } from "../support/provider-mock.mjs";
+import { routeProvider, seedConfiguredBridge } from "../support/provider-mock.mjs";
 import { bootWebApp } from "../support/web-app-harness.mjs";
 
 const app = await bootWebApp();
@@ -8,7 +8,7 @@ const { browser, baseUrl } = app;
 
 try {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   const providerBodies = [];
   await routeProvider(page, {
@@ -152,12 +152,11 @@ try {
   await page.waitForFunction(() => Array.from(document.querySelectorAll(".card .doc-content"))
     .some((node) => node.textContent.includes("Digit four used the configured custom question.")));
   assert.equal(providerBodies.length, 1, "digit 4 submits the positional fourth preset once");
-  const modelContext = providerBodies[0].messages.find((message) => message.role === "user").content;
-  assert.match(modelContext,
-    /- Human: Anchored to "exact marked passage": Keep the exact concrete shape that worked here\./,
-    "the configured reaction instruction reaches the browser provider's model-context projection");
-  assert.doesNotMatch(modelContext, /Anchored to "exact marked passage": 👍/,
-    "the context substitution does not require changing the stored glyph markdown");
+  const input = providerBodies[0].input;
+  assert.equal(input.kind, "ask");
+  assert.equal(input.instruction, "Challenge this claim from another angle.");
+  assert.equal(input.selected_text, "distant paragraph");
+  assert.match(input.article.markdown, /exact marked passage/);
   assert.deepEqual(await page.evaluate(async () => {
     const node = (await window.__rabbitholeTest.readStoredHole()).nodes.find((entry) => entry.origin?.lens === "custom");
     return node ? { lens: node.origin.lens, instruction: node.origin.instruction } : null;

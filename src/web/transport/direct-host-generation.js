@@ -1,10 +1,8 @@
-import { CODEX_CONVERSATION, normalizeCodexConversation } from "../../core/conversation.js";
-import { prepareNodeConversation } from "./direct-host-conversations.js";
+import { BACKEND_CONVERSATION, normalizeBackendConversation } from "../../core/conversation.js";
 import { MAX_ASK_ATTACHMENTS } from "../../core/attachments.js";
 import { validateImageAssetName } from "../../core/assets.js";
-import { collectRelevantNotes, isNoteNode } from "../../core/hole/ask.js";
+import { isNoteNode } from "../../core/hole/ask.js";
 import { Run } from "../../core/hole/run.js";
-import { lineageNodesFromMap } from "../../core/hole/tree.js";
 import { holeStateToHole } from "../../core/hole/reduce.js";
 import { buildNodeAnsweredEvent } from "../../core/hole-host.js";
 import { normalizePdfExtension } from "../../core/pdf-shared.js";
@@ -18,6 +16,7 @@ import {
   generationDocEvents,
   isAuthError,
   rawOrigin,
+  requireReadableArticle,
   resetMarkdownForRun,
   rootAnsweredFields,
   rootQuestionForNode,
@@ -116,9 +115,9 @@ export class DirectHostGeneration extends DirectHostPdf {
     const node = this.state.nodes.get(nodeId);
     if (!node || node.status !== "pending") return;
     if (!this.provider) {
-      throw new ProviderError(this.providerRequiredError?.message || "Add your provider key to keep asking.", {
+      throw new ProviderError(this.providerRequiredError?.message || "Connect the bridge and choose a model to keep asking.", {
         status: 401,
-        code: this.providerRequiredError?.code || "missing_key",
+        code: this.providerRequiredError?.code || "setup_incomplete",
         retryable: true,
       });
     }
@@ -167,9 +166,9 @@ export class DirectHostGeneration extends DirectHostPdf {
     const node = this.state.nodes.get(nodeId);
     if (!node || node.status !== "pending") return;
     if (!this.provider) {
-      throw new ProviderError(this.providerRequiredError?.message || "Add your provider key to keep asking.", {
+      throw new ProviderError(this.providerRequiredError?.message || "Connect the bridge and choose a model to keep asking.", {
         status: 401,
-        code: this.providerRequiredError?.code || "missing_key",
+        code: this.providerRequiredError?.code || "setup_incomplete",
         retryable: true,
       });
     }
@@ -179,47 +178,22 @@ export class DirectHostGeneration extends DirectHostPdf {
     if (!withoutAttachment) await this.attachBranchImage(node, context);
     const fallbackTitle = fallbackTitleForNode(node);
     context.fallbackTitle = fallbackTitle;
-    let rebuild = false;
-    let recovered = false;
-    let droppedImages = false;
-    let droppedPastedImages = false;
-    for (;;) {
-      context.conversation = await prepareNodeConversation(this, provider, context, controller.signal, { reset: rebuild });
+    const association = this.state.nodes.get(context.parent_id)?.extensions?.[BACKEND_CONVERSATION];
+    context.conversation = normalizeBackendConversation(association);
+    if (association != null && !context.conversation) throw new ProviderError("The source article has an invalid session reference.", { code: "conversation_invalid" });
+    if (controller.signal.aborted || this.disposed || !this.isLivePending(nodeId)) return;
+    const run = this.createRun(this.state.nodes.get(nodeId), fallbackTitle);
+    const generation = provider.answerBranch(context, controller.signal);
+    for await (const docEvent of generationDocEvents(generation, run, {
+      nodeId,
+      progressFields: { base_url: node.base_url, base_url_source: node.base_url_source },
+      answeredFields: () => branchAnsweredFields(this.state.nodes.get(nodeId)),
+    })) {
       if (controller.signal.aborted || this.disposed || !this.isLivePending(nodeId)) return;
-      const run = this.createRun(this.state.nodes.get(nodeId), fallbackTitle);
-      try {
-        const generation = provider.answerBranch(context, controller.signal);
-        for await (const docEvent of generationDocEvents(generation, run, {
-          nodeId,
-          progressFields: { base_url: node.base_url, base_url_source: node.base_url_source },
-          answeredFields: () => branchAnsweredFields(this.state.nodes.get(nodeId)),
-        })) {
-          if (controller.signal.aborted || this.disposed || !this.isLivePending(nodeId)) return;
-          this.dispatch(docEvent);
-          if (docEvent.type === "node_progress") {
-            this.emit({ ...docEvent, markdown: this.state.nodes.get(nodeId).markdown });
-            this.scheduleSave();
-          }
-        }
-        break;
-      } catch (error) {
-        if (controller.signal.aborted) throw error;
-        const code = normalizeProviderError(error).code;
-        if (provider.codexConversations && code === "conversation_unavailable" && !recovered) {
-          recovered = true;
-          rebuild = true;
-          this.dispatchProgress(nodeId, "", { emit: true });
-          continue;
-        }
-        if (droppedImages || (!context.attachment && !context.attachments?.length)
-          || ["model_no_images", "web_search_failed", "conversation_unavailable", "conversation_invalid", "conversation_incomplete"].includes(code)) throw error;
-        droppedImages = true;
-        droppedPastedImages = !!context.attachments?.some((attachment) => attachment?.source === "pasted_image");
-        delete context.attachment;
-        delete context.attachments;
-        rebuild = false;
-        this.dispatchProgress(nodeId, "", { emit: true });
-
+      this.dispatch(docEvent);
+      if (docEvent.type === "node_progress") {
+        this.emit({ ...docEvent, markdown: this.state.nodes.get(nodeId).markdown });
+        this.scheduleSave();
       }
     }
 
@@ -228,15 +202,14 @@ export class DirectHostGeneration extends DirectHostPdf {
     const finalNode = this.state.nodes.get(nodeId);
     this.abortByNode.delete(nodeId);
     this.noteConversions.delete(nodeId);
-    if (droppedPastedImages) this.onToast?.({ message: "Answered without the pasted image(s) — the request was too large for this model." });
     this.emit(buildNodeAnsweredEvent(finalNode));
     this.emitConversation(finalNode);
     await this.flushSave();
   }
 
   emitConversation(node) {
-    const conversation = normalizeCodexConversation(node?.extensions?.[CODEX_CONVERSATION]);
-    if (conversation) this.emit({ type: "node_extensions_patch", node_id: node.id, namespace: CODEX_CONVERSATION, value: conversation });
+    const conversation = normalizeBackendConversation(node?.extensions?.[BACKEND_CONVERSATION]);
+    if (conversation) this.emit({ type: "node_extensions_patch", node_id: node.id, namespace: BACKEND_CONVERSATION, value: conversation });
   }
 
   async attachBranchImage(node, context) {
@@ -382,23 +355,13 @@ export class DirectHostGeneration extends DirectHostPdf {
   }
 
   buildBranchContext(node) {
-    const root = this.state.nodes.get(this.state.root_id);
     const parent = this.state.nodes.get(node.parent_id ?? this.state.root_id);
-    const lineage = parent ? lineageNodesFromMap(this.state.nodes, parent.id) : [];
-    const ancestors = lineage.filter((entry) => entry.id !== parent?.id).map((entry) => ({
-      id: entry.id,
-      title: entry.title,
-      markdown: entry.markdown,
-    }));
+    requireReadableArticle(parent);
     return {
       node_id: node.id,
-      root_title: root?.title || this.state.title || "Untitled",
-      root_question: rootQuestionForNode(root),
       parent_id: parent?.id || null,
       parent_title: parent?.title || "Untitled",
       parent_markdown: parent?.markdown || "",
-      ancestors,
-      notes: collectRelevantNotes(this.state.nodes, parent?.id || this.state.root_id),
       selected_text: node.parent_id == null ? "" : (node.origin?.selected_text || ""),
       question: node.origin?.question || "",
       lens: node.origin?.lens || null,

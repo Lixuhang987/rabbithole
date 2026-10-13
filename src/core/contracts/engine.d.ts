@@ -49,7 +49,6 @@ export interface Ask {
   produces: string;
   state: "requested" | "streaming" | "settled" | "failed";
   run: { id: string; seq: number } | null;
-  delegated: boolean;
   error: { message: string; code: string | null; retryable: boolean } | null;
 }
 
@@ -129,7 +128,7 @@ export interface NodeProgressEvent extends NodeTarget, BaseUrlFields {
 }
 export interface NodeAnsweredEvent extends NodeTarget, BaseUrlFields, NodePresentationFields {
   type: "node_answered";
-  codex_conversation?: import("../conversation.js").CodexConversation;
+  backend_conversation?: import("../conversation.js").BackendConversation;
   parent_id?: unknown;
   title?: unknown;
   markdown?: unknown;
@@ -148,9 +147,9 @@ export interface NodeUpdateEvent extends NodeTarget, NodePresentationFields {
 }
 export interface NodesUpdateEvent { type: "nodes_update"; nodes?: unknown; }
 export interface ViewStateEvent { type: "view_state"; state?: unknown; }
-/** Internal engine event; not part of the MCP/SSE wire vocabulary. */
+/** Internal engine event; not part of the browser event vocabulary. */
 export interface HoleTitleEvent { type: "hole_title"; title?: unknown; }
-/** Internal engine event; not part of the MCP/SSE wire vocabulary. */
+/** Internal engine event; not part of the browser event vocabulary. */
 export interface NodeOriginEvent extends NodeTarget { type: "node_origin"; origin?: unknown; }
 export interface NodeExtensionsPatchEvent extends NodeTarget { type: "node_extensions_patch"; namespace?: unknown; value?: unknown; }
 export interface BlockStateEvent extends NodeTarget {

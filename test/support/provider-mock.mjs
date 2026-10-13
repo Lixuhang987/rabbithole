@@ -1,70 +1,63 @@
-const PROVIDER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const KEY_URL = "https://openrouter.ai/api/v1/key";
-const MODEL_URL = "https://openrouter.ai/api/v1/models";
-const LOCAL_MODEL_URL = "http://localhost:11434/v1/models";
-const LOCAL_SHOW_URL = "http://localhost:11434/api/show";
-const MOCK_KEY = `sk-or-v1-${"x".repeat(64)}`;
-
-export const MOCK_MODEL = "anthropic/claude-sonnet-5";
-
+export const BRIDGE_URL = 'http://127.0.0.1:41414';
+export const MOCK_MODEL = 'gpt-fake';
+export const MOCK_TOKEN = 'browser-paired-token';
+export const MOCK_MODELS = [
+  { id: MOCK_MODEL, name: 'Codex Test', images: true, reasoning: { options: ['low', 'medium', 'high'], default: 'medium' } },
+  { id: 'gpt-text', name: 'Codex Text', images: false, reasoning: { options: ['medium'], default: 'medium' } },
+];
+export const MOCK_STATE = { bridge: 'test', agents: [{ id: 'codex', state: 'ready', models: MOCK_MODELS }] };
 export function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, content-type, accept, http-referer, x-title",
-  };
+  return { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'authorization, content-type, accept', 'Access-Control-Allow-Private-Network': 'true' };
 }
-
+let sequence = 0;
 export function sse(chunks) {
-  return chunks.map((content) => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`).join("") + "data: [DONE]\n\n";
+  return [...chunks.map((delta) => ({ type: 'text', delta })),
+    { type: 'completed', session: { backend: 'codex', sessionId: `mock-session-${++sequence}`, scopeId: 'mock-scope' } }]
+    .map((event) => `data: ${JSON.stringify(event)}\n\n`).join('');
 }
-
-/** @param {any} page @param {{keyStatus?: (key: string) => number, streams?: string[][], onProviderCall?: ((body: any) => void) | null, providerDelayMs?: number, keyLabel?: string}} [options] */
-export async function routeProvider(page, { keyStatus, streams = [], onProviderCall = null, providerDelayMs = 0, keyLabel = "test key" } = {}) {
-  await page.route(LOCAL_MODEL_URL, (route) => route.fulfill({
-    status: 200,
-    headers: { ...corsHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ data: [{ id: "llama3.2", name: "llama3.2" }, { id: "deepseek-r1:7b", name: "deepseek-r1:7b" }] }),
-  }));
-  await page.route(LOCAL_SHOW_URL, (route) => {
-    const model = route.request().postDataJSON()?.model || "";
-    return route.fulfill({
-      status: 200,
-      headers: { ...corsHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ capabilities: /vision|llava/i.test(model) ? ["completion", "vision"] : ["completion"] }),
-    });
-  });
-  await page.route(MODEL_URL, (route) => route.fulfill({
-    status: 200,
-    headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ data: [
-      { id: MOCK_MODEL, name: "Anthropic: Claude Sonnet 5", context_length: 1000000, pricing: { prompt: "0.000003", completion: "0.000015" } },
-      { id: "openai/gpt-5", name: "OpenAI: GPT-5", context_length: 400000, pricing: { prompt: "0.00000125", completion: "0.00001" } },
-      { id: "openrouter/auto", name: "Auto Router", context_length: 2000000, pricing: { prompt: "-1", completion: "-1" } },
-      { id: "deepseek/deepseek-v4-flash", name: "DeepSeek: DeepSeek V4 Flash", context_length: 164000, pricing: { prompt: "0", completion: "0" } },
-    ] }),
-  }));
-  await page.route(KEY_URL, async (route) => {
-    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders(), body: "" });
-    const key = (route.request().headers().authorization || "").replace(/^Bearer\s+/i, "");
-    const status = keyStatus ? keyStatus(key) : 200;
-    await route.fulfill({ status, headers: { ...corsHeaders(), "Content-Type": "application/json; charset=utf-8" }, body: status === 200 ? JSON.stringify({ data: { label: keyLabel } }) : JSON.stringify({ error: { message: "invalid key" } }) });
-  });
-  await page.route(PROVIDER_URL, async (route) => {
-    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders(), body: "" });
-    onProviderCall?.(route.request().postDataJSON());
-    const chunks = streams.shift() || ["# Fallback\n\nFallback streamed document."];
-    if (providerDelayMs) await new Promise((resolve) => setTimeout(resolve, providerDelayMs));
-    await route.fulfill({ status: 200, headers: { ...corsHeaders(), "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store" }, body: sse(chunks) });
+/** @param {any} page @param {{streams?: string[][], onProviderCall?: (body:any) => void, providerDelayMs?: number}} [options] */
+export async function routeProvider(page, { streams = [], onProviderCall = null, providerDelayMs = 0 } = {}) {
+  // State streams stay open like the real bridge. A closed mock stream causes
+  // reconnect churn and makes browser network-idle waits impossible.
+  await page.addInitScript(({ bridgeUrl, state }) => {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init = {}) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url !== `${bridgeUrl}/bridge/events`) return nativeFetch(input, init);
+      const signal = init.signal;
+      let detach = () => {};
+      const stream = new ReadableStream({
+        start(controller) {
+          const abort = () => { controller.error(new DOMException('Aborted', 'AbortError')); detach(); };
+          detach = () => signal?.removeEventListener('abort', abort);
+          if (signal?.aborted) { abort(); return; }
+          signal?.addEventListener('abort', abort, { once: true });
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(state)}\n\n`));
+        },
+        cancel() { detach(); },
+      });
+      return Promise.resolve(new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }));
+    };
+  }, { bridgeUrl: BRIDGE_URL, state: MOCK_STATE });
+  await page.route(`${BRIDGE_URL}/bridge/**`, async (route) => {
+    const request = route.request();
+    if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: corsHeaders(), body: '' });
+    const url = new URL(request.url());
+    if (url.pathname === '/bridge/generate') {
+      onProviderCall?.(request.postDataJSON());
+      const chunks = streams.shift() || ['# Fallback\n\nFallback streamed document.'];
+      if (providerDelayMs) await new Promise((resolve) => setTimeout(resolve, providerDelayMs));
+      return route.fulfill({ status: 200, headers: { ...corsHeaders(), 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' }, body: sse(chunks) });
+    }
+    if (url.pathname === '/bridge/events') return route.fulfill({ status: 200,
+      headers: { ...corsHeaders(), 'Content-Type': 'text/event-stream' }, body: `data: ${JSON.stringify(MOCK_STATE)}\n\n` });
+    const result = url.pathname === '/bridge/models' ? { models: MOCK_MODELS } : { ok: true, state: MOCK_STATE };
+    return route.fulfill({ status: 200, headers: { ...corsHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(result) });
   });
 }
-
-export async function seedConfiguredOpenRouter(context) {
-  await context.addInitScript(({ key, model }) => {
-    localStorage.setItem("rh-web-settings", JSON.stringify({
-      preset: "openrouter", base_url: "https://openrouter.ai/api/v1", model: model, session_only: false,
-      generation_setup: { version: 1, preset: "openrouter", base_url: "https://openrouter.ai/api/v1", model },
-    }));
-    localStorage.setItem("rh-web-api-keys", JSON.stringify({ openrouter: key }));
-  }, { key: MOCK_KEY, model: MOCK_MODEL });
+export async function seedConfiguredBridge(context) {
+  await context.addInitScript(({ model, token, base_url }) => {
+    localStorage.setItem('rh-web-settings', JSON.stringify({ backend: 'codex', model, reasoning: 'medium', token, base_url }));
+  }, { model: MOCK_MODEL, token: MOCK_TOKEN, base_url: BRIDGE_URL });
 }
