@@ -138,7 +138,7 @@ try {
   await bridge.start();
   await bridge.refreshState();
 
-  const seventeenMiB = Buffer.alloc(17 * 1024 * 1024, 0x20);
+  const largeInput = `ARTICLE_START ${"文".repeat(6 * 1024 * 1024)} ARTICLE_TAIL`;
   const rows = [
     {
       name: "no token",
@@ -180,18 +180,13 @@ try {
       code: "unsupported_media_type",
     },
     {
-      name: "17 MiB body",
-      run: () => request(bridge, {
-        method: "POST",
-        pathname: "/v1/chat/completions",
-        headers: authHeaders(bridge, {
-          "Content-Type": "application/json",
-          "Content-Length": seventeenMiB.length,
-        }),
-        body: seventeenMiB,
+      name: "large model input",
+      run: () => chat(bridge, {
+        model: "codex/gpt-fake",
+        messages: [{ role: "user", content: largeInput }],
+        stream: false,
       }),
-      status: 413,
-      code: "payload_too_large",
+      status: 200,
     },
     {
       name: "native no origin",
@@ -277,6 +272,8 @@ try {
       acao: result.headers["access-control-allow-origin"] || null,
     });
   }
+  const largeCall = JSON.parse((await fs.readFile(codexRecord, "utf8")).trim().split("\n")[0]);
+  assert.equal(largeCall.input[0].text, `Conversation transcript:\n<user>${largeInput}</user>`);
   assert.equal(observed.length, rows.length, "acceptance E capture must include every gate row");
   process.stdout.write(`acceptance E ${JSON.stringify(observed)}\n`);
 
@@ -464,12 +461,15 @@ try {
   await imageHost.dispose();
   (/** @type {any} */ (globalThis)).FileReader = previousFileReader;
 
-  const importedHole = createHoleFromMarkdown({ markdown: "# Imported article\n\nUnique imported parent context." });
+  const longParent = `# Imported article\n\nUnique imported parent context.\n${"全文段落\n".repeat(12000)}ARTICLE_END`;
+  const longAsk = `First imported Ask ${"问题".repeat(30000)} ASK_END`;
+  const longSelection = `SELECTION_START ${"选中".repeat(30000)} SELECTION_END`;
+  const importedHole = createHoleFromMarkdown({ markdown: longParent });
   const importedSaved = [];
   const importedHost = new DirectRabbitholeHost({ hole: importedHole, provider, store: { saveHole: async (value) => importedSaved.push(structuredClone(value)) } });
   const turnsBeforeImport = (await turnCalls()).length;
   const injectionsBefore = (await protocolCalls()).filter((call) => call.method === "thread/inject_items").length;
-  await Promise.all([ask(importedHost, "import-first", importedHole.root_id, "First imported Ask"), ask(importedHost, "import-second", importedHole.root_id, "Second imported Ask")]);
+  await Promise.all([ask(importedHost, "import-first", importedHole.root_id, longAsk, longSelection), ask(importedHost, "import-second", importedHole.root_id, "Second imported Ask")]);
   assert.equal((await turnCalls()).length - turnsBeforeImport, 2, "baseline injection makes no extra model call");
   assert.equal((await protocolCalls()).filter((call) => call.method === "thread/inject_items").length - injectionsBefore, 1, "concurrent first Asks share one baseline");
   const baseline = importedHost.state.nodes.get(importedHole.root_id).extensions.codex_conversation;
@@ -477,6 +477,11 @@ try {
   assert.equal(importedForks.length, 2);
   const importedHistory = JSON.stringify((await turnCalls()).at(-1).inheritedHistory);
   assert.match(importedHistory, /Unique imported parent context/);
+  const injection = (await protocolCalls()).find((call) => call.method === "thread/inject_items" && call.params.threadId === baseline.threadId);
+  assert.ok(injection.params.items[0].content[0].text.includes(longParent), "baseline includes the complete imported article");
+  const importedCall = (await turnCalls()).find((call) => call.input[0].text.includes("First imported Ask"));
+  assert.ok(importedCall.input[0].text.includes(longAsk), "fork receives the complete new Ask");
+  assert.ok(importedCall.input[0].text.includes(longSelection), "fork receives the complete selection");
   assert.equal(importedHistory.includes("First imported Ask"), false);
   assert.equal(importedHistory.includes("Second imported Ask"), false);
   const stale = { ...baseline, threadId: "missing-history" };
@@ -538,8 +543,15 @@ try {
   assert.equal(noImages.status, 400);
   assert.equal(noImages.json.error.code, "model_no_images");
 
+  const echoInput = `ECHO_LARGE ${"文".repeat(1100000)} RESPONSE_END`;
+  const echo = await chat(bridge, { model: "codex/gpt-fake", messages: [{ role: "user", content: echoInput }], stream: false });
+  assert.equal(echo.status, 200);
+  assert.equal(echo.json.choices[0].message.content, `Conversation transcript:\n<user>${echoInput}</user>`, "large Codex response is returned intact");
+
   const codexLaunch = (await fs.readFile(codexArgsRecord, "utf8")).trim().split("\n").map((line) => JSON.parse(line)).find((call) => call.args[0] === "app-server");
   assert.equal(codexLaunch.codexHome, undefined);
+  assert.ok(codexLaunch.args.includes("model_context_window=1000000"));
+  assert.ok(codexLaunch.args.includes("model_auto_compact_token_limit=900000"));
   assert.ok(codexLaunch.args.includes('skills.include_instructions=false'));
   assert.ok(codexLaunch.args.includes('sandbox_mode="danger-full-access"'));
   assert.ok(codexLaunch.args.includes('approval_policy="never"'));
@@ -582,6 +594,10 @@ try {
   assert.equal(bridge.token, previousToken);
   const launches = (await fs.readFile(codexArgsRecord, "utf8")).trim().split("\n").map((line) => JSON.parse(line)).filter((call) => call.args[0] === "app-server");
   assert.equal(launches.length, 2);
+  for (const launch of launches) {
+    assert.ok(launch.args.includes("model_context_window=1000000"));
+    assert.ok(launch.args.includes("model_auto_compact_token_limit=900000"));
+  }
   assert.equal(launches.at(-1).config, changedConfig, "new CLI process reads updated user configuration");
   const afterRestart = await chat(bridge, { model: "codex/gpt-fake", messages: [{ role: "user", content: "After restart" }], stream: false });
   assert.equal(afterRestart.status, 200);

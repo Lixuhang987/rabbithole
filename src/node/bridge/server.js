@@ -30,7 +30,6 @@ import { shortId } from "../shared/ids.js";
 
 const HOST = "127.0.0.1";
 const REQUEST_TIMEOUT_MS = AGENT_TURN_DEADLINE_MS;
-const BRIDGE_MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 function sendJson(res, statusCode, body) {
   if (res.writableEnded || res.destroyed) return;
@@ -387,14 +386,7 @@ export async function createBridge({
             415
           );
         }
-        body = await parseRequestBody(req, {
-          maxBytes: BRIDGE_MAX_BODY_BYTES,
-          tooLargeError: new BridgeError(
-            "Request body exceeds 16 MiB.",
-            "payload_too_large",
-            413
-          ),
-        });
+        body = await parseRequestBody(req, { maxBytes: Infinity });
       }
 
       if (req.method === "GET" && url.pathname === "/bridge/events") {
