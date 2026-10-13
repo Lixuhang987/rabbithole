@@ -76,6 +76,7 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/integration/artifact-portability.test.mjs` — artifact portability capability contracts.
 - `test/integration/bridge-failure-modes.test.mjs` — bridge failure modes capability contracts.
 - `test/integration/bridge-http.test.mjs` — bridge http capability contracts.
+- `test/integration/codex-ego-browser.test.mjs` — the Codex ego-browser skill's executable MCP adapter and reference/image round trips.
 - `test/integration/custom-endpoint.test.mjs` — custom endpoint capability contracts.
 - `test/integration/generation-lifecycle.test.mjs` — generation lifecycle capability contracts.
 - `test/integration/image-experience.test.mjs` — image experience capability contracts.

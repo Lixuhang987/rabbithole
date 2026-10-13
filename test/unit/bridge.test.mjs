@@ -173,7 +173,7 @@ try {
   const overrides = codexIsolationArgs();
   assert.ok(overrides.includes('skills.include_instructions=false'));
   assert.ok(overrides.includes('orchestrator.mcp.enabled=false'));
-  assert.ok(overrides.includes('sandbox_mode="read-only"'));
+  assert.ok(overrides.includes('sandbox_mode="danger-full-access"'));
 
   const model = {
     id: "codex/test",

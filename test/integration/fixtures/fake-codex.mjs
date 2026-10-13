@@ -3,11 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 const args = process.argv.slice(2);
+const configPath = path.join(process.env.CODEX_HOME || path.join(process.env.HOME, ".codex"), "config.toml");
+const config = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : "";
+const requiresOpenaiAuth = !/^\s*requires_openai_auth\s*=\s*false\s*$/m.test(config);
 if (process.env.FAKE_CODEX_APP_SERVER_ARGS) {
   fs.appendFileSync(process.env.FAKE_CODEX_APP_SERVER_ARGS, `${JSON.stringify({
     args,
     codexHome: process.env.CODEX_HOME,
-    config: fs.existsSync(path.join(process.env.CODEX_HOME || path.join(process.env.HOME, ".codex"), "config.toml")) ? fs.readFileSync(path.join(process.env.CODEX_HOME || path.join(process.env.HOME, ".codex"), "config.toml"), "utf8") : null,
+    config: config || null,
   })}\n`);
 }
 if (args[0] === "mcp") {
@@ -114,9 +117,9 @@ process.stdin.on("data", (chunk) => {
     } else if (method === "account/read") {
       emit({
         id,
-        result: process.env.FAKE_CODEX_SIGNED_OUT === "1"
-          ? { account: null }
-          : { account: { type: "chatgpt" }, planType: "pro" },
+        result: !requiresOpenaiAuth || process.env.FAKE_CODEX_SIGNED_OUT === "1"
+          ? { account: null, requiresOpenaiAuth }
+          : { account: { type: "chatgpt" }, planType: "pro", requiresOpenaiAuth },
       });
     } else if (method === "collaborationMode/list") {
       emit({

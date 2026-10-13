@@ -11,6 +11,7 @@ const HANDLE_FIELDS = Object.freeze([
   "ncText",
   "ncActions",
   "ncHandle",
+  "_composerAttachments",
   "canvasEl",
   "canvasBodyEl",
   "_noteEditor",
@@ -33,6 +34,7 @@ const RESET_FIELDS = Object.freeze({
 
 export function dropNodeView(node) {
   if (!node) return;
+  node._composerAttachments?.dispose();
   node._noteDraftDispose?.();
   node._noteEditDispose?.();
   node.el?.remove();

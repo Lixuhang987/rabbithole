@@ -48,7 +48,7 @@ const searchIcon = iconSvg("search", { size: 13 });
 const PROVIDER_ROWS = Object.freeze([
   Object.freeze({ id: "openrouter", preset: "openrouter", label: "OpenRouter", detail: "Hundreds of models · your API key" }),
   Object.freeze({ id: "claude", preset: "subscriptions", agent: "claude", label: "Claude Code", detail: "Your Claude plan" }),
-  Object.freeze({ id: "codex", preset: "subscriptions", agent: "codex", label: "Codex", detail: "Your ChatGPT plan" }),
+  Object.freeze({ id: "codex", preset: "subscriptions", agent: "codex", label: "Codex", detail: "Your ChatGPT plan or local configuration" }),
   Object.freeze({ id: "local", preset: "local", label: "Ollama", detail: "Models on this computer" }),
   Object.freeze({ id: "custom_endpoint", preset: "custom_endpoint", label: "Custom endpoint", detail: "Any OpenAI-compatible server" }),
 ]);
@@ -474,7 +474,7 @@ export function createModelSettings({
     }
     const why = bridgeUnauthorized
       ? "This browser lost its pairing with the bridge. Connect it again:"
-      : "Answers come from Claude Code or Codex running on this computer — included in the plan you already pay for.";
+      : "Answers come from Claude Code or Codex running on this computer. Codex also supports third-party endpoints through your local configuration.";
     return `<div class="settings-section bridge-setup-section">${heading}<p class="bridge-setup-why">${escapeHtml(why)}</p><div class="bridge-steps"><div class="bridge-step" data-step="run"><span class="bridge-step-marker" aria-hidden="true">1</span><div class="bridge-step-body"><p>Run this in your terminal:</p>${bridgeCommandMarkup(BRIDGE_COMMAND)}<small class="field-hint bridge-step-wait" role="status"><span class="ollama-spinner" aria-hidden="true"></span>Waiting for the bridge to start…</small></div></div><div class="bridge-step bridge-step-upcoming" data-step="connect"><span class="bridge-step-marker" aria-hidden="true">2</span><div class="bridge-step-body"><p>Click the link it prints to connect this page.</p></div></div></div><details class="bridge-paste-fallback"><summary>Paste the link instead</summary>${bridgePairingFieldMarkup({ inline: false })}</details></div>`;
   }
 
@@ -514,12 +514,11 @@ export function createModelSettings({
     const copy = agent?.state === "missing"
       ? `${label} isn’t installed on this computer.`
       : agent?.state === "signed_out"
-        ? `Sign in to ${label}.`
+        ? agent.id === "codex" ? "Sign in to Codex, or configure a third-party endpoint in Codex." : `Sign in to ${label}.`
         : `${label} needs attention.`;
-    // The bridge re-probes both CLIs on its own, so install/sign-in resolves
-    // without a restart — say so, or the user goes hunting for a reload button.
+    // Account changes are re-probed; provider configuration needs a new CLI process.
     const followUp = agent?.state === "missing" || agent?.state === "signed_out"
-      ? `<small class="field-hint">Rabbithole notices by itself — no restart needed.</small>`
+      ? `<small class="field-hint">${agent.id === "codex" && agent.state === "signed_out" ? "After signing in, Rabbithole reconnects automatically. After changing local configuration, restart the bridge." : "Rabbithole notices by itself — no restart needed."}</small>`
       : "";
     return `<div class="settings-section bridge-agent-state"><p>${escapeHtml(copy)}</p>${agent?.detail ? `<small class="field-hint">${escapeHtml(agent.detail)}</small>` : ""}${bridgeCommandMarkup(agent?.fix || BRIDGE_COMMAND)}${followUp}</div>`;
   }
@@ -529,7 +528,7 @@ export function createModelSettings({
     const modelSection = `<div class="settings-section model-section local-model-section"><div class="settings-row"><span class="settings-label" id="bridge-model-label">Model</span>${comboboxMarkup({ id: "bridge-model", labelledBy: "bridge-model-label", value: settings.model, label: model, title: settings.model, iconHtml: chevron })}</div></div>`;
     const transcriptionSection = purpose === "setup" ? "" : bridgeTranscriptionMarkup(settings, agentId);
     const searchSection = agentId === "codex"
-      ? `<div class="settings-section"><p id="codex-web-search-config" class="field-hint">Web search follows your Codex configuration.</p></div>`
+      ? `<div class="settings-section"><p id="codex-web-search-config" class="field-hint">Models, authentication, and web search follow your local Codex configuration.</p></div>`
       : "";
     return `${modelSection}${reasoningSectionMarkup(settings)}${searchSection}${transcriptionSection}`;
   }

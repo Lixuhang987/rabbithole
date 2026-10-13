@@ -47,8 +47,11 @@ async function verifyEnterCompositionAndNewlines() {
     await createDocument(documentPage.page, "# Enter handling\n\nEuler identity lets us test selection and follow-up inputs.");
     await documentPage.page.locator(".card .doc-content", { hasText: "Euler identity" }).first().waitFor();
     await verifySelectionCommitKeys(documentPage.page, () => documentPage.providerCalls);
+    assertImageRequest(documentPage.providerBodies[0]);
     await verifyReaderComposer(documentPage.page, () => documentPage.providerCalls);
+    assertImageRequest(documentPage.providerBodies[1]);
     await verifyCardComposer(documentPage.page, () => documentPage.providerCalls);
+    assertImageRequest(documentPage.providerBodies[4]);
     await verifyStandaloneComposer(documentPage.page, () => documentPage.providerCalls);
     assert.equal(documentPage.providerCalls, 7, "each in-document ask submit should call the provider exactly once");
   } finally {
@@ -205,11 +208,11 @@ async function openTestPage(streams) {
   const context = await browser.newContext();
   await seedConfiguredOpenRouter(context);
   const page = await context.newPage();
-  const state = { providerCalls: 0 };
+  const state = { providerCalls: 0, providerBodies: [] };
   await routeProvider(page, {
     streams,
     providerDelayMs: 120,
-    onProviderCall: () => { state.providerCalls += 1; },
+    onProviderCall: (body) => { state.providerCalls += 1; state.providerBodies.push(body); },
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.waitForFunction(() => !!window.__rabbitholeTest);
@@ -217,6 +220,7 @@ async function openTestPage(streams) {
     context,
     page,
     get providerCalls() { return state.providerCalls; },
+    get providerBodies() { return state.providerBodies; },
   };
 }
 
@@ -252,6 +256,7 @@ async function verifySelectionCommitKeys(page, calls) {
   await page.keyboard.press("Shift+Enter");
   await page.keyboard.type("line two");
   assert.equal(await page.inputValue("#ask-text"), "line one\nline two", "Shift+Enter should insert a newline in the selection ask composer");
+  await pasteImage(page, "#ask-text", "#ask");
   await page.keyboard.press("Control+Enter");
   await page.waitForSelector("#ask:not(.visible)", { state: "attached" });
   await page.locator(".card:not(.root)", { hasText: "Selection Enter completed." }).waitFor();
@@ -296,7 +301,12 @@ async function verifyReaderComposer(page, calls) {
   await page.waitForFunction(() => Array.from(document.querySelectorAll("#composer-actions .ask-commit"))
     .every((button) => getComputedStyle(button).display === "none"));
 
-  await page.fill("#composer-text", "Reader command ask");
+  await pasteImage(page, "#composer-text", "#composer-inner");
+  assert.equal(await page.inputValue("#composer-text"), "", "image-only reader asks must be supported");
+  await page.press("#composer-text", "1");
+  assert.equal(await page.inputValue("#composer-text"), "1", "an image draft must let digits type instead of invoking hidden presets");
+  assert.equal(calls(), 1, "typing a digit on an image draft must not send it prematurely");
+  await page.fill("#composer-text", "");
   await page.keyboard.press("Control+Enter");
   await page.locator("body", { hasText: "Reader Enter completed." }).waitFor();
   assert.equal(calls(), 2, "Cmd/Ctrl+Enter should submit the reader ask once");
@@ -371,8 +381,20 @@ async function verifyCardComposer(page, calls) {
     "card Enter should persist a visible child note window");
   assert.equal(await page.locator(`.card[data-id="${cardNoteId}"]`).count(), 1, "the persisted follow-up note should remain visible on the canvas");
   assert.equal(calls(), 4, "plain Enter should save a card note without calling the provider");
+  await page.locator(".card.root .nc-handle").evaluate((button) => button.click());
+  await pasteImage(page, selector, ".card.root .nc-inner");
+  await page.press(selector, "Enter");
+  await page.locator(".card-note .doc-content img").last().waitFor();
+  const imageNoteId = await page.locator(".card-note", { has: page.locator(".doc-content img") }).last().getAttribute("data-id");
+  assert.match((await storedNote(page, imageNoteId)).markdown, /!\[Pasted image\]\(asset:paste-/);
+  assert.equal(calls(), 4, "saving an image-only Note must not call the provider");
+
 
   await page.locator(".card.root .nc-handle").evaluate((button) => button.click());
+  await pasteImage(page, selector, ".card.root .nc-inner");
+  await page.locator(".card.root .paste-attachment-remove").evaluate((button) => button.click());
+  assert.equal(await page.locator(".card.root .paste-attachment").count(), 0);
+  await pasteImage(page, selector, ".card.root .nc-inner");
   await page.fill(selector, "Card command ask");
   await page.keyboard.press("Control+Enter");
   await page.locator(".card:not(.root)", { hasText: "Card Enter completed." }).waitFor();
@@ -599,4 +621,27 @@ async function storedNote(page, id, timeout = 8000) {
     await page.waitForTimeout(120);
   }
   throw new Error(`note ${id} never persisted`);
+}
+
+async function pasteImage(page, selector, surface) {
+  await page.focus(selector);
+  assert.equal(await page.locator(selector).evaluate(async (editor) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 16;
+    canvas.getContext("2d").fillRect(0, 0, 16, 16);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([blob], "clipboard.png", { type: "image/png" }));
+    const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer });
+    editor.dispatchEvent(event);
+    return event.defaultPrevented;
+  }), true, "Ask or note must consume pasted clipboard images");
+  await page.locator(`${surface} .paste-attachment img`).last().waitFor();
+  assert.equal(await page.locator(selector).evaluate((editor) => document.activeElement === editor), true);
+}
+
+function assertImageRequest(body) {
+  const content = body.messages.at(-1).content;
+  assert.deepEqual(content.map((part) => part.type), ["text", "image_url"]);
+  assert.match(content[1].image_url.url, /^data:image\/png;base64,/);
 }

@@ -527,7 +527,7 @@ async function verifyMobileSelectionSurface(browserEngine, engineName) {
       [true, true], `${engineName}: mobile commit chips must stay visible`);
     await assertSelectionPopoverUsable(canvasPage);
     await canvasPage.click('#ask .ask-commit[data-commit="ask"]', { timeout: 4_000 });
-    await canvasPage.waitForSelector("#ask:not(.visible)");
+    await canvasPage.waitForSelector("#ask", { state: "hidden" });
     await canvasPage.locator(".card:not(.root)", { hasText: "Mobile custom question completed." }).waitFor();
     await canvasPage.close();
 

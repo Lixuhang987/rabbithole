@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 import { abortError, BridgeError } from "../errors.js";
 import { buildCodexInput } from "../messages.js";
@@ -13,6 +14,7 @@ import { armAgentTurnDeadline } from "../../shared/deadline.js";
 import { createNdjsonReader } from "../../shared/ndjson.js";
 import { openAiUsage, probeAgent } from "./agent.js";
 import { SearchCitations, searchSources } from "./codex-search.js";
+import { discoverEgoBrowser, egoBrowserInstructions } from "./ego-browser.js";
 
 const INITIALIZE_TIMEOUT_MS = 20_000;
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -22,7 +24,7 @@ const LOGIN_FIX = "codex login";
 // Overlay only execution capabilities; provider, authentication and search remain user-owned.
 export function codexIsolationArgs() {
   return [
-    'sandbox_mode="read-only"',
+    'sandbox_mode="danger-full-access"',
     'approval_policy="never"',
     'features.multi_agent=false',
     'features.multi_agent_v2=false',
@@ -38,7 +40,7 @@ export function codexIsolationArgs() {
   ].flatMap((override) => ["-c", override]);
 }
 
-async function launchArgs(executable, { env, cwd }) {
+async function launchArgs(executable, { env, cwd, egoBrowser }) {
   const overrides = codexIsolationArgs();
   // Empty tables merge with user configuration, so disable each configured server.
   const result = await runCaptured(executable, ["mcp", ...overrides, "list", "--json"], { env, cwd });
@@ -47,8 +49,15 @@ async function launchArgs(executable, { env, cwd }) {
   if (result.code !== 0 || !Array.isArray(servers) || servers.some((server) => typeof server?.name !== "string")) {
     throw new BridgeError("Could not read Codex MCP configuration for isolation.", "turn_failed", 500);
   }
-  if (servers.length) {
+  if (servers.length || egoBrowser) {
     const entries = servers.map((server) => `${JSON.stringify(server.name)}={enabled=false}`);
+    if (egoBrowser) {
+      let name = "rabbithole_ego_browser";
+      while (servers.some((server) => server.name === name)) name += "_";
+      egoBrowser.serverName = name;
+      const args = [fileURLToPath(new URL("./ego-browser-mcp.js", import.meta.url)), egoBrowser.executable, egoBrowser.skillPath];
+      entries.push(`${JSON.stringify(name)}={enabled=true,command=${JSON.stringify(process.execPath)},args=${JSON.stringify(args)},enabled_tools=["ego_browser"]}`);
+    }
     overrides.push("-c", `mcp_servers={${entries.join(",")}}`);
   }
   return ["app-server", ...overrides, "--listen", "stdio://"];
@@ -165,12 +174,14 @@ export class CodexAppServer {
     this.startPromise = null;
     this.initialized = false;
     this.account = null;
+    this.requiresOpenaiAuth = true;
     this.planType = null;
     this.lastProtocolError = null;
     this.executeMode = null;
     this.modeList = null;
     this.closed = false;
     this.historyScopePromise = null;
+    this.egoBrowser = null;
   }
 
   async ensureStarted() {
@@ -188,7 +199,8 @@ export class CodexAppServer {
     if (!this.executable) {
       throw new BridgeError("Codex is not installed", "agent_missing", 503);
     }
-    const args = await launchArgs(this.executable, { env: this.env, cwd: this.cwd });
+    this.egoBrowser = await discoverEgoBrowser(this.env);
+    const args = await launchArgs(this.executable, { env: this.env, cwd: this.cwd, egoBrowser: this.egoBrowser });
     if (this.closed) throw new BridgeError("Codex is shutting down.", "turn_failed", 500);
     const child = spawn(this.executable, args, {
       cwd: this.cwd,
@@ -331,6 +343,7 @@ export class CodexAppServer {
     this.child = null;
     this.initialized = false;
     this.account = null;
+    this.requiresOpenaiAuth = true;
     this.planType = null;
     const failure = error instanceof BridgeError
       ? error
@@ -385,6 +398,7 @@ export class CodexAppServer {
   async refreshAccount() {
     const result = await this.request("account/read");
     this.account = result?.account || null;
+    this.requiresOpenaiAuth = result?.requiresOpenaiAuth !== false;
     this.planType = result?.planType || this.account?.planType || null;
     return this.account;
   }
@@ -466,6 +480,7 @@ export class CodexAppServer {
     conversation = null,
   }) {
     const codexInput = buildCodexInput(messages);
+    codexInput.systemPrompt += egoBrowserInstructions(this.egoBrowser);
     if (codexInput.imagePartCount !== codexInput.imageCount) {
       throw new BridgeError(
         "Codex image input must use an embedded base64 data URL.",
@@ -489,7 +504,7 @@ export class CodexAppServer {
         model,
         cwd: requestCwd,
         approvalPolicy: "never",
-        sandbox: "read-only",
+        sandbox: "danger-full-access",
         ephemeral: !conversation,
         developerInstructions: codexInput.systemPrompt,
       });
@@ -563,8 +578,7 @@ export class CodexAppServer {
           environments: [],
           approvalPolicy: "never",
           sandboxPolicy: {
-            type: "readOnly",
-            networkAccess: false,
+            type: "dangerFullAccess",
           },
           model,
           effort: reasoningEffort,
@@ -642,14 +656,16 @@ export class CodexBackend {
     return {
       installed: true,
       signedIn: Boolean(this.appServer.account),
-      plan: this.appServer.planType
-        || (this.appServer.account?.type === "apiKey" ? "api_key" : "chatgpt"),
+      requiresLogin: this.appServer.requiresOpenaiAuth && !this.appServer.account,
+      plan: this.appServer.account
+        ? this.appServer.planType || (this.appServer.account.type === "apiKey" ? "api_key" : "chatgpt")
+        : null,
     };
   }
 
   async listModels() {
     const status = await this.status();
-    if (!status.signedIn) {
+    if (status.requiresLogin ?? !status.signedIn) {
       throw new BridgeError(
         "Codex is signed out. Run `codex login` and try again.",
         "agent_signed_out",

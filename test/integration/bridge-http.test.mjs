@@ -26,6 +26,10 @@ const codexThreadRecord = path.join(temporaryRoot, "codex-threads.ndjson");
 const codexHistory = path.join(temporaryRoot, "codex-history.json");
 const codexProtocolRecord = path.join(temporaryRoot, "codex-protocol.ndjson");
 const codexArgsRecord = path.join(temporaryRoot, "codex-args.ndjson");
+const egoSkill = path.join(home, ".agents/skills/ego-browser/SKILL.md");
+const egoExecutable = path.join(ROOT, "test/integration/fixtures/fake-ego-browser.mjs");
+await fs.mkdir(path.dirname(egoSkill), { recursive: true });
+await fs.writeFile(egoSkill, "---\nname: ego-browser\ndescription: Browse with Ego.\n---\n\nEGO_BROWSER_SKILL_BODY\n");
 await fs.mkdir(path.join(home, ".codex"), { recursive: true });
 await fs.writeFile(path.join(home, ".codex", "auth.json"), "{}\n");
 const userConfig = 'web_search = "cached"\n[features]\nstandalone_web_search = false\n';
@@ -118,6 +122,7 @@ try {
       RABBITHOLE_DIR: data,
       RABBITHOLE_BRIDGE_CLAUDE_BIN: FAKE_CLAUDE,
       RABBITHOLE_BRIDGE_CODEX_BIN: FAKE_CODEX,
+      RABBITHOLE_BRIDGE_EGO_BIN: egoExecutable,
       FAKE_CLAUDE_RECORD: claudeRecord,
       FAKE_CODEX_RECORD: codexRecord,
       FAKE_CODEX_HISTORY: codexHistory,
@@ -339,6 +344,7 @@ try {
   const codexCall = JSON.parse((await fs.readFile(codexRecord, "utf8")).trim().split("\n").at(-1));
   assert.equal(codexCall.model, "gpt-fake");
   assert.equal(codexCall.effort, "xhigh");
+  assert.match(codexCall.collaborationMode.settings.developer_instructions, /EGO_BROWSER_SKILL_BODY/);
   assert.deepEqual(codexCall.input[1], {
     type: "image",
     url: "data:image/png;base64,AQID",
@@ -426,6 +432,38 @@ try {
   assert.equal((await protocolCalls()).slice().reverse().find((call) => call.method === "thread/fork").params.threadId, branchConversation.threadId);
   await reopen.dispose();
 
+  const previousFileReader = globalThis.FileReader;
+  (/** @type {any} */ (globalThis)).FileReader = class {
+    /** @type {any} */ result = null;
+    /** @type {any} */ error = null;
+    /** @type {any} */ onload = null;
+    /** @type {any} */ onerror = null;
+    readAsDataURL(blob) {
+      blob.arrayBuffer().then((buffer) => {
+        this.result = `data:${blob.type};base64,${Buffer.from(buffer).toString("base64")}`;
+        this.onload?.();
+      }, (error) => { this.error = error; this.onerror?.(); });
+    }
+  };
+  const pastedBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  const pastedAssets = new Map();
+  const imageHole = createHoleFromMarkdown({ markdown: "# Image question\n\nRead my screenshot." });
+  const imageHost = new DirectRabbitholeHost({ hole: imageHole, provider, store: {
+    saveHole: async () => {},
+    putAsset: async (_hole, name, bytes) => pastedAssets.set(name, new Blob([bytes], { type: "image/png" })),
+    getAsset: async (_hole, name) => pastedAssets.get(name),
+  } });
+  assert.equal((await imageHost.adapter().putAsset("paste-codex.png", new Blob([pastedBytes], { type: "image/png" }))).ok, true);
+  assert.equal((await imageHost.handleBrowserEvent({ type: "branch_request", node_id: "image-ask", parent_id: imageHole.root_id,
+    question: "", selected_text: "", branch_type: "followup", attachment_assets: ["paste-codex.png"], position: { x: 0, y: 0 } })).ok, true);
+  const imageAnswer = await waitForAnswered(imageHost, "image-ask");
+  assert.deepEqual(imageAnswer.origin.attachment_assets, ["paste-codex.png"]);
+  assert.deepEqual((await turnCalls()).at(-1).input[1], {
+    type: "image", url: `data:image/png;base64,${pastedBytes.toString("base64")}`, detail: "auto",
+  }, "durable image-only Ask assets must reach Codex app-server as actual image input");
+  await imageHost.dispose();
+  (/** @type {any} */ (globalThis)).FileReader = previousFileReader;
+
   const importedHole = createHoleFromMarkdown({ markdown: "# Imported article\n\nUnique imported parent context." });
   const importedSaved = [];
   const importedHost = new DirectRabbitholeHost({ hole: importedHole, provider, store: { saveHole: async (value) => importedSaved.push(structuredClone(value)) } });
@@ -503,11 +541,33 @@ try {
   const codexLaunch = (await fs.readFile(codexArgsRecord, "utf8")).trim().split("\n").map((line) => JSON.parse(line)).find((call) => call.args[0] === "app-server");
   assert.equal(codexLaunch.codexHome, undefined);
   assert.ok(codexLaunch.args.includes('skills.include_instructions=false'));
-  assert.ok(codexLaunch.args.includes('mcp_servers={"user_server"={enabled=false}}'));
+  assert.ok(codexLaunch.args.includes('sandbox_mode="danger-full-access"'));
+  assert.ok(codexLaunch.args.includes('approval_policy="never"'));
+  const executionCalls = (await protocolCalls()).filter((call) => ["thread/start", "thread/fork"].includes(call.method));
+  assert.ok(executionCalls.some((call) => call.method === "thread/start"));
+  assert.ok(executionCalls.some((call) => call.method === "thread/fork"));
+  for (const call of executionCalls) {
+    assert.equal(call.params.approvalPolicy, "never");
+    assert.equal(call.params.sandbox, "danger-full-access");
+  }
+  const executionTurns = await turnCalls();
+  assert.ok(executionTurns.length > 0);
+  for (const call of executionTurns) {
+    assert.equal(call.approvalPolicy, "never");
+    assert.deepEqual(call.sandboxPolicy, { type: "dangerFullAccess" });
+  }
+  const mcpOverlay = codexLaunch.args.find((arg) => arg.startsWith("mcp_servers={"));
+  assert.match(mcpOverlay, /"user_server"=\{enabled=false\}/);
+  assert.match(mcpOverlay, /"rabbithole_ego_browser"=\{enabled=true/);
+  assert.ok(mcpOverlay.includes(JSON.stringify(egoExecutable)));
+  assert.ok(mcpOverlay.includes(JSON.stringify(await fs.realpath(egoSkill))));
+  assert.match((await threadCalls()).at(-1).developerInstructions, /EGO_BROWSER_SKILL_BODY/);
   assert.equal(codexLaunch.args.some((arg) => /web_search/.test(arg)), false);
   assert.equal(await fs.readFile(path.join(home, ".codex", "config.toml"), "utf8"), userConfig);
-  const changedConfig = userConfig.replace('"cached"', '"live"');
+  const changedConfig = 'model_provider = "local"\n' + userConfig.replace('"cached"', '"live"')
+    + '\n[model_providers.local]\nname = "Local provider"\nbase_url = "http://127.0.0.1:1234/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n';
   await fs.writeFile(path.join(home, ".codex", "config.toml"), changedConfig);
+  await fs.rm(path.join(home, ".codex", "auth.json"));
   const previousToken = bridge.token;
   const unauthorizedRestart = await request(bridge, { method: "POST", pathname: "/bridge/restart", headers: { "Content-Type": "application/json" }, body: "{}" });
   assert.equal(unauthorizedRestart.status, 401);
@@ -515,6 +575,10 @@ try {
   assert.equal(restarted.status, 200);
   assert.equal(restarted.json.ok, true);
   assert.equal(restarted.json.state.agents.find((agent) => agent.id === "codex").state, "ready");
+  assert.equal(Object.hasOwn(restarted.json.state.agents.find((agent) => agent.id === "codex"), "plan"), false, "local providers need no OpenAI account or plan");
+  const localModels = await request(bridge, { headers: authHeaders(bridge) });
+  assert.equal(localModels.status, 200);
+  assert.ok(localModels.json.data.some((model) => model.id === "codex/gpt-fake"), "local provider models remain selectable without login");
   assert.equal(bridge.token, previousToken);
   const launches = (await fs.readFile(codexArgsRecord, "utf8")).trim().split("\n").map((line) => JSON.parse(line)).filter((call) => call.args[0] === "app-server");
   assert.equal(launches.length, 2);
@@ -522,6 +586,8 @@ try {
   const afterRestart = await chat(bridge, { model: "codex/gpt-fake", messages: [{ role: "user", content: "After restart" }], stream: false });
   assert.equal(afterRestart.status, 200);
   assert.equal(afterRestart.json.choices[0].message.content, "OK");
+  assert.equal(await fs.readFile(path.join(home, ".codex", "config.toml"), "utf8"), changedConfig);
+  await assert.rejects(fs.access(path.join(home, ".codex", "auth.json")));
   await assert.rejects(fs.access(path.join(data, "codex-models.json")));
   await bridge.close();
   bridge = await createTestBridge();

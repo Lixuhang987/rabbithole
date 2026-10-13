@@ -9,6 +9,7 @@ import {
   subtreeBounds as sharedSubtreeBounds,
 } from "../core/layout.js";
 import { presetFor, refreshAskPresetActions, renderAskPresetActions } from "./ask-presets.js";
+import { createComposerAttachments, noteWithImages } from "./authoring/composer-attachments.js";
 import {
   autoGrowEl,
   createNodeEl,
@@ -53,6 +54,10 @@ import { renderMarginNotes } from "./reader.js";
 import { charOffset, mountPdfRectMark, wrapInContainer } from "./text-marks.js";
 import { refreshVisualMarks } from "./visuals.js";
 
+let selectionAttachments = null;
+let readerAttachments = null;
+let readerAttachmentOwner = null;
+
 const askLifecycle = createModuleLifecycle({
   defaults: function () {
     return {};
@@ -74,6 +79,24 @@ export function initAskFollowups() {
   }
   renderAskPresetActions(document.getElementById("ask-actions"), "selection");
   renderAskPresetActions(composerActions, "followup");
+  selectionAttachments = createComposerAttachments({
+    text: askText,
+    actions: document.getElementById("ask-actions"),
+    onChange: () => {
+      updateSelectionDraftSurface();
+      askPosition?.update();
+    },
+    active: () => !!selectionDraft && !closed,
+  });
+  readerAttachmentOwner = currentNodeId;
+  readerAttachments = createComposerAttachments({
+    text: composerText,
+    actions: composerActions,
+    onChange: updateComposerState,
+    active: () => !!nodes[currentNodeId] && !closed,
+  });
+  askScope.addCleanup(selectionAttachments.dispose);
+  askScope.addCleanup(readerAttachments.dispose);
   askScope.addCleanup(
     onPreferenceChange(function (kind) {
       if (kind === "ask-presets") refreshAskPresetActions();
@@ -97,14 +120,18 @@ export function initAskFollowups() {
   );
   wireComposerActions({
     text: askText,
+    hasDraft: () => selectionAttachments.hasDraft,
     actions: document.getElementById("ask-actions"),
     listen: scopeListen,
     onCommit: function (kind, e) {
-      if (kind === "ask") submitAsk(null, composerSource(e));
-      else submitNote(composerSource(e), kind === "note-window");
+      selectionAttachments.submit((names) =>
+        kind === "ask"
+          ? submitAsk(null, composerSource(e), names)
+          : submitNote(composerSource(e), kind === "note-window", names),
+      );
     },
     onLens: function (lens, e) {
-      submitAsk(lens, composerSource(e));
+      selectionAttachments.submit((names) => submitAsk(lens, composerSource(e), names));
     },
     onReaction: function (reaction) {
       submitReaction(reaction);
@@ -139,6 +166,7 @@ export function initAskFollowups() {
   });
   wireComposerActions({
     text: composerText,
+    hasDraft: () => readerAttachments.hasDraft,
     actions: composerActions,
     listen: scopeListen,
     onCommit: function (kind, e) {
@@ -412,6 +440,7 @@ export function hideAsk() {
     cleanup();
   }
   askTabOwner = null;
+  selectionAttachments?.reset();
   ask.classList.remove("visible", "has-draft", "over-lightbox");
   selectionDraft = null;
   clearSelectionHighlight();
@@ -425,6 +454,9 @@ function disposeAskFollowupResources(resetHooks) {
   hideAsk();
   cancelScrollAnimation();
   askLifecycle.dispose(resetHooks);
+  selectionAttachments = null;
+  readerAttachments = null;
+  readerAttachmentOwner = null;
   selectionDraft = null;
   askTabOwner = null;
   askOwnerCleanup = null;
@@ -451,7 +483,7 @@ function clearSelectionHighlight() {
   } catch (e) {}
 }
 function updateSelectionDraftSurface() {
-  ask.classList.toggle("has-draft", !!askText.value.trim());
+  ask.classList.toggle("has-draft", selectionAttachments?.hasDraft || !!askText.value.trim());
   updateSelectionComposerState();
 }
 
@@ -463,11 +495,17 @@ export function updateSelectionComposerState() {
   applyComposerState(
     {
       text: askText,
+      hasDraft: selectionAttachments?.hasDraft,
       commits: actions.querySelectorAll(".ask-commit"),
       lenses: actions.querySelectorAll(".lens"),
       wrap: ask,
     },
-    { phase: sessionPhase(), pending: parentPending, unavailable: !parent || !!parent.source?.converting },
+    {
+      phase: sessionPhase(),
+      pending: parentPending,
+      unavailable: !parent || !!parent.source?.converting,
+      disabled: selectionAttachments?.busy,
+    },
     {
       frozen: "Read-only snapshot",
       closed: "Session ended",
@@ -476,6 +514,10 @@ export function updateSelectionComposerState() {
       live: "Ask or note…",
     },
   );
+  if (selectionAttachments?.busy)
+    /** @type {NodeListOf<HTMLButtonElement>} */ (actions.querySelectorAll(".lens")).forEach((button) => {
+      button.disabled = true;
+    });
   const noteCommit = /** @type {HTMLButtonElement | null} */ (actions.querySelector('[data-commit="note"]'));
   if (noteCommit) noteCommit.title = "Save note (Enter)";
   if (selectionDraft.blockAnchor) {
@@ -503,7 +545,7 @@ function retirePdfConversionAction(parent) {
     ?.remove();
 }
 
-function submitAsk(lensKey, source) {
+function submitAsk(lensKey, source, attachmentNames = []) {
   if (!selectionDraft || closed) return;
   const parent = nodes[selectionDraft.parentId];
   if (!parent) {
@@ -539,6 +581,7 @@ function submitAsk(lensKey, source) {
         ...(instruction ? { instruction: instruction } : {}),
         anchor: anchor,
         branch_type: BRANCH_SELECTION,
+        ...(attachmentNames.length ? { attachment_assets: attachmentNames } : {}),
       },
       position: { x: pos.x, y: pos.y },
       size: { w: DEFAULT_CHILD.w, h: DEFAULT_CHILD.h },
@@ -602,6 +645,7 @@ function submitAsk(lensKey, source) {
     ...(instruction ? { instruction: instruction } : {}),
     anchor: anchor,
     branch_type: BRANCH_SELECTION,
+    ...(attachmentNames.length ? { attachment_assets: attachmentNames } : {}),
     position: { x: node.position.x, y: node.position.y },
     size: { w: node.size.w, h: node.size.h },
   });
@@ -619,15 +663,16 @@ function submitAsk(lensKey, source) {
       if (!res || !res.ok) rollbackBranch(node);
     });
   }
+  return node;
 }
 
 // An ordinary Note commit docks on the words it marks. The hidden place
 // chord takes the same note path but asks the shared placement primitive to
 // give it geometry immediately.
-function submitNote(source, placed) {
+function submitNote(source, placed, attachmentNames = []) {
   if (!selectionDraft || closed) return;
   if (selectionDraft.blockAnchor) return;
-  const markdown = askText.value.trim();
+  const markdown = noteWithImages(askText.value.trim(), attachmentNames);
   if (!markdown) return;
   const draft = selectionDraft,
     parent = nodes[draft.parentId];
@@ -648,6 +693,7 @@ function submitNote(source, placed) {
   if (sel) sel.removeAllRanges();
   hideAsk();
   revealNode(node, source);
+  return node;
 }
 
 function submitReaction(reaction) {
@@ -676,13 +722,18 @@ function submitReaction(reaction) {
 
 // ---------- follow-up composer ----------
 export function updateComposerState() {
+  if (readerAttachments && readerAttachmentOwner !== currentNodeId) {
+    readerAttachmentOwner = currentNodeId;
+    readerAttachments.reset();
+  }
   const current = nodes[currentNodeId];
-  composerInner.classList.toggle("has-draft", !!composerText.value.trim());
+  composerInner.classList.toggle("has-draft", readerAttachments?.hasDraft || !!composerText.value.trim());
   // A missing agent doesn't disable asking — questions queue server-side and
   // are answered when it returns. Only a closed session (server gone) does.
   applyComposerState(
     {
       text: composerText,
+      hasDraft: readerAttachments?.hasDraft,
       commits: composerActions.querySelectorAll(".ask-commit"),
       lenses: composerActions.querySelectorAll(".lens"),
       wrap: composerInner,
@@ -691,6 +742,7 @@ export function updateComposerState() {
       phase: sessionPhase(),
       pending: !!current && current.status === "pending",
       unavailable: !current || !!current.source?.converting,
+      disabled: readerAttachments?.busy,
     },
     {
       frozen: "Read-only snapshot — open the live Rabbithole to keep asking",
@@ -700,6 +752,10 @@ export function updateComposerState() {
       live: "Ask or note…",
     },
   );
+  if (readerAttachments?.busy)
+    composerActions.querySelectorAll(".lens").forEach((button) => {
+      button.disabled = true;
+    });
 }
 function autoGrowComposer() {
   autoGrowEl(composerText, 140);
@@ -707,7 +763,7 @@ function autoGrowComposer() {
 
 // Shared follow-up submission: from the reader composer or a card's docked
 // one. Every direct child uses the same Reader branch rail.
-export function sendFollowup(parent, question, lens, instruction = null) {
+export function sendFollowup(parent, question, lens, instruction = null, attachmentNames = []) {
   if (parent?.source?.converting) return null;
   const requestId = uuid(),
     childId = uuid();
@@ -716,7 +772,7 @@ export function sendFollowup(parent, question, lens, instruction = null) {
     makeNode({
       id: childId,
       parent_id: parent.id,
-      title: lens ? presetFor("followup", lens)?.label || String(lens) : truncate(question, 48),
+      title: lens ? presetFor("followup", lens)?.label || String(lens) : truncate(question, 48) || "Pasted image",
       html: "",
       markdown: "",
       base_url: parent.base_url || null,
@@ -729,6 +785,7 @@ export function sendFollowup(parent, question, lens, instruction = null) {
         ...(instruction ? { instruction: instruction } : {}),
         anchor: null,
         branch_type: BRANCH_FOLLOWUP,
+        ...(attachmentNames.length ? { attachment_assets: attachmentNames } : {}),
       },
       position: { x: pos.x, y: pos.y },
       size: { w: DEFAULT_CHILD.w, h: DEFAULT_CHILD.h },
@@ -756,6 +813,7 @@ export function sendFollowup(parent, question, lens, instruction = null) {
     ...(instruction ? { instruction: instruction } : {}),
     anchor: null,
     branch_type: BRANCH_FOLLOWUP,
+    ...(attachmentNames.length ? { attachment_assets: attachmentNames } : {}),
     position: { x: node.position.x, y: node.position.y },
     size: { w: node.size.w, h: node.size.h },
   };
@@ -837,24 +895,35 @@ function readerComposerParent(needsSettled) {
 }
 function submitReaderFollowup(commit, source) {
   const parent = readerComposerParent(commit === "ask");
-  const question = composerText.value.trim();
-  if (!parent || !question) return;
-  const node = commit === "ask" ? sendFollowup(parent, question, null) : createPlacedNote(parent, question);
-  if (!node) return;
-  composerText.value = "";
-  autoGrowComposer();
-  updateComposerState();
-  scrollReaderRail(source);
+  if (!parent || !readerAttachments.hasDraft) return;
+  return readerAttachments.submit((names, question) => {
+    if (readerComposerParent(commit === "ask") !== parent) return null;
+    const node =
+      commit === "ask"
+        ? sendFollowup(parent, question, null, null, names)
+        : createPlacedNote(parent, noteWithImages(question, names));
+    if (!node) return null;
+    composerText.value = "";
+    autoGrowComposer();
+    updateComposerState();
+    scrollReaderRail(source);
+    return node;
+  });
 }
 function submitReaderLens(lens, source) {
   const parent = readerComposerParent(true);
   const preset = presetFor("followup", lens);
-  const question = composerText.value.trim();
-  if (!parent || !preset || !sendFollowup(parent, question, lens, preset.instruction)) return;
-  composerText.value = "";
-  autoGrowComposer();
-  updateComposerState();
-  scrollReaderRail(source);
+  if (!parent || !preset) return;
+  return readerAttachments.submit((names, question) => {
+    if (readerComposerParent(true) !== parent) return null;
+    const node = sendFollowup(parent, question, lens, preset.instruction, names);
+    if (!node) return null;
+    composerText.value = "";
+    autoGrowComposer();
+    updateComposerState();
+    scrollReaderRail(source);
+    return node;
+  });
 }
 function scrollReaderRail(source) {
   const notes = document.getElementById("margin-notes");

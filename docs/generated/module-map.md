@@ -69,6 +69,8 @@ This inventory is derived from the source tree.
 - `src/node/bridge/agents/claude.js`
 - `src/node/bridge/agents/codex-search.js`
 - `src/node/bridge/agents/codex.js`
+- `src/node/bridge/agents/ego-browser-mcp.js`
+- `src/node/bridge/agents/ego-browser.js`
 - `src/node/bridge/agents/isolation.js`
 - `src/node/bridge/claude.js`
 - `src/node/bridge/codex.js`
@@ -156,6 +158,7 @@ This inventory is derived from the source tree.
 
 - `src/ui/ask-followups.js`
 - `src/ui/ask-presets.js`
+- `src/ui/authoring/composer-attachments.js`
 - `src/ui/authoring/note-editor.js`
 - `src/ui/authoring/standalone-note-submit.js`
 - `src/ui/branch-surfaces.js`

@@ -50,21 +50,7 @@ export function raiseEventCard(e) {
   if (el) raiseCard(el);
 }
 
-export function clipboardImageFiles(event) {
-  const files = [];
-  for (const item of Array.from(event.clipboardData?.items || [])) {
-    if (
-      item.kind !== "file" ||
-      !String(item.type || "")
-        .toLowerCase()
-        .startsWith("image/")
-    )
-      continue;
-    const file = item.getAsFile();
-    if (file) files.push(file);
-  }
-  return files;
-}
+export { clipboardImageFiles } from "../clipboard-image.js";
 
 export function flashClipboardImageError(error) {
   flashHint(

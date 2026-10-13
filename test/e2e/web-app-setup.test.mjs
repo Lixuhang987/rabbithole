@@ -792,7 +792,7 @@ function bridgeAgentFixture(id, state, options = {}) {
     return {
       id,
       state,
-      plan: options.plan || (id === "claude" ? "Max" : "chatgpt"),
+      plan: options.plan ?? (id === "claude" ? "Max" : "chatgpt"),
       models: bridgeModelsFixture(id, options),
     };
   }
@@ -947,11 +947,15 @@ async function verifySubscriptionsPanelStates() {
     assert.equal(afterAgentSignOut.body, beforeAgentSignOut.body, "a background-agent sign-out must not change the selected agent body");
     assert.equal(afterAgentSignOut.focusedId, "bridge-model", "focus returns to the equivalent selected-agent control");
     assert.equal(afterAgentSignOut.popupCount, 0, "transition disposal leaves no orphan combobox popup");
-    await pushBridgeState(page, readyState);
+    await pushBridgeState(page, bridgeStateFixture("ready", "ready", { codex: { plan: "" } }));
     await page.waitForSelector('.bridge-surface[data-state="ready"] #bridge-model');
     await page.click('[data-provider="codex"]');
     await page.waitForSelector("#codex-web-search-config");
+    assert.match(await page.locator('[data-provider-item="codex"] .provider-copy small').innerText(), /local configuration/);
+    assert.equal(await page.locator('[data-provider-item="codex"] .provider-chip').innerText(), "Ready", "Codex without an OpenAI plan remains selectable");
+    assert.equal(await page.locator("#bridge-model").isEnabled(), true);
     assert.match(await page.locator("#codex-web-search-config").innerText(), /Codex configuration/);
+    assert.match(await page.locator("#codex-web-search-config").innerText(), /Models, authentication, and web search/);
     await page.evaluate(() => window.__bridgeStub.queueRestart({ error: "Wait for current answers to finish, then restart the bridge." }));
     await page.click("#restart-bridge");
     assert.equal(await page.locator("#restart-bridge").isDisabled(), true);

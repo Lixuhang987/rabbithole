@@ -6,6 +6,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
 import {
   CodexAppServer,
@@ -20,6 +21,8 @@ const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-codex-
 const home = path.join(temporaryRoot, "home");
 const data = path.join(temporaryRoot, "data");
 const cwd = path.join(temporaryRoot, "cwd");
+const egoSkill = path.join(home, ".agents/skills/ego-browser/SKILL.md");
+const egoExecutable = fileURLToPath(new URL("../integration/fixtures/fake-ego-browser.mjs", import.meta.url));
 await fs.mkdir(path.join(home, ".codex"), { recursive: true, mode: 0o700 });
 await fs.mkdir(cwd, { mode: 0o700 });
 
@@ -47,6 +50,20 @@ const stub = http.createServer((req, res) => {
           return;
         }
         providerRequests.push(body);
+        if (JSON.stringify(body.input).includes("EGO-CHECK")) {
+          const received = JSON.stringify(body.input).includes("EGO_TOOL_ROUNDTRIP");
+          const item = received
+            ? { type: "message", id: "msg-ego", role: "assistant", content: [{ type: "output_text", text: "Browser verified." }] }
+            : { type: "function_call", call_id: "ego-call", namespace: "mcp__rabbithole_ego_browser", name: "ego_browser", arguments: JSON.stringify({ action: "run", script: "console.log('EGO_TOOL_ROUNDTRIP')" }) };
+          res.writeHead(200, { "Content-Type": "text/event-stream" });
+          for (const event of [
+            { type: "response.created", response: { id: `resp-ego-${providerRequests.length}` } },
+            { type: "response.output_item.done", item },
+            { type: "response.completed", response: { id: `resp-ego-${providerRequests.length}`, status: "completed", output: [] } },
+          ]) res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+          res.end();
+          return;
+        }
         if (JSON.stringify(body.input).includes("FORK-CHECK")) {
           const item = { type: "message", id: "msg-fork", role: "assistant", content: [{ type: "output_text", text: "Fork verified." }] };
           res.writeHead(200, { "Content-Type": "text/event-stream" });
@@ -230,6 +247,34 @@ try {
   assert.match(JSON.stringify(providerRequests.at(-1).input), /Fork verified/);
   assert.deepEqual(providerRequests.at(-1).tools.map((tool) => tool.name), ["web"], "descendant uses current search-on configuration");
   process.stdout.write("persistent baseline: no model call; restart fork: inherited article and child answer\n");
+
+  appServer.close();
+  await fs.mkdir(path.dirname(egoSkill), { recursive: true });
+  await fs.writeFile(egoSkill, "---\nname: ego-browser\ndescription: Browse with Ego.\n---\n\nEGO_SKILL_INSTRUCTIONS\n");
+  const otherSkill = path.join(home, ".agents/skills/unrelated-skill/SKILL.md");
+  await fs.mkdir(path.dirname(otherSkill), { recursive: true });
+  await fs.writeFile(otherSkill, "---\nname: unrelated-skill\ndescription: UNRELATED_SKILL_DESCRIPTION\n---\nUNRELATED_SKILL_BODY\n");
+  await fs.writeFile(configPath, 'web_search = "disabled"\n' + providerConfig + isolationFixture);
+  appServer = new CodexAppServer({ executable, env: { ...env, RABBITHOLE_BRIDGE_EGO_BIN: egoExecutable }, cwd, version: "0.4.0-test" });
+  await appServer.ensureStarted();
+  const beforeEgo = providerRequests.length;
+  const egoAnswer = await appServer.turn({
+    model: "rabbithole-isolation-model", messages: [{ role: "user", content: "EGO-CHECK: browse using the selected skill." }],
+    reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {},
+    conversation: { version: 1, operation: "fork", nodeId: "ego-child", source: baseline.conversation },
+  });
+  assert.equal(egoAnswer.text, "Browser verified.");
+  const egoRequests = providerRequests.slice(beforeEgo);
+  assert.equal(egoRequests.length, 2, "installed Codex completes the MCP browser round trip");
+  assert.match(JSON.stringify(egoRequests[0].input), /EGO_SKILL_INSTRUCTIONS/);
+  assert.equal(/UNRELATED_SKILL_(?:DESCRIPTION|BODY)/.test(JSON.stringify(egoRequests)), false);
+  const egoToolNames = egoRequests[0].tools.map((tool) => tool.name);
+  const egoNamespace = egoRequests[0].tools.find((tool) => tool.name === "mcp__rabbithole_ego_browser");
+  assert.deepEqual(egoNamespace?.tools?.map((tool) => tool.name), ["ego_browser"], JSON.stringify(egoToolNames));
+  assert.equal(egoToolNames.some((name) => /exec_command|shell|user_server/.test(name)), false);
+  assert.match(JSON.stringify(egoRequests[1].input), /EGO_TOOL_ROUNDTRIP/);
+  assert.equal(await fs.readFile(configPath, "utf8"), 'web_search = "disabled"\n' + providerConfig + isolationFixture);
+  process.stdout.write(`ego-browser: one skill, no shell/user MCP, legacy-source fork tool round trip; tools=${JSON.stringify(egoToolNames)}\n`);
 
   const started = process.hrtime.bigint();
   const mcp = await execFileAsync(executable, ["mcp", ...codexIsolationArgs(), "-c", 'mcp_servers={"user_server"={enabled=false}}', "list", "--json"], {

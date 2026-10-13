@@ -1,5 +1,6 @@
 import { composerActionsMarkup } from "../../core/html/markup.js";
 import { presetFor, renderAskPresetActions } from "../ask-presets.js";
+import { createComposerAttachments, noteWithImages } from "../authoring/composer-attachments.js";
 import { applyComposerState, wireComposerActions } from "../composer-state.js";
 import { closed, flashHint, motionSourceFromEvent, sessionPhase, view, viewport } from "../core.js";
 import { revealNode } from "./camera.js";
@@ -79,6 +80,13 @@ export function buildCardComposer(node) {
   node.ncText = ta;
   node.ncActions = actions;
   node.ncHandle = handle;
+  node._composerAttachments?.dispose();
+  node._composerAttachments = createComposerAttachments({
+    text: ta,
+    actions,
+    onChange: () => updateCardComposer(node),
+    active: () => !!node.el && !closed,
+  });
   handle.addEventListener("click", function (e) {
     e.stopPropagation();
     openCardDrawer(node);
@@ -97,6 +105,7 @@ export function buildCardComposer(node) {
   wireComposerActions({
     text: ta,
     actions: actions,
+    hasDraft: () => node._composerAttachments.hasDraft,
     onCommit: function (kind, e) {
       e.stopPropagation();
       submitCardFollowup(node, kind, cardComposerSource(e));
@@ -108,7 +117,7 @@ export function buildCardComposer(node) {
   });
   // Click-away with an empty drawer tucks it back in (a draft keeps it out).
   ta.addEventListener("blur", function () {
-    if (!ta.value.trim() && !(node.el && node.el.matches(":hover"))) closeCardDrawer(node);
+    if (!node._composerAttachments.hasDraft && !(node.el && node.el.matches(":hover"))) closeCardDrawer(node);
   });
   return comp;
 }
@@ -157,19 +166,29 @@ export function updateCardComposer(node) {
   }
   if (!node.ncText) return;
   // A draft in progress keeps the drawer out even when the pointer wanders off.
-  const hasDraft = !!node.ncText.value.trim();
+  const hasDraft = node._composerAttachments?.hasDraft || !!node.ncText.value.trim();
   node.ncComp.classList.toggle("nc-draft", hasDraft);
   node.ncInner.classList.toggle("has-draft", hasDraft);
   applyComposerState(
     {
       text: node.ncText,
+      hasDraft,
       commits: node.ncActions.querySelectorAll(".ask-commit"),
       lenses: node.ncActions.querySelectorAll(".lens"),
       wrap: node.ncInner,
     },
-    { phase: sessionPhase(), pending: node.status === "pending", unavailable: !!node.source?.converting },
+    {
+      phase: sessionPhase(),
+      pending: node.status === "pending",
+      unavailable: !!node.source?.converting,
+      disabled: node._composerAttachments?.busy,
+    },
     r.CARD_COMPOSER_COPY,
   );
+  if (node._composerAttachments?.busy)
+    node.ncActions.querySelectorAll(".lens").forEach((button) => {
+      button.disabled = true;
+    });
 }
 
 // The card composer's submit gate (a closed session says so out loud), and
@@ -192,23 +211,29 @@ export function submitCardLens(node, lens, source) {
   if (cardComposerBlocked(node, true)) return;
   const preset = presetFor("followup", lens);
   if (!preset) return;
-  const kid = r.lifecycle.hooks.sendFollowup(node, node.ncText.value.trim(), lens, preset.instruction);
-  if (!kid) return;
-  node.ncText.value = "";
-  autoGrowEl(node.ncText, 90);
-  settleCardSubmit(node, kid, source);
+  return node._composerAttachments.submit((names, question) => {
+    if (cardComposerBlocked(node, true)) return null;
+    const kid = r.lifecycle.hooks.sendFollowup(node, question, lens, preset.instruction, names);
+    if (!kid) return null;
+    node.ncText.value = "";
+    autoGrowEl(node.ncText, 90);
+    settleCardSubmit(node, kid, source);
+    return kid;
+  });
 }
 
 export function submitCardFollowup(node, commit, source) {
-  if (cardComposerBlocked(node, commit === "ask")) return;
-  const question = node.ncText.value.trim();
-  if (!question) return;
-  const kid =
-    commit === "ask"
-      ? r.lifecycle.hooks.sendFollowup(node, question, null)
-      : r.lifecycle.hooks.sendPlacedNote(node, question);
-  if (!kid) return;
-  node.ncText.value = "";
-  autoGrowEl(node.ncText, 90);
-  settleCardSubmit(node, kid, source);
+  if (cardComposerBlocked(node, commit === "ask") || !node._composerAttachments.hasDraft) return;
+  return node._composerAttachments.submit((names, question) => {
+    if (cardComposerBlocked(node, commit === "ask")) return null;
+    const kid =
+      commit === "ask"
+        ? r.lifecycle.hooks.sendFollowup(node, question, null, null, names)
+        : r.lifecycle.hooks.sendPlacedNote(node, noteWithImages(question, names));
+    if (!kid) return null;
+    node.ncText.value = "";
+    autoGrowEl(node.ncText, 90);
+    settleCardSubmit(node, kid, source);
+    return kid;
+  });
 }

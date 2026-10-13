@@ -12,12 +12,12 @@ export function openAiUsage(usage) {
   };
 }
 
-/** Shared installed/authenticated/catalog probe for Claude and Codex adapters. */
+/** Shared availability/catalog probe; adapters can allow account-free local providers. */
 export async function probeAgent({ name, executable, installFix, loginFix, errorFix, status, models }) {
   if (!executable) return unavailableAgent(name, "missing", installFix);
   try {
     const current = await status();
-    if (!current.signedIn) return unavailableAgent(name, "signed_out", loginFix);
+    if (current.requiresLogin ?? !current.signedIn) return unavailableAgent(name, "signed_out", loginFix);
     const catalog = await models();
     if (!catalog.length) return unavailableAgent(name, "error", errorFix, "Empty model catalog");
     return readyAgent(name, { plan: current.plan, models: catalog });

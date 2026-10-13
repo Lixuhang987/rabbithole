@@ -1071,7 +1071,7 @@ function providerForSettings(settings) {
 
 function providerRequiredErrorForSettings(settings) {
   return providerFor(settings.preset).id === "subscriptions"
-    ? { message: "Connect your Claude or ChatGPT plan to keep asking.", code: "subscription_unpaired" }
+    ? { message: "Connect Claude Code or Codex to keep asking.", code: "subscription_unpaired" }
     : null;
 }
 

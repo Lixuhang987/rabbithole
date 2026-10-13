@@ -6,7 +6,7 @@ export function bridgeRootUrl(baseUrl) {
 }
 
 export const BRIDGE_COMMAND = "npx @shlokkhemani/rabbithole bridge";
-export const BRIDGE_DOWN_HEADING = "Use your Claude or ChatGPT plan.";
+export const BRIDGE_DOWN_HEADING = "Use Claude Code or Codex on this computer.";
 export const BRIDGE_RECONNECT_INITIAL_MS = 1_000;
 export const BRIDGE_RECONNECT_MAX_MS = 15_000;
 export const BRIDGE_PING_INTERVAL_MS = 2_000;

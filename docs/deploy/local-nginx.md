@@ -13,6 +13,8 @@ This runbook describes the macOS deployment configured on 2026-10-07. Paths and 
 
 **A launchd service does not inherit terminal proxy variables.** On this machine, direct OpenAI connections time out; the bridge launch agent therefore explicitly sets `http_proxy` and `https_proxy` to `http://127.0.0.1:7897`, and `all_proxy` to `socks5://127.0.0.1:7897`. `NO_PROXY` and `no_proxy` exclude `localhost,127.0.0.1,::1`. Keep that local proxy running; if its port changes, update the plist. Account/model discovery succeeding does not prove that generation can reach OpenAI.
 
+Codex's configured third-party provider also reads its credential through `env_key`. The bridge launch agent must supply that variable; a key available only in the terminal leaves model discovery working while generation fails. This installation supplies it through `EnvironmentVariables`, and the plist is restricted to mode `0600`. Keep that private plist out of version control and shared logs.
+
 After changing the launch agent's environment, unload and reload it; `kickstart` alone does not reread an edited plist. This interrupts active answers:
 
 ```bash
@@ -59,7 +61,7 @@ That foreground process must remain open. `npx @shlokkhemani/rabbithole bridge` 
 2. Paste the bridge's pairing link into Pairing link and click Connect. The field also accepts just the token; copy this installation's token with `cat ~/.rabbithole/bridge-token | pbcopy`.
 3. Select Codex or Claude Code and confirm Ready. Complete setup if prompted. For Codex answers, Web search is on by default.
 
-The bridge reuses the local CLI's login. Codex uses its normal user configuration and login, respecting `CODEX_HOME` when supplied; Claude Code obtains its existing login through the installed CLI. Codex providers and Web Search are inherited, while the bridge overrides MCP, skills, goals, multi-agent and sandbox permissions. If an agent is signed out, run `codex login` or `claude /login`, then retry. Do not enter an account password or OpenAI API key in Pairing link.
+The bridge reuses the local CLI's authentication. Codex uses its normal user configuration, respecting `CODEX_HOME` when supplied; providers that do not require OpenAI authentication work without OpenAI sign-in. Claude Code obtains its existing login through the installed CLI. Codex providers and Web Search are inherited, while the bridge overrides MCP, skills, goals, multi-agent and sandbox permissions, with [ego-browser as the sole skill exception](codex-ego-browser.md). If a provider requires account login, run `codex login` or `claude /login`, then retry. Do not enter an account password or provider API key in Pairing link.
 
 Ordinary restarts retain `~/.rabbithole/bridge-token`. Changing it with `--new-token` invalidates existing browser pairings. The private service log is `~/.rabbithole/bridge-launchd.log`; it contains the pairing token, so keep its permissions restricted and redact tokens before sharing logs.
 

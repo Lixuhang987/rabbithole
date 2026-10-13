@@ -23,7 +23,7 @@ The web app supports OpenRouter, local and custom OpenAI-compatible endpoints, a
 npx @shlokkhemani/rabbithole bridge
 ```
 
-The bridge prints a private pairing link and connects the page to an installed, signed-in Claude Code or Codex CLI. It binds only to loopback.
+The bridge prints a private pairing link and connects the page to an installed Claude Code or Codex CLI. Codex uses your local provider configuration, including third-party endpoints that do not require OpenAI sign-in. The bridge binds only to loopback.
 
 ## MCP quick start
 

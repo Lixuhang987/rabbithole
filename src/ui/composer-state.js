@@ -93,6 +93,7 @@ export function wireComposerActions(surface) {
     if (
       !isComposingText(e) &&
       surface.text.value === "" &&
+      !hasDraft() &&
       !e.metaKey &&
       !e.ctrlKey &&
       !e.altKey &&
@@ -111,6 +112,7 @@ export function wireComposerActions(surface) {
       surface.onReaction &&
       !isComposingText(e) &&
       surface.text.value === "" &&
+      !hasDraft() &&
       !e.metaKey &&
       !e.ctrlKey &&
       !e.altKey &&
