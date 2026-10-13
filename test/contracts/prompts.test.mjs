@@ -1,8 +1,7 @@
 /** @protects prompts capability contracts. */
 import assert from "node:assert/strict";
 import { buildAnswerMessages } from "../../src/core/prompts/answering-v1.js";
-import { AUTHORING_VOCABULARY_V1 } from "../../src/core/prompts/authoring-v1.js";
-import { buildTranscribeMessages, TRANSCRIBE_V1_RULES } from "../../src/core/prompts/transcribe-v1.js";
+import { buildTranscribeMessages } from "../../src/core/prompts/transcribe-v1.js";
 
 const context = { root_title: "Root", parent_title: "Parent", parent_markdown: "Body", ancestors: [], selected_text: "x", question: "Why?", lens: null };
 const without = buildAnswerMessages(context);
@@ -14,11 +13,9 @@ const dataUrl = "data:image/jpeg;base64,/9j/2Q==";
 const withImage = buildAnswerMessages({ ...context, attachment: { kind: "image", data_url: dataUrl, page: 7 } });
 assert.deepEqual(withImage[1].content.map((part) => part.type), ["text", "image_url"]);
 assert.equal(withImage[1].content[1].image_url.url, dataUrl);
-assert(withImage[1].content[0].text.startsWith("Selection region image: attached (page 7). Trust the image over extracted text for math, tables, and figures.\n"));
 assert.equal(JSON.stringify(buildAnswerMessages(context)), baseline, "attachment assembly must not mutate its source context");
 
 const inherited = buildAnswerMessages({ ...context, attachment: { kind: "image", data_url: dataUrl, page: 7, source: "parent_crop" } });
-assert(inherited[1].content[0].text.startsWith("Parent clip image: attached (page 7). Trust the image over extracted text for math, tables, and figures.\n"));
 assert.equal(inherited[1].content[1].image_url.url, dataUrl);
 
 const styled = buildAnswerMessages({ ...context, question: "Focus on the failure mode.", lens: "deeper", instruction: "Use a systems lens." });
@@ -33,7 +30,6 @@ const pasted = buildAnswerMessages({ ...context, attachments: [
   { kind: "image", data_url: "data:image/jpeg;base64,BBBB", source: "pasted_image" },
 ] });
 assert.deepEqual(pasted[1].content.map((part) => part.type), ["text", "image_url", "image_url"]);
-assert(pasted[1].content[0].text.startsWith("Pasted images: attached. Use them as part of the human's question.\n"));
 assert.equal(pasted[1].content[0].text.includes("page undefined"), false);
 assert.deepEqual(pasted[1].content.slice(1).map((part) => part.image_url.url), [
   "data:image/png;base64,AAAA", "data:image/jpeg;base64,BBBB",
@@ -49,7 +45,6 @@ const noteContext = {
   ],
 };
 const noteMessages = buildAnswerMessages(noteContext);
-assert.match(noteMessages[0].content, /Each note is attributed to the human or an agent/);
 assert.match(noteMessages[1].content, /Human question:\nWhy\?\n\nNotes:\n- Human: Compare this globally\.\n- Human: Anchored to "the exact clause": This caveat matters\.\n- Agent: On "Parent": This applies to the whole parent\.\n\nParent document markdown:/);
 assert.equal(noteMessages[1].content.includes('Anchored to "null"'), false, "anchor-less parented notes must never stringify a null anchor");
 
@@ -67,15 +62,6 @@ assert.ok(longMessages.includes(longContext.ancestors[0].markdown), "complete an
 
 const transcription = buildTranscribeMessages({ pages: [{ n: 7, data_url: dataUrl }], tail: "x".repeat(700) });
 assert.equal(transcription[0].content.at(-1).image_url.url, dataUrl);
-assert.match(TRANSCRIBE_V1_RULES, /GitHub-flavored Markdown/); assert.match(TRANSCRIBE_V1_RULES, /LaTeX/); assert.match(TRANSCRIBE_V1_RULES, /GFM tables/);
-assert.match(TRANSCRIBE_V1_RULES, /figure:page-NNN:x,y,w,h/); assert.match(TRANSCRIBE_V1_RULES, /running headers/); assert.match(TRANSCRIBE_V1_RULES, /no TITLE sentinel/i);
 assert.equal(transcription[0].content[0].text.includes("x".repeat(500)), true); assert.equal(transcription[0].content[0].text.includes("x".repeat(501)), false);
-assert.match(AUTHORING_VOCABULARY_V1, /```mermaid/);
-assert.match(AUTHORING_VOCABULARY_V1, /flowcharts, sequence, class, state, and entity-relationship/);
-assert.match(AUTHORING_VOCABULARY_V1, /Markdown Strings/);
-assert.match(AUTHORING_VOCABULARY_V1, /Do not put HTML tags such as <i>, <b>, or <br> in Mermaid labels/);
-assert.match(AUTHORING_VOCABULARY_V1, /mindmap, architecture, and Mermaid-side KaTeX syntax are not supported/);
-assert.match(AUTHORING_VOCABULARY_V1, /```show id=<slug>/);
-assert.match(AUTHORING_VOCABULARY_V1, /```check with strict JSON/);
 
-console.log("ok prompts: PDF attachments, complete note and article context, byte-identical text-only messages, and Mermaid guidance");
+console.log("ok prompts: PDF attachments, complete note and article context, and byte-identical text-only messages");

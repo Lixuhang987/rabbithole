@@ -76,6 +76,7 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/integration/artifact-portability.test.mjs` — artifact portability capability contracts.
 - `test/integration/bridge-failure-modes.test.mjs` — bridge failure modes capability contracts.
 - `test/integration/bridge-http.test.mjs` — bridge http capability contracts.
+- `test/integration/bridge-long-answer.test.mjs` — long subscribed answers complete while cancellation remains explicit.
 - `test/integration/codex-ego-browser.test.mjs` — the Codex ego-browser skill's executable MCP adapter and reference/image round trips.
 - `test/integration/custom-endpoint.test.mjs` — custom endpoint capability contracts.
 - `test/integration/generation-lifecycle.test.mjs` — generation lifecycle capability contracts.
@@ -96,7 +97,7 @@ Each description is harvested from the test file's `@protects` declaration.
 ## e2e
 
 - `test/e2e/auto-tidy.test.mjs` — auto-tidy live canvas behavior, settings, and frozen exclusion.
-- `test/e2e/canvas-edge-scroll.test.mjs` — canvas edge scroll capability contracts.
+- `test/e2e/canvas-edge-scroll.test.mjs` — canvas edge scroll and anchored Command-wheel zoom capability contracts.
 - `test/e2e/cross-host-journey.test.mjs` — cross host journey capability contracts.
 - `test/e2e/enter-composition.test.mjs` — enter composition capability contracts.
 - `test/e2e/preferences-persistence.test.mjs` — durable MCP reader preferences across origins and frozen isolation.

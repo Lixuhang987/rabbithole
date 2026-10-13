@@ -10,7 +10,6 @@ import { buildCodexInput } from "../messages.js";
 import { codexModelEntry } from "../models.js";
 import { startingAgent } from "../state.js";
 import { resolveExecutable, terminateChild, runCaptured } from "./isolation.js";
-import { armAgentTurnDeadline } from "../../shared/deadline.js";
 import { createNdjsonReader } from "../../shared/ndjson.js";
 import { openAiUsage, probeAgent } from "./agent.js";
 import { SearchCitations, searchSources } from "./codex-search.js";
@@ -568,11 +567,6 @@ export class CodexAppServer {
         rejectTurn(abortError(signal));
       };
       signal?.addEventListener("abort", onAbort, { once: true });
-      const clearTurnDeadline = armAgentTurnDeadline(() => {
-        turn.aborted = true;
-        void this.interrupt(turn);
-        rejectTurn(new BridgeError("Codex turn exceeded 300 seconds.", "turn_failed", 500));
-      });
 
       try {
         const response = await this.request("turn/start", {
@@ -600,7 +594,6 @@ export class CodexAppServer {
         return { ...result, ...(reference ? { conversation: reference } : {}) };
       } finally {
         turn.resolveStarted?.();
-        clearTurnDeadline();
         signal?.removeEventListener("abort", onAbort);
         if (!turn.aborted) this.turns.delete(threadId);
       }

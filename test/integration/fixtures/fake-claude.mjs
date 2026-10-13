@@ -41,7 +41,7 @@ process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
   input += chunk;
 });
-process.stdin.on("end", () => {
+process.stdin.on("end", async () => {
   const request = JSON.parse(input.trim());
   if (process.env.FAKE_CLAUDE_RECORD) {
     fs.appendFileSync(process.env.FAKE_CLAUDE_RECORD, `${JSON.stringify({
@@ -108,6 +108,7 @@ process.stdin.on("end", () => {
     return;
   }
 
+  if (text.includes("LONG_RESPONSE")) await new Promise((resolve) => setTimeout(resolve, 250));
   const answer = hasImage ? "RED" : "OK";
   for (const delta of [answer.slice(0, 1), answer.slice(1)]) {
     if (!delta) continue;

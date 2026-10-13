@@ -18,7 +18,6 @@ import {
   terminateChild,
 } from "./isolation.js";
 import { errorCode } from "../../shared/errno.js";
-import { armAgentTurnDeadline } from "../../shared/deadline.js";
 import { createNdjsonReader } from "../../shared/ndjson.js";
 import { openAiUsage, probeAgent } from "./agent.js";
 
@@ -279,7 +278,6 @@ export class ClaudeBackend {
 
         const cleanup = () => {
           clearTimeout(firstEventTimer);
-          clearTurnDeadline();
           signal?.removeEventListener("abort", onAbort);
           this.children.delete(child);
         };
@@ -311,9 +309,6 @@ export class ClaudeBackend {
         const firstEventTimer = setTimeout(() => {
           fail(new BridgeError("Claude Code did not start in time.", "turn_failed", 500));
         }, FIRST_EVENT_TIMEOUT_MS);
-        const clearTurnDeadline = armAgentTurnDeadline(() => {
-          fail(new BridgeError("Claude Code turn exceeded 300 seconds.", "turn_failed", 500));
-        });
 
         signal?.addEventListener("abort", onAbort, { once: true });
         child.once("error", (error) => {

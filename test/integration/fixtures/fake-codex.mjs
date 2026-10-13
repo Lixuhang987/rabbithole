@@ -221,7 +221,7 @@ process.stdin.on("data", (chunk) => {
       if (search) emit({ method: "item/started", params: { threadId: params.threadId, turnId, item: { type: "webSearch", id: `search-${turnId}`, query: "", action: null, results: null } } });
       const timer = text.includes("SLOW")
         ? null
-        : setTimeout(() => complete(params.threadId, turnId), 20);
+        : setTimeout(() => complete(params.threadId, turnId), text.includes("LONG_RESPONSE") ? 250 : 20);
       turns.set(turnId, { threadId: params.threadId, timer, search, answer, failSearch: text.includes("SEARCH FAIL") && (!text.includes("FAIL ONCE") || !failedOnce.has(text)) });
       failedOnce.add(text);
     } else if (method === "turn/interrupt") {

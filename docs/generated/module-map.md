@@ -134,7 +134,6 @@ This inventory is derived from the source tree.
 - `src/node/pdf-ingest.js`
 - `src/node/rabbithole.js`
 - `src/node/sessions.js`
-- `src/node/shared/deadline.js`
 - `src/node/shared/dist-assets.js`
 - `src/node/shared/errno.js`
 - `src/node/shared/http-guard.js`

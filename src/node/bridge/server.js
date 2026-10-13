@@ -25,11 +25,9 @@ import {
 } from "../shared/http.js";
 import { assertHttpRequest } from "../shared/http-guard.js";
 import { errorCode, errorStatusCode } from "../shared/errno.js";
-import { AGENT_TURN_DEADLINE_MS } from "../shared/deadline.js";
 import { shortId } from "../shared/ids.js";
 
 const HOST = "127.0.0.1";
-const REQUEST_TIMEOUT_MS = AGENT_TURN_DEADLINE_MS;
 
 function sendJson(res, statusCode, body) {
   if (res.writableEnded || res.destroyed) return;
@@ -175,7 +173,6 @@ export async function createBridge({
     assertAvailable();
     let streamStarted = false;
     let clientAborted = false;
-    let timedOut = false;
     const controller = new AbortController();
     activeControllers.add(controller);
     const abortForClient = () => {
@@ -188,14 +185,6 @@ export async function createBridge({
     };
     req.once("aborted", abortForClient);
     res.once("close", onResponseClose);
-    const timer = setTimeout(() => {
-      timedOut = true;
-      controller.abort(new BridgeError(
-        "Agent turn exceeded 300 seconds.",
-        "turn_failed",
-        500
-      ));
-    }, REQUEST_TIMEOUT_MS);
 
     const startStream = () => {
       if (streamStarted || res.destroyed) return;
@@ -319,7 +308,7 @@ export async function createBridge({
         });
       }
     } catch (error) {
-      if (clientAborted || (isAbortError(error) && !timedOut)) return;
+      if (clientAborted || isAbortError(error)) return;
       const normalized = requestError(error);
       if (streamStarted) {
         sseData(res, errorBody(normalized).body);
@@ -329,7 +318,6 @@ export async function createBridge({
         sendBridgeError(res, normalized);
       }
     } finally {
-      clearTimeout(timer);
       req.removeListener("aborted", abortForClient);
       res.removeListener("close", onResponseClose);
       activeControllers.delete(controller);
