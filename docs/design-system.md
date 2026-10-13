@@ -41,7 +41,7 @@ This section is generated from `src/design/tokens.css`. Edit the stylesheet, the
   --space-7: 14px; --space-8: 16px; --space-9: 20px; --space-10: 24px; --space-11: 28px;
 
   /* Controls */
-  --control-h-xs: 24px; --control-h-sm: 28px; --control-h-md: 36px; --control-h-lg: 44px; --taskbar-pill-pad-block: 7px;
+  --control-h-xs: 24px; --control-h-sm: 28px; --control-h-lg: 44px; --taskbar-pill-pad-block: 7px;
   --control-pad-x-compact: 8px; --control-gap: 6px;
 
   /* Shape */
@@ -65,10 +65,7 @@ This section is generated from `src/design/tokens.css`. Edit the stylesheet, the
 
   /* Motion */
   --duration-zero: 0ms; --duration-instant: 70ms; --duration-fast: 120ms; --duration-legacy-150: 150ms;
-  --duration-enter: 160ms; --duration-legacy-180: 180ms; --duration-legacy-200: 200ms;
-  --duration-legacy-220: 220ms; --duration-legacy-240: 240ms; --duration-legacy-260: 260ms;
-  --duration-legacy-320: 320ms; --duration-slow: 340ms; --duration-legacy-600: 600ms;
-  --duration-legacy-1100: 1100ms; --duration-legacy-1150: 1150ms;
+  --duration-enter: 160ms; --duration-legacy-180: 180ms; --duration-legacy-220: 220ms; --duration-slow: 340ms; --duration-legacy-1150: 1150ms;
   --duration-legacy-1350: 1350ms; --duration-legacy-1450: 1450ms;
   --ease-standard: ease; --ease-out: cubic-bezier(.23, 1, .32, 1); --ease-spring: cubic-bezier(.3, 1.4, .45, 1);
   --transition-color: color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);

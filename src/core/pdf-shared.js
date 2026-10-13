@@ -6,6 +6,12 @@ const PDF_AGENT_CROP_PADDING_POINTS = 12;
 
 const FIGURE_REF_RE = /!\[([^\]\n]*)\]\(figure:page-(\d{1,6}):([^\s)]+)\)/g;
 
+/** @param {any} node */
+export function pdfArticleNeedsConversion(node) {
+  const pdf = node?.source || node?.extensions?.pdf;
+  return pdf?.version === 2 && (pdf.converting || !pdf.converted);
+}
+
 /** @param {unknown} markdown */
 export function parseFigureRefs(markdown) {
   const source = String(markdown || ""), refs = [];

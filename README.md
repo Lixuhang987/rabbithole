@@ -2,73 +2,54 @@
 
 An infinite canvas for learning. Open a document, ask at any point, and follow each answer into a new document.
 
-[![Rabbithole branching canvas demo](website/public/demo-ask-poster.jpg)](https://rabbithole.ing)
+[Open the web app](https://rabbithole.ing) · [Offline architecture tour](docs/tour.html)
 
-**[Open the web app](https://rabbithole.ing)** · **[Explore the offline architecture tour](docs/tour.html)**
+## Quick start
 
-Rabbithole has two hosts and one canvas:
-
-- The static web app uses your chosen model endpoint or the coding-agent subscription already signed in on your machine.
-- The MCP server lets Claude Code, Codex, and other MCP clients answer while the canvas, storage, and local transport stay on your machine.
-
-No account, telemetry, or hosted document store. Web documents live in your browser. MCP documents live under `~/.rabbithole/` unless `RABBITHOLE_DIR` overrides it.
-
-## Web
-
-Visit [rabbithole.ing](https://rabbithole.ing), then paste a question or URL, drop Markdown or PDF, or import a Rabbithole file.
-
-The web app supports OpenRouter, local and custom OpenAI-compatible endpoints, and the optional subscription bridge:
+Requires Node 18+, a browser, and an installed Codex CLI.
 
 ```bash
 npx @shlokkhemani/rabbithole bridge
 ```
 
-The bridge prints a private pairing link and connects the page to an installed Claude Code or Codex CLI. Codex uses your local provider configuration, including third-party endpoints that do not require OpenAI sign-in. The bridge binds only to loopback.
+Open the private pairing link printed by the bridge. Choose a model and reasoning
+in Model settings, then start with a question, URL, Markdown, PDF, or Rabbithole file.
+Keep the bridge running while asking questions.
 
-## MCP quick start
+Codex uses its local provider configuration and authentication. Every generation
+creates a persistent native session; questions on generated articles fork their
+source session independently. Every Ask on imported Markdown or PDF starts a new
+session with the readable article. Unavailable history fails explicitly.
 
-Requires Node 18+ and a browser.
+Documents live in this browser's IndexedDB. Native history stays with Codex on this
+computer. Exports and offline snapshots omit local session references. The bridge
+binds to loopback and requires pairing. There is no Rabbithole account or hosted
+document store.
 
-Claude Code:
+Claude Code and OpenCode execution are TODOs. Rabbithole's public MCP workflow and
+direct model endpoints have been removed. This release has no settings or session
+reference migration.
 
-```bash
-claude mcp add rabbithole -- npx -y github:shlokkhemani/rabbithole
-```
-
-Codex:
-
-```bash
-codex mcp add rabbithole -- npx -y github:shlokkhemani/rabbithole
-```
-
-Then start a fresh agent session and say:
-
-> Open this document in Rabbithole.
-
-The tool call stays pending while the agent listens for canvas asks. If a client enforces a short MCP tool timeout, raise that client's timeout; saved asks survive disconnects and resume.
-
-## Develop
+## Run the browser version locally
 
 ```bash
-git clone https://github.com/shlokkhemani/rabbithole.git
-cd rabbithole
 npm install
 npm run build
-npm test
+node bin/rabbithole.js bridge --no-open
 ```
 
-Useful references:
+Serve `web/dist/` with a static server and an entry-page fallback.
 
-- [Product and architecture tour](docs/01-tour.md)
-- [Generated module map](docs/generated/module-map.md)
-- [Generated command map](docs/generated/commands.md)
-- [Testing model](docs/05-contribute.md)
+- [Architecture](docs/02-architecture.md)
+- [Data and trust](docs/03-data-and-trust.md)
+- [Testing](docs/testing.md)
 - [Deployment and bridge operations](docs/06-deploy.md)
-- [Compatibility contract](docs/compatibility.md)
+- [Data contracts](docs/compatibility.md)
 - [Design system](docs/design-system.md)
 - [Historical proposals](docs/proposals/README.md)
 
-The canvas and frozen snapshots remain self-contained HTML. The browser bundles in `dist/` are committed so the package can run without an install-time build.
+The shared core executes as ES modules. Browser bundles in `dist/` are committed;
+frozen snapshots embed their runtimes and assets for offline reading.
 
 ## License
 

@@ -1,5 +1,5 @@
 import { LEARN } from "./answering-v1.js";
-import { AUTHORING_VOCABULARY_V1, normalizePromptText } from "./authoring-v1.js";
+import { normalizePromptText } from "./authoring-v1.js";
 
 const EXPLAINER_SYSTEM_PROMPT_V1 = [
   "You are the explainer Provider for Rabbithole, a branching-document canvas for learning.",
@@ -11,17 +11,11 @@ const EXPLAINER_SYSTEM_PROMPT_V1 = [
 ].join("\n");
 
 /** @param {{question?: unknown}} [options] */
-export function buildExplainerMessages({ question = "" } = {}) {
-  return [
-    { role: "system", content: EXPLAINER_SYSTEM_PROMPT_V1 },
-    {
-      role: "user",
-      content: [
+export function buildExplainerInput({ question = "" } = {}) {
+  return { instructions: EXPLAINER_SYSTEM_PROMPT_V1, text: [
         "Question:",
         normalizePromptText(question) || "(empty)",
         "",
         "Write the root Rabbithole document.",
-      ].join("\n"),
-    },
-  ];
+      ].join("\n"), images: [] };
 }

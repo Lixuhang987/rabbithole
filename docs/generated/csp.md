@@ -7,8 +7,6 @@
 - `'self'`
 - `blob:`
 - `https:`
-- `http:`
-- `https://openrouter.ai`
 - `https://api.github.com`
 - `https://arxiv.org`
 - `https://www.arxiv.org`
@@ -19,7 +17,7 @@
 - `http://localhost:*`
 - `http://127.0.0.1:*`
 
-The browser list is broad so users can choose custom model endpoints; script execution remains self-only.
+Browser HTTPS supports ingestion; loopback HTTP supports the paired bridge.
 
 ## Fetch-proxy hosts
 

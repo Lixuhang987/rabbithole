@@ -1,4 +1,4 @@
-/** Stderr-only logger. stdout is reserved for the MCP stdio transport. */
+/** Stderr-only logger. CLI stdout carries the pairing banner. */
 import { inspect } from "node:util";
 
 const PREFIX = "[rabbithole";

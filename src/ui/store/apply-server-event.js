@@ -4,7 +4,6 @@ const DOCUMENT_EVENTS = new Set([
   "node_answered",
   "node_deleted",
   "node_progress",
-  "node_work_state",
   "node_search_status",
   "node_extensions_patch",
   "pdf_convert_progress",
@@ -36,8 +35,6 @@ export function applyServerEvent(store, message, options = {}) {
   if (!node) return result;
 
   if (type === "node_answered") {
-    node.delegated = false;
-    node.queued = false;
     node.error = null;
     node._searchStatus = null;
     node._searchCalls = new Map();
@@ -52,8 +49,6 @@ export function applyServerEvent(store, message, options = {}) {
     invalidated.add("status");
   } else if (type === "node_progress" && node.status === "pending") {
     result.firstChunk = !node.markdown;
-    node.delegated = false;
-    node.queued = false;
     node.error = null;
     if (!message.markdown) {
       node._searchStatus = null;
@@ -72,10 +67,6 @@ export function applyServerEvent(store, message, options = {}) {
       );
     } else node._searchCalls.delete(message.call_id);
     node._searchStatus = node._searchCalls.values().next().value || null;
-    invalidated.add("status");
-  } else if (type === "node_work_state" && node.status === "pending") {
-    node.delegated = message.state === "delegated";
-    node.queued = message.state === "queued";
     invalidated.add("status");
   } else if (type === "node_extensions_patch") {
     const value =

@@ -21,13 +21,13 @@ const hydrationGolden = [
   { id: "root", parent_id: null, title: "", markdown: "", base_url: null, base_url_source: null, origin: { private: "web-root" }, position: { x: 0, y: 0 }, size: null, font_scale: 1, collapsed: false, status: "answered", read: false, extensions: { progress: ["雪", { score: 2 }] } },
   { id: "child", parent_id: "root", title: "Child", markdown: "Body", base_url: null, base_url_source: null, origin: { lens: "deeper" }, position: { x: 0, y: 0 }, size: null, font_scale: 1, collapsed: false, status: "answered", read: false, extensions: {} },
 ];
-assert.deepEqual(holeStateToHydrationNodes(hydrationState), hydrationGolden, "MCP hydration uses the canonical exact-key node projection");
+assert.deepEqual(holeStateToHydrationNodes(hydrationState), hydrationGolden, "Browser hydration uses the canonical exact-key node projection");
 assert.deepEqual(
   holeStateToHydrationNodes(hydrationState, { suppressRootOrigin: true }),
   [{ ...hydrationGolden[0], origin: null }, hydrationGolden[1]],
   "web hydration preserves its intentional root-origin suppression"
 );
-console.log("ok reducer: canonical hydration-node projection preserves both host wire shapes");
+console.log("ok reducer: canonical hydration-node projection preserves canonical browser projections");
 
 // A standalone ask is disconnected in the graph while borrowing root context
 // for inherited document metadata. Its exact node state must survive the same

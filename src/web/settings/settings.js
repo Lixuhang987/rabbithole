@@ -1,88 +1,31 @@
-import { defaultProviderSettings, normalizeProviderSettings, providerFor } from "../provider/provider-registry.js";
-import { saveApiKey } from "./credential-store.js";
-import { migrateSettings } from "./migrate.js";
-
-export const SETTINGS_KEY = "rh-web-settings";
-const DEFAULT_FETCH_PROXY_URL =
-  typeof __RABBITHOLE_DEFAULT_PROXY_URL__ === "string" ? __RABBITHOLE_DEFAULT_PROXY_URL__ : "";
-
-/** @returns {Record<string, any>} */
-function defaultWebSettings() {
-  return { ...defaultProviderSettings(), fetch_proxy_url: DEFAULT_FETCH_PROXY_URL || "" };
-}
-
+export const SETTINGS_KEY = 'rh-web-settings';
+const DEFAULT_FETCH_PROXY_URL = typeof __RABBITHOLE_DEFAULT_PROXY_URL__ === 'string' ? __RABBITHOLE_DEFAULT_PROXY_URL__ : '';
+const defaults = () => ({ backend: 'codex', model: '', reasoning: '', base_url: 'http://127.0.0.1:41414', token: '', fetch_proxy_url: DEFAULT_FETCH_PROXY_URL });
 let currentSettings = null;
 const subscribers = new Set();
-
-if (typeof window !== "undefined") {
-  window.addEventListener("storage", (event) => {
-    if (event.key !== SETTINGS_KEY) return;
-    currentSettings = null;
-    const settings = loadSettings();
-    for (const subscriber of subscribers) subscriber(settings);
-  });
+function normalize(value) {
+  const next = defaults();
+  if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.backend !== 'string') return next;
+  for (const key of Object.keys(next)) if (typeof value[key] === 'string') next[key] = value[key];
+  return next;
 }
-
-/** @returns {Record<string, any>} */
+if (typeof window !== 'undefined') window.addEventListener('storage', (event) => {
+  if (event.key !== SETTINGS_KEY) return;
+  currentSettings = null;
+  for (const subscriber of subscribers) subscriber(loadSettings());
+});
 export function loadSettings() {
-  if (currentSettings) return currentSettings;
-  const defaults = defaultWebSettings();
-  try {
-    const parsedValue = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
-    const { value: parsed, changed } = parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)
-      ? migrateSettings(parsedValue)
-      : { value: parsedValue, changed: false };
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return defaults;
-    const preset = providerFor(parsed.preset).id;
-    const providers = normalizeProviderSettings(parsed.providers, { [preset]: parsed });
-    const active = providers[preset] || normalizeProviderSettings({ [preset]: parsed })[preset];
-    providers[preset] = active;
-    currentSettings = { ...defaults, ...parsed, agent: "", agents: {}, preset, ...active, providers };
-    if (changed) persist(currentSettings);
-    return currentSettings;
-  } catch {
-    currentSettings = defaults;
-    return currentSettings;
+  if (!currentSettings) {
+    try { currentSettings = normalize(JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null')); }
+    catch { currentSettings = defaults(); }
   }
-}
-
-/** @param {Record<string, any>} settings */
-export function saveSettings(settings) {
-  const preset = providerFor(settings.preset).id;
-  const providers = normalizeProviderSettings(settings.providers);
-  providers[preset] = normalizeProviderSettings({ [preset]: settings })[preset];
-  const { api_key, ...persistable } = /** @type {Record<string, any>} */ ({ ...settings, preset, providers });
-  if (persistable.fetch_proxy_url === DEFAULT_FETCH_PROXY_URL) delete persistable.fetch_proxy_url;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(persistable));
-  saveApiKey({ ...settings, preset, api_key });
-  currentSettings = { ...settings, preset, providers };
-  for (const subscriber of subscribers) subscriber(currentSettings);
-}
-
-function persist(settings) {
-  const preset = providerFor(settings.preset).id;
-  const providers = normalizeProviderSettings(settings.providers);
-  providers[preset] = normalizeProviderSettings({ [preset]: settings })[preset];
-  const { api_key, ...persistable } = /** @type {Record<string, any>} */ ({ ...settings, preset, providers });
-  if (persistable.fetch_proxy_url === DEFAULT_FETCH_PROXY_URL) delete persistable.fetch_proxy_url;
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(persistable));
-}
-
-export const getSettings = loadSettings;
-
-/** @param {Record<string, any>} values */
-export function patchSettings(values) {
-  saveSettings({ ...loadSettings(), ...values });
   return currentSettings;
 }
-
-/** @param {(settings: Record<string, any>) => void} subscriber */
-export function subscribeSettings(subscriber) {
-  subscribers.add(subscriber);
-  return () => subscribers.delete(subscriber);
+export function saveSettings(settings) {
+  const next = normalize(settings);
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+  currentSettings = next;
+  for (const subscriber of subscribers) subscriber(next);
 }
-
-/** Test/dev storage replacement hook; production settings stay memory-owned. */
-export function resetSettingsCache() {
-  currentSettings = null;
-}
+export function subscribeSettings(subscriber) { subscribers.add(subscriber); return () => subscribers.delete(subscriber); }
+export function resetSettingsCache() { currentSettings = null; }

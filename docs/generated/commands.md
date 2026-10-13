@@ -15,7 +15,6 @@
 | `npm run check:dist` | `node scripts/check-dist.mjs` |
 | `npm run check:docs` | `node scripts/build-docs.mjs --check` |
 | `npm run check:icons` | `node scripts/generate-ionicons.mjs --check` |
-| `npm run check:install-live` | `node scripts/install-journey-check.mjs` |
 | `npm run check:isolation-live` | `node test/run.mjs isolation-live` |
 | `npm run check:purity` | `node scripts/check-ui-purity.mjs` |
 | `npm run check:types` | `node scripts/check-types.mjs` |

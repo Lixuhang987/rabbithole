@@ -61,8 +61,8 @@ async function readReadyState(url, token, frames, intermediateStates) {
       frames.push(frame);
       assert.deepEqual(
         frame.agents?.map((agent) => agent.id).sort(),
-        ["claude", "codex"],
-        "bridge state must contain Claude and Codex"
+        ["codex"],
+        "bridge state must contain Codex"
       );
       for (const agent of frame.agents) {
         assert.ok(
@@ -204,11 +204,9 @@ assert.equal(
 );
 assert.deepEqual([...intermediateStates], ["starting"]);
 const finalById = new Map(finalState.agents.map((agent) => [agent.id, agent]));
-const claude = finalById.get("claude");
 const codex = finalById.get("codex");
 process.stdout.write(
-  `acceptance I claude=${claude.state} models=${claude.models.length} `
-  + `codex=${codex.state} models=${codex.models.length} `
+  `acceptance I codex=${codex.state} models=${codex.models.length} `
   + `intermediate=${[...intermediateStates].join(",")} `
   + `error_frames=${errorFrames.length} orphan_count=${orphans.size}\n`
 );

@@ -4,15 +4,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { extractSnapshotPayload } from "../../src/core/portable-import.js";
 import { serializeForInlineScript } from "../../src/core/utils.js";
-import { MOCK_MODEL, corsHeaders, routeProvider, seedConfiguredOpenRouter } from "../support/provider-mock.mjs";
+import { MOCK_MODEL, corsHeaders, routeProvider, seedConfiguredBridge } from "../support/provider-mock.mjs";
 import { ROOT, bootWebApp } from "../support/web-app-harness.mjs";
 
-const MOCK_KEY = `sk-or-v1-${"x".repeat(64)}`;
-const BAD_KEY = `sk-or-v1-${"y".repeat(64)}`;
-const PROVIDER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const KEY_URL = "https://openrouter.ai/api/v1/key";
-const MODEL_URL = "https://openrouter.ai/api/v1/models";
-const LOCAL_MODEL_URL = "http://localhost:11434/v1/models";
 const NOTICE_SOURCE = (await fs.readFile(path.join(ROOT, "src/ui/primitives/notice.js"), "utf8"))
   .replace('import { systemClock } from "../../core/clock.js";', "const systemClock = { now: () => Date.now() };")
   .replace("export function wireNotice", "window.wireNotice = function wireNotice");
@@ -32,7 +26,7 @@ try {
 
 async function verifyBranchContentSizing() {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   const longAnswer = `# Long answer\n\n${Array.from({ length: 80 }, (_, i) => `Paragraph ${i + 1} fills the branch with enough rendered content to require scrolling.`).join("\n\n")}`;
   await routeProvider(page, { streams: [["# Brief answer\n\nJust enough."], [longAnswer]] });

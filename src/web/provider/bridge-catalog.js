@@ -1,26 +1,22 @@
-import { addressSpaceHint } from "./model-endpoint.js";
+import { addressSpaceHint } from "./network.js";
 import { modelDescriptor } from "./model-descriptor.js";
 
 export function bridgeRootUrl(baseUrl) {
-  return String(baseUrl || "").trim().replace(/\/+$/, "").replace(/\/v1$/, "");
+  return String(baseUrl || "").trim().replace(/\/+$/, "");
 }
 
 export const BRIDGE_COMMAND = "npx @shlokkhemani/rabbithole bridge";
-export const BRIDGE_DOWN_HEADING = "Use Claude Code or Codex on this computer.";
+export const BRIDGE_DOWN_HEADING = "Use Codex on this computer.";
 export const BRIDGE_RECONNECT_INITIAL_MS = 1_000;
 export const BRIDGE_RECONNECT_MAX_MS = 15_000;
 export const BRIDGE_PING_INTERVAL_MS = 2_000;
 export const BRIDGE_AGENT_COMMANDS = Object.freeze({
-  claude: Object.freeze({
-    login: "claude /login",
-    install: "npm install -g @anthropic-ai/claude-code",
-  }),
   codex: Object.freeze({
     login: "codex login",
     install: "npm install -g @openai/codex",
   }),
 });
-export const BRIDGE_AGENT_LABELS = Object.freeze({ claude: "Claude Code", codex: "Codex" });
+export const BRIDGE_AGENT_LABELS = Object.freeze({ codex: "Codex" });
 
 export function nextBridgeReconnectDelay(currentDelay = 0) {
   const current = Number(currentDelay) || 0;
@@ -153,7 +149,7 @@ export function normalizeBridgeState(value) {
 }
 
 function normalizeAgent(agent) {
-  if (!agent || (agent.id !== "claude" && agent.id !== "codex")) return null;
+  if (!agent || agent.id !== "codex") return null;
   const state = ["starting", "missing", "signed_out", "ready", "error"].includes(agent.state)
     ? agent.state
     : "error";
@@ -161,9 +157,9 @@ function normalizeAgent(agent) {
     ? agent.models.filter((model) => model && typeof model.id === "string" && model.id).map((model) => ({
       ...modelDescriptor({
       id: model.id,
-      name: typeof model.name === "string" && model.name ? model.name : visibleBridgeModelId(model.id),
+      name: typeof model.name === "string" && model.name ? model.name : model.id,
       reasoning: normalizeReasoning(model.reasoning),
-      vision: model.images === true,
+      images: model.images === true,
       }),
       agent: agent.id,
     }))
@@ -194,18 +190,6 @@ export function bridgeAgent(state, agentId) {
 export function bridgeModelsForAgent(state, agentId) {
   const agent = bridgeAgent(state, agentId);
   return agent?.state === "ready" ? agent.models : [];
-}
-
-export function bridgeAgentOf(modelId) {
-  const id = String(modelId || "");
-  if (id.startsWith("claude/")) return "claude";
-  if (id.startsWith("codex/")) return "codex";
-  return "";
-}
-
-function visibleBridgeModelId(modelId) {
-  const id = String(modelId || "");
-  return bridgeAgentOf(id) ? id.slice(id.indexOf("/") + 1) : id;
 }
 
 const REASONING_LABELS = Object.freeze({

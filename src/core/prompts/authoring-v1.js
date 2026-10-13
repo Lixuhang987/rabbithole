@@ -21,28 +21,19 @@ const AUTHORING_SYSTEM_PROMPT_V1 = [
 /**
  * @typedef {object} AuthorSource
  * @property {unknown} [title]
- * @property {unknown} [name]
  * @property {unknown} [source_name]
  * @property {unknown} [base_url]
- * @property {unknown} [baseUrl]
  * @property {unknown} [kind]
- * @property {unknown} [type]
  * @property {unknown} [markdown]
- * @property {unknown} [content]
- * @property {unknown} [text]
  */
 
 /** @param {AuthorSource} [source] */
-export function buildAuthorMessages(source = {}) {
-  const title = normalizePromptText(source.title || source.name || source.source_name || "");
-  const baseUrl = normalizePromptText(source.base_url || source.baseUrl || "");
-  const kind = normalizePromptText(source.kind || source.type || "source");
-  const content = normalizePromptText(source.markdown || source.content || source.text || "");
-  return [
-    { role: "system", content: AUTHORING_SYSTEM_PROMPT_V1 },
-    {
-      role: "user",
-      content: [
+export function buildAuthorInput(source = {}) {
+  const title = normalizePromptText(source.title || source.source_name || "");
+  const baseUrl = normalizePromptText(source.base_url || "");
+  const kind = normalizePromptText(source.kind || "source");
+  const content = normalizePromptText(source.markdown || "");
+  return { instructions: AUTHORING_SYSTEM_PROMPT_V1, text: [
         `Source kind: ${kind || "source"}`,
         `Suggested title: ${title || "(none)"}`,
         `Base URL: ${baseUrl || "(none)"}`,
@@ -51,9 +42,7 @@ export function buildAuthorMessages(source = {}) {
         content || "(empty)",
         "",
         "Author this source into a standalone Rabbithole markdown document.",
-      ].join("\n"),
-    },
-  ];
+      ].join("\n"), images: [] };
 }
 
 /** @param {unknown} value */

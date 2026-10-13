@@ -24,9 +24,8 @@ function collapseGroupMarkup(/** @type {string} */ prefix) {
 export const CANVAS_SHELL = `
 <div id="taskbar">
   <div class="tb-pill" id="tb-tools">
-    <!-- The rail and New Rabbithole belong to the web app, which owns a library of
-         holes and can create one. Under MCP the agent opens the hole and there is no
-         library to browse, so the web shell injects those two itself (renderShell). -->
+    <!-- The browser app injects library and creation actions; frozen snapshots
+         reuse the canvas without those controls. -->
     <span id="tb-app"></span>
     <span class="sep" id="app-view-sep"></span>
     <!-- There is no Reader/Canvas toggle: the canvas is the place and the
@@ -55,8 +54,6 @@ export const CANVAS_SHELL = `
       ${buttonMarkup({ id: "reader-restore", title: "Back to canvas · Esc", ariaLabel: "Back to canvas", label: "Back to canvas", svgIconHtml: iconSvg("contract") })}
     </div>
     <div class="tb-pill">
-    <span id="context-usage" hidden aria-live="polite"></span>
-    <span class="sep" id="context-usage-sep" hidden aria-hidden="true"></span>
     ${iconButtonMarkup({ id: "t-share", title: "Share and export", ariaLabel: "Share and export", ariaHaspopup: "menu", ariaControls: "sharemenu", ariaExpanded: "false", svgIconHtml: iconSvg("share") })}
     ${iconButtonMarkup({ id: "t-theme", title: "Toggle theme", ariaLabel: "Toggle theme", svgIconHtml: iconSvg("theme") })}
     <!-- The gear holds global preferences in every host: appearance always,

@@ -11,7 +11,7 @@ export function composerHasDraft(elements) {
 
 /**
  * @param {{ text: HTMLTextAreaElement, commits: Iterable<HTMLButtonElement>, lenses?: Iterable<HTMLButtonElement>, wrap: Element, hasDraft?: boolean | (() => boolean) }} elements
- * @param {{ phase: "frozen" | "closed" | "away" | "live", pending: boolean, disabled?: boolean, unavailable?: boolean }} state
+ * @param {{ phase: "frozen" | "closed" | "away" | "live", pending: boolean, disabled?: boolean, unavailable?: boolean, askUnavailable?: boolean }} state
  * @param {{ frozen: string, closed: string, pending: string, away: string, live: string }} copy
  */
 export function applyComposerState(elements, state, copy) {
@@ -28,11 +28,11 @@ export function applyComposerState(elements, state, copy) {
     state.pending && state.phase !== "frozen" && state.phase !== "closed" ? "pending" : state.phase;
   elements.text.placeholder = copy[placeholderPhase];
   for (const commit of elements.commits) {
-    const intentBlocked = commitsDown || (state.pending && commit.dataset.commit === "ask");
+    const intentBlocked = commitsDown || ((state.pending || state.askUnavailable) && commit.dataset.commit === "ask");
     commit.dataset.intentBlocked = intentBlocked ? "true" : "false";
     commit.disabled = intentBlocked || !hasDraft;
   }
-  for (const lens of elements.lenses || []) lens.disabled = down || state.pending;
+  for (const lens of elements.lenses || []) lens.disabled = down || state.pending || !!state.askUnavailable;
 }
 
 // The one interaction contract for every composer surface: commit buttons and

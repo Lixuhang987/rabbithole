@@ -43,7 +43,6 @@ export function snapshotProjectionToFrozenHydration(projection) {
     title: hole.title,
     root_id: hole.root_id,
     last_event_id: 0,
-    agent_attached: false,
     view_state: hole.view_state,
     frozen: true,
     asset_data: assetData,

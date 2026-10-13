@@ -6,7 +6,7 @@ import { chromium } from "playwright";
 import { NEWER_SCHEMA_MESSAGE } from "../../src/core/schema.js";
 import { ensureWebDist } from "../support/build.mjs";
 import { serveStatic } from "../support/static-server.mjs";
-import { corsHeaders, sse } from "../support/provider-mock.mjs";
+import { BRIDGE_URL, MOCK_MODEL, MOCK_MODELS, corsHeaders, sse, seedConfiguredBridge, routeProvider } from "../support/provider-mock.mjs";
 import { ATTENTION_PDF_PAGE_COUNT, ATTENTION_PDF_SHA256, readAttentionPdf, readAttentionPdfTwoPage } from "../support/attention-pdf.mjs";
 import { assertSelectionPopoverUsable, selectVisibleText } from "../support/visible-selection.mjs";
 
@@ -28,14 +28,7 @@ const server = await serveStatic(WEB_DIST, { spaFallback: true, routes: {
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch();
 const context = await browser.newContext();
-await context.addInitScript(() => localStorage.setItem("rh-web-settings", JSON.stringify({
-  preset: "custom",
-  base_url: "http://localhost:11434/v1",
-  model: "llama3.2",
-  transcribe_model: "llama3.2-vision",
-  session_only: true,
-  generation_setup: { version: 1, preset: "custom", base_url: "http://localhost:11434/v1", model: "llama3.2" },
-})));
+await seedConfiguredBridge(context);
 const page = await context.newPage();
 page.on("pageerror", (error) => process.stderr.write(`browser page error: ${error.stack || error.message}\n`));
 const requests = [];
@@ -51,32 +44,20 @@ await page.route(/https:\/\/ar5iv\.labs\.arxiv\.org\/html\/.+/, async (route) =>
   await route.abort("failed");
 });
 
-// Opening settings warms the OpenRouter model catalog; keep this test offline.
-await page.route("https://openrouter.ai/api/v1/models", async (route) => {
-  await route.fulfill({
-    status: 200,
-    headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify({ data: [
-      { id: "anthropic/claude-sonnet-5", name: "Anthropic: Claude Sonnet 5", context_length: 1000000, pricing: { prompt: "0.000003", completion: "0.000015" } },
-    ] }),
-  });
-});
+await routeProvider(page);
 const transcribeBodies = [];
 let transcribeMode = "stream";
 let localVisionAvailable = true;
 let holdNextAnswer = false;
 /** @type {null | (() => void)} */
 let releaseHeldAnswer = null;
-let rejectNextInheritedImage = false;
-await page.route("http://localhost:11434/v1/models", (route) => route.fulfill({ status: 200, headers: { ...corsHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ data: [{ id: "llama3.2" }, { id: "llama3.2-vision" }] }) }));
-await page.route("http://localhost:11434/api/show", (route) => {
-  const model = route.request().postDataJSON()?.model || "";
-  return route.fulfill({ status: 200, headers: { ...corsHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ capabilities: localVisionAvailable && model === "llama3.2-vision" ? ["completion", "vision"] : ["completion"] }) });
-});
-await page.route("http://localhost:11434/v1/chat/completions", async (route) => {
+await page.route(`${BRIDGE_URL}/bridge/models`, (route) => route.fulfill({ status: 200,
+  headers: { ...corsHeaders(), "Content-Type": "application/json" },
+  body: JSON.stringify({ models: MOCK_MODELS.map((model) => ({ ...model, images: localVisionAvailable })) }) }));
+await page.route(`${BRIDGE_URL}/bridge/generate`, async (route) => {
   if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders(), body: "" });
   const body = route.request().postDataJSON();
-  if (JSON.stringify(body.messages).includes("Transcribe the supplied PDF page images")) {
+  if (body.input.kind === "transcribe") {
     transcribeBodies.push(body);
     if (transcribeMode === "hang") return; // held open — cancel aborts client-side
     return route.fulfill({ status: 200, headers: { ...corsHeaders(), "Content-Type": "text/event-stream" }, body: sse([
@@ -85,11 +66,6 @@ await page.route("http://localhost:11434/v1/chat/completions", async (route) => 
     ]) });
   }
   answerBodies.push(body);
-  if (answerBodies.length === 1) return route.fulfill({ status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ error: { message: "model does not support images" } }) });
-  if (rejectNextInheritedImage && Array.isArray(body.messages?.at(-1)?.content)) {
-    rejectNextInheritedImage = false;
-    return route.fulfill({ status: 400, headers: { ...corsHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ error: { message: "inherited image unsupported" } }) });
-  }
   if (holdNextAnswer) {
     holdNextAnswer = false;
     await new Promise((resolve) => { releaseHeldAnswer = () => resolve(); });
@@ -114,7 +90,7 @@ try {
 
   assert(requests.some((url) => url.startsWith(baseUrl) || url.startsWith("blob:")),
     "PDF request capture must observe the import");
-  const externalDuringPdf = requests.filter((url) => !url.startsWith(baseUrl) && !url.startsWith("blob:") && !url.startsWith("http://localhost:11434/"));
+  const externalDuringPdf = requests.filter((url) => !url.startsWith(baseUrl) && !url.startsWith("blob:") && !url.startsWith(BRIDGE_URL));
   assert.deepEqual(externalDuringPdf, [], `PDF ingest made external request(s): ${externalDuringPdf.join(", ")}`);
   const answerCallsAfterImport = answerBodies.length;
 
@@ -171,12 +147,11 @@ try {
   const mark = page.locator(".card .rh-pdf-mark.mark-ready").first();
   await mark.waitFor();
   assert.equal(await page.locator(".card .rh-pdf-convert").count(), 0, "creating the first branch should immediately remove the text-version action");
-  assert.equal(answerBodies.length, 2, "vision rejection should trigger exactly one text-only retry");
+  assert.equal(answerBodies.length, 1, "a visual Ask uses one native request");
   assert.equal(answerCallsAfterImport, 0, "PDF import may inspect local model capabilities but must not invoke model inference");
-  assert(Array.isArray(answerBodies[0].messages.at(-1).content), "paper text selection should ship multimodal content parts");
-  assert.equal(answerBodies[0].messages.at(-1).content[1].type, "image_url");
-  assert.match(answerBodies[0].messages.at(-1).content[1].image_url.url, /^data:image\/png;base64,/);
-  assert.equal(typeof answerBodies[1].messages.at(-1).content, "string", "fallback attempt must be text-only");
+  assert(Array.isArray(answerBodies[0].input.attachments), "paper text selection should ship multimodal content parts");
+  assert.equal(answerBodies[0].input.attachments[0].kind, "image");
+  assert.match(answerBodies[0].input.attachments[0].data_url, /^data:image\/png;base64,/);
   assert.equal(await mark.getAttribute("role"), "link");
   assert.equal(await mark.getAttribute("tabindex"), "0");
   assert.equal(await page.locator("#edges path").count() > 0, true, "PDF branch should retain an anchored canvas edge");
@@ -231,9 +206,9 @@ try {
   releaseHeldAnswer?.();
   await page.waitForFunction(() => document.querySelectorAll(".card .rh-pdf-mark.mark-ready").length >= 2);
   await page.waitForFunction(() => document.querySelectorAll(".rh-pdf-box-draft").length === 0, undefined, { timeout: 5000 });
-  assert.equal(answerBodies.length, 3);
-  assert(Array.isArray(answerBodies[2].messages.at(-1).content), "box ask should ship its crop as an image part");
-  const boxImageUrl = answerBodies[2].messages.at(-1).content[1].image_url.url;
+  assert.equal(answerBodies.length, 2);
+  assert(Array.isArray(answerBodies[1].input.attachments), "box ask should ship its crop as an image part");
+  const boxImageUrl = answerBodies[1].input.attachments[0].data_url;
   assert.match(boxImageUrl, /^data:image\/png;base64,/);
   const boxClip = await page.evaluate(async () => {
     const hole = await window.__rabbitholeTest.readStoredHole();
@@ -252,16 +227,13 @@ try {
   assert.equal(boxClip.markdown.includes("asset:"), false, "answer markdown must stay clean of crop provenance");
 
   const boxCard = page.locator(`.card[data-id="${boxClip.id}"]`);
-  rejectNextInheritedImage = true;
   await boxCard.locator(".nc-handle").evaluate((el) => el.click());
   await boxCard.locator(".nc-inner textarea").fill("What follows from this clip?");
   await boxCard.locator('.ask-commit[data-commit="ask"]').evaluate((el) => el.click());
   await page.waitForFunction(() => window.__rabbitholeTest && document.querySelectorAll(".card").length >= 4);
-  for (let i = 0; i < 100 && answerBodies.length < 5; i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
-  assert(Array.isArray(answerBodies[3].messages.at(-1).content), "follow-up from a clip card must inherit its image");
-  assert.equal(answerBodies[3].messages.at(-1).content[1].image_url.url, boxImageUrl, "follow-ups must re-render the same source region deterministically");
-  assert.match(answerBodies[3].messages.at(-1).content[0].text, /^Selection region image: attached/);
-  assert.equal(typeof answerBodies[4].messages.at(-1).content, "string", "inherited images must use the same text-only retry path");
+  for (let i = 0; i < 100 && answerBodies.length < 3; i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert(Array.isArray(answerBodies[2].input.attachments), "follow-up from a clip card must inherit its image");
+  assert.equal(answerBodies[2].input.attachments[0].data_url, boxImageUrl, "follow-ups must re-render the same source region deterministically");
 
   await selectVisibleText(page, {
     text: "Streamed",
@@ -269,9 +241,9 @@ try {
   });
   await page.fill("#ask-text", "What does this wording mean?");
   await page.click('#ask .ask-commit[data-commit="ask"]');
-  for (let i = 0; i < 100 && answerBodies.length < 6; i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
-  assert(Array.isArray(answerBodies[5].messages.at(-1).content), "text selection from a clip card must inherit its image");
-  assert.equal(answerBodies[5].messages.at(-1).content[1].image_url.url, boxImageUrl);
+  for (let i = 0; i < 100 && answerBodies.length < 4; i += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert(Array.isArray(answerBodies[3].input.attachments), "text selection from a clip card must inherit its image");
+  assert.equal(answerBodies[3].input.attachments[0].data_url, boxImageUrl);
 
   await boxCard.locator(".card-more").evaluate((el) => el.click());
   await page.locator("#cardmenu").locator("#cm-delete").evaluate((el) => el.click());
@@ -378,9 +350,9 @@ try {
     return !!img && img.complete && img.naturalWidth > 0;
   });
   assert(transcribeBodies.length >= 1, "convert must call the transcription model");
-  assert.equal(transcribeBodies[0].model, "llama3.2-vision", "conversion must use the confirmed local vision model setting");
-  const transcribeParts = transcribeBodies[0].messages[0].content;
-  assert(Array.isArray(transcribeParts) && transcribeParts.filter((part) => part.type === "image_url").length === 2, "one image part per page in the batch");
+  assert.equal(transcribeBodies[0].model, MOCK_MODEL, "conversion must use the currently selected Codex model");
+  const transcribeParts = transcribeBodies[0].input.pages;
+  assert(Array.isArray(transcribeParts) && transcribeParts.filter((part) => part.data_url).length === 2, "one image part per page in the batch");
   const convertedState = await page.evaluate(async () => {
     const hole = await window.__rabbitholeTest.readStoredHole();
     const { names } = await window.__rabbitholeTest.inspectAssets(hole.hole_id);
@@ -452,7 +424,7 @@ try {
   await page.waitForSelector(".card .doc-content.rh-pdf .rh-pdf-page[data-page='1']");
   await page.waitForSelector(".card .rh-pdf-convert:disabled");
   assert.equal(await page.locator(".card .rh-pdf-transcription-note").count(), 0, "model setup guidance must not displace PDF controls");
-  assert.equal(await page.locator(".card .rh-pdf-convert").getAttribute("title"), "Install a local model that supports vision to enable PDF transcription.");
+  assert.equal(await page.locator(".card .rh-pdf-convert").getAttribute("title"), "The selected model does not support PDF images. Choose a vision model.");
 
   // ---- A corrupt PDF fails with an actionable message, no stranded hole ----
   await gotoReadyApp(page, baseUrl);
@@ -464,13 +436,7 @@ try {
   // ---- A temporarily unavailable PDF runtime never blames the file and can retry ----
   const retryContext = await browser.newContext();
   try {
-    await retryContext.addInitScript(() => localStorage.setItem("rh-web-settings", JSON.stringify({
-      preset: "custom",
-      base_url: "http://localhost:11434/v1",
-      model: "llama3.2",
-      session_only: true,
-      generation_setup: { version: 1, preset: "custom", base_url: "http://localhost:11434/v1", model: "llama3.2" },
-    })));
+    await seedConfiguredBridge(retryContext);
     const retryPage = await retryContext.newPage();
     let runtimeRequests = 0;
     await retryPage.route(/\/pdf\.mjs(?:\?.*)?$/, async (route) => {

@@ -19,7 +19,7 @@ import {
 } from "./core.js";
 import { setRendererAssetData } from "./renderer.js";
 
-export function hydrateInitialState({ connectSse = null, refreshStatus = null } = {}) {
+export function hydrateInitialState({ connectTransport = null, refreshStatus = null } = {}) {
   setRendererAssetData(hydration.asset_data || null);
   if (frozen) document.body.classList.add("frozen");
   (hydration.nodes || []).forEach(function (raw) {
@@ -32,8 +32,6 @@ export function hydrateInitialState({ connectSse = null, refreshStatus = null } 
       ...model,
       html: "",
       _order: 0,
-      delegated: !!raw.delegated,
-      queued: !!raw.queued,
       _startTs: raw.status === "pending" ? systemClock.now() : 0,
     };
     registerNode(node);
@@ -60,5 +58,5 @@ export function hydrateInitialState({ connectSse = null, refreshStatus = null } 
   // expanding the current card, which still remembers its scroll position.
   setMode("canvas");
   if (typeof refreshStatus === "function") refreshStatus();
-  if (!frozen && typeof connectSse === "function") connectSse();
+  if (!frozen && typeof connectTransport === "function") connectTransport();
 }

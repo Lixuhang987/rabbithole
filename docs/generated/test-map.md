@@ -6,7 +6,6 @@ Each description is harvested from the test file's `@protects` declaration.
 
 ## unit
 
-- `test/unit/apply-server-event.test.mjs` — live node work-state projection capability contracts.
 - `test/unit/auto-tidy.test.mjs` — auto-tidy branch selection and preference capability contracts.
 - `test/unit/base-url.test.mjs` — base url capability contracts.
 - `test/unit/bridge-catalog.test.mjs` — bridge catalog capability contracts.
@@ -15,7 +14,6 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/unit/clipboard-image.test.mjs` — clipboard image capability contracts.
 - `test/unit/content-blocks.test.mjs` — content blocks capability contracts.
 - `test/unit/context-model.test.mjs` — compact context map, deterministic tree order, thread, and delta-note contracts.
-- `test/unit/context-usage.test.mjs` — context usage capability contracts.
 - `test/unit/dev-reload.test.mjs` — dev reload capability contracts.
 - `test/unit/edge-scroll.test.mjs` — edge scroll capability contracts.
 - `test/unit/hole-host.test.mjs` — hole host capability contracts.
@@ -25,48 +23,31 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/unit/input-intent.test.mjs` — keyboard input ownership capability contracts.
 - `test/unit/lifecycle.test.mjs` — lifecycle capability contracts.
 - `test/unit/markdown-renderer.test.mjs` — markdown renderer capability contracts.
-- `test/unit/model-endpoint.test.mjs` — model endpoint capability contracts.
 - `test/unit/model-notes.test.mjs` — model notes capability contracts.
-- `test/unit/ollama-diagnostics.test.mjs` — ollama diagnostics capability contracts.
 - `test/unit/pdf-import-error.test.mjs` — pdf import error capability contracts.
 - `test/unit/pdf-ingest-staging.test.mjs` — pdf ingest staging capability contracts.
 - `test/unit/pdf-provenance.test.mjs` — pdf provenance capability contracts.
 - `test/unit/pdf-selection.test.mjs` — pdf selection capability contracts.
-- `test/unit/pdf-transcription-capability.test.mjs` — pdf transcription capability capability contracts.
-- `test/unit/preferences-backing.test.mjs` — durable reader preference backing capability contracts.
+- `test/unit/pdf-transcription-capability.test.mjs` — selected-model PDF vision discovery through the bridge.
 - `test/unit/preferences-store.test.mjs` — preferences store capability contracts.
-- `test/unit/prefs-store.test.mjs` — machine preference store merge and atomicity capability contracts.
-- `test/unit/provider-registry.test.mjs` — provider registry capability contracts.
 - `test/unit/reactions.test.mjs` — reaction note normalization and selection-only action markup.
 - `test/unit/reader-preferences.test.mjs` — reader preferences capability contracts.
 - `test/unit/reducer.test.mjs` — reducer capability contracts.
-- `test/unit/request-table.test.mjs` — request table capability contracts.
 - `test/unit/subscription-source-guard.test.mjs` — subscription source guard capability contracts.
 - `test/unit/ui-card-presentation.test.mjs` — ui card presentation capability contracts.
 
 ## contracts
 
 - `test/contracts/artifact-roundtrip.test.mjs` — artifact roundtrip capability contracts.
-- `test/contracts/assets.test.mjs` — assets capability contracts.
+- `test/contracts/assets.test.mjs` — asset Markdown resolution and trust boundaries.
 - `test/contracts/compatibility-security.test.mjs` — compatibility security capability contracts.
-- `test/contracts/context-usage-wire.test.mjs` — context usage wire capability contracts.
 - `test/contracts/css-integrity.test.mjs` — CSS source and generated-artifact integrity contracts.
 - `test/contracts/data-boundaries.test.mjs` — data boundaries capability contracts.
 - `test/contracts/docs-tour.test.mjs` — The offline, zero-network architecture tour.
 - `test/contracts/fetch-proxy-worker.test.mjs` — fetch proxy worker capability contracts.
-- `test/contracts/filesystem-store.test.mjs` — filesystem store capability contracts.
-- `test/contracts/host-parity.test.mjs` — Shared engine state, persistence, and asset GC parity across the MCP and web host adapters.
 - `test/contracts/indexeddb-store.test.mjs` — indexeddb store capability contracts.
-- `test/contracts/mcp-context-budget.test.mjs` — branch context payload ceilings across the portable corpus and a 50-node note-heavy hole.
-- `test/contracts/mcp-copy.test.mjs` — MCP instruction and tool-description context budgets.
-- `test/contracts/mcp-list-rabbitholes.test.mjs` — bounded and searchable list_rabbitholes MCP contracts.
-- `test/contracts/mcp-markdown-wire.test.mjs` — mcp markdown wire capability contracts.
-- `test/contracts/mcp-read-rabbithole.test.mjs` — read_rabbithole selectors, disk/live delivery state, normalization, and file-root context contracts.
-- `test/contracts/mcp-short-ids.test.mjs` — MCP short-id, legacy-id, and copied-id boundary contracts.
-- `test/contracts/mcp-thread-delta.test.mjs` — delta thread delivery: published nodes are delivered, delegated finals are not, and thread carries only undelivered lineage.
 - `test/contracts/node-projection.test.mjs` — node projection capability contracts.
-- `test/contracts/preferences-wire.test.mjs` — machine preference patch validation and document-boundary capability contracts.
-- `test/contracts/prompts.test.mjs` — prompts capability contracts.
+- `test/contracts/prompts.test.mjs` — complete semantic Ask input, images, visual sources and PDF transcription.
 - `test/contracts/reactions.test.mjs` — reaction notes as ordinary notes across context and artifact projections.
 - `test/contracts/ui-bundle-boundaries.test.mjs` — ui bundle boundaries capability contracts.
 - `test/contracts/ui-lifecycle.test.mjs` — ui lifecycle capability contracts.
@@ -74,32 +55,23 @@ Each description is harvested from the test file's `@protects` declaration.
 ## integration
 
 - `test/integration/artifact-portability.test.mjs` — artifact portability capability contracts.
-- `test/integration/bridge-failure-modes.test.mjs` — bridge failure modes capability contracts.
-- `test/integration/bridge-http.test.mjs` — bridge http capability contracts.
+- `test/integration/bridge-failure-modes.test.mjs` — native bridge search failures, cancellation, concurrency and backend availability.
+- `test/integration/bridge-http.test.mjs` — native bridge requests, independent article sessions, persistence and isolation.
 - `test/integration/codex-ego-browser.test.mjs` — the Codex ego-browser skill's executable MCP adapter and reference/image round trips.
-- `test/integration/custom-endpoint.test.mjs` — custom endpoint capability contracts.
 - `test/integration/generation-lifecycle.test.mjs` — generation lifecycle capability contracts.
 - `test/integration/image-experience.test.mjs` — image experience capability contracts.
-- `test/integration/mcp-rearm.test.mjs` — mcp rearm capability contracts.
 - `test/integration/mermaid-rendering.test.mjs` — mermaid rendering capability contracts.
 - `test/integration/pdf-conversion.test.mjs` — pdf conversion capability contracts.
 - `test/integration/pdf-gc.test.mjs` — pdf gc capability contracts.
-- `test/integration/pdf-ingestion.test.mjs` — pdf ingestion capability contracts.
-- `test/integration/pdf-node-conversion.test.mjs` — pdf node conversion capability contracts.
 - `test/integration/pdf-portability-caps.test.mjs` — pdf portability caps capability contracts.
 - `test/integration/pdf-precision.test.mjs` — pdf precision capability contracts.
-- `test/integration/pdf-snapshot.test.mjs` — pdf snapshot capability contracts.
-- `test/integration/preferences-persistence.test.mjs` — cross-session reader preference persistence and same-session sync capability contracts.
-- `test/integration/session-http-guard.test.mjs` — session http guard capability contracts.
 - `test/integration/web-ingestion.test.mjs` — web ingestion capability contracts.
 
 ## e2e
 
 - `test/e2e/auto-tidy.test.mjs` — auto-tidy live canvas behavior, settings, and frozen exclusion.
-- `test/e2e/canvas-edge-scroll.test.mjs` — canvas edge scroll capability contracts.
-- `test/e2e/cross-host-journey.test.mjs` — cross host journey capability contracts.
+- `test/e2e/canvas-edge-scroll.test.mjs` — canvas edge scroll and anchored Command-wheel zoom capability contracts.
 - `test/e2e/enter-composition.test.mjs` — enter composition capability contracts.
-- `test/e2e/preferences-persistence.test.mjs` — durable MCP reader preferences across origins and frozen isolation.
 - `test/e2e/reactions.test.mjs` — selection reaction composition, wash-only rendering, deletion, and frozen behavior.
 - `test/e2e/reducer-browser-parity.test.mjs` — reducer browser parity capability contracts.
 - `test/e2e/selection-popover.test.mjs` — selection popover capability contracts.
@@ -108,7 +80,7 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/e2e/web-app-learning.test.mjs` — web app learning capability contracts.
 - `test/e2e/web-app-mobile.test.mjs` — Mobile canvas navigation, selection, reader layout, and Chromium/WebKit parity.
 - `test/e2e/web-app-notes.test.mjs` — Anchored, docked, popover, and standalone note journeys.
-- `test/e2e/web-app-setup.test.mjs` — web app setup capability contracts.
+- `test/e2e/web-app-setup.test.mjs` — Codex pairing, model/reasoning settings, connection recovery and unified article requests.
 - `test/e2e/web-app-sharing.test.mjs` — Card actions, branching, export, sharing, reload, and undo journeys.
 
 ## performance
@@ -121,6 +93,5 @@ Each description is harvested from the test file's `@protects` declaration.
 
 ## isolation-live
 
-- `test/isolation-live/claude-isolation.test.mjs` — claude isolation capability contracts.
 - `test/isolation-live/codex-isolation.test.mjs` — codex isolation capability contracts.
 

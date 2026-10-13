@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { serializeForInlineScript } from "../../core/utils.js";
-import { createSourceReader, devEnabled } from "../mcp/http/assets.js";
+import { createSourceReader, devEnabled } from "./source-reader.js";
 
 const CLIENT_PATH = new URL("../../../dist/client.js", import.meta.url);
 const FROZEN_CLIENT_PATH = new URL("../../../dist/frozen-client.js", import.meta.url);

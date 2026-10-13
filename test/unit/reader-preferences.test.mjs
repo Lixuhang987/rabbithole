@@ -61,7 +61,6 @@ const {
   onPreferenceChange,
   readingScale,
   reactionPrompt,
-  resetPreferenceBacking,
   resolvedTheme,
   setReadingScale,
   setAskPreset,
@@ -226,9 +225,10 @@ assert.deepEqual(askPreset("selection", "custom"), {
   removed: false,
 });
 const customStored = store.get(ASK_PRESETS_KEY);
-resetPreferenceBacking();
+/** @type {typeof import("../../src/ui/preferences.js")} */
+const reopenedPreferences = await import(new URL("../../src/ui/preferences.js?reopen", import.meta.url).href);
 assert.equal(store.get(ASK_PRESETS_KEY), customStored);
-assert.deepEqual(askPreset("selection", "custom"), {
+assert.deepEqual(reopenedPreferences.askPreset("selection", "custom"), {
   label: "Counterpoint",
   instruction: "Challenge this claim.",
   removed: false,

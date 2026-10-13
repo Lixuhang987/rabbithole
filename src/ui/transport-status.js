@@ -15,34 +15,24 @@ import {
   updateCardComposer,
 } from "./canvas/index.js";
 import {
-  agentReason,
   bannerNotice,
   buildLoading,
   canvasBuilt,
   closed,
-  closedReason,
-  connLost,
   currentNodeId,
   fillStreaming,
   frozen,
   hydration,
-  incrementSseFails,
   mode,
   nextOrder,
   nodes,
   readerMain,
   registerNode,
-  resetSseFails,
   sessionPhase,
-  setAgentAttached,
-  setAgentReason,
-  setClosedState,
-  setConnLost,
   view,
   viewAdjusted,
 } from "./core.js";
 import { cancelFrame, nextFrame } from "./kit/scope.js";
-import { applyPreferencePatch } from "./preferences.js";
 import { renderBreadcrumb, renderMarginNotes, renderReaderBody } from "./reader.js";
 import { refreshNodeHtml } from "./renderer.js";
 import { applyServerEvent } from "./store/apply-server-event.js";
@@ -53,12 +43,10 @@ import { refreshVisualMarks } from "./visuals.js";
 // transport
 // ===========================================================================
 let transportAdapter = null;
-let sse = null;
 let webTransport = null;
 let transportEpoch = 0;
 let transportDisposed = true;
 let transportDisposePromise = null;
-let healthProbeController = null;
 
 export function setTransportAdapter(adapter) {
   transportAdapter = adapter && typeof adapter === "object" ? adapter : null;
@@ -68,54 +56,6 @@ export function initTransportStatus() {
   transportEpoch += 1;
   transportDisposed = false;
   transportDisposePromise = null;
-  renderContextUsage(hydration && hydration.context_usage);
-}
-
-function renderContextUsage(usage) {
-  const el = document.getElementById("context-usage");
-  const sep = document.getElementById("context-usage-sep");
-  if (!el || !sep) return;
-  const available =
-    usage &&
-    (usage.quality === "reported" || usage.quality === "stale") &&
-    typeof usage.used_tokens === "number" &&
-    isFinite(usage.used_tokens) &&
-    usage.used_tokens >= 0 &&
-    typeof usage.window_tokens === "number" &&
-    isFinite(usage.window_tokens) &&
-    usage.window_tokens > 0 &&
-    usage.used_tokens <= usage.window_tokens &&
-    typeof usage.percent === "number" &&
-    isFinite(usage.percent);
-  if (!available) {
-    el.hidden = true;
-    sep.hidden = true;
-    el.textContent = "";
-    el.removeAttribute("title");
-    el.removeAttribute("aria-label");
-    el.classList.remove("stale");
-    return;
-  }
-  const stale = usage.quality === "stale";
-  const percent = Math.max(0, Math.min(100, Math.round(usage.percent)));
-  const agent = usage.agent === "claude" ? "Claude Code" : usage.agent === "codex" ? "Codex CLI" : "Agent";
-  const model = usage.model || "unknown model";
-  let detail =
-    agent +
-    " · " +
-    model +
-    " · " +
-    usage.used_tokens.toLocaleString() +
-    " / " +
-    usage.window_tokens.toLocaleString() +
-    " tokens";
-  if (stale) detail += " · last measured";
-  el.textContent = percent + "%";
-  el.title = detail;
-  el.setAttribute("aria-label", percent + "% context. " + detail);
-  el.classList.toggle("stale", stale);
-  el.hidden = false;
-  sep.hidden = false;
 }
 
 export function post(payload) {
@@ -131,13 +71,7 @@ export function putAsset(name, blob) {
       return null;
     });
   }
-  return fetch("/assets/" + name, {
-    method: "PUT",
-    headers: { "Content-Type": blob.type || "application/octet-stream" },
-    body: blob,
-  }).catch(function () {
-    return null;
-  });
+  return Promise.resolve(null);
 }
 export function deleteAsset(name) {
   if (frozen) return Promise.resolve({ ok: false });
@@ -147,9 +81,7 @@ export function deleteAsset(name) {
       return null;
     });
   }
-  return fetch("/assets/" + name, { method: "DELETE" }).catch(function () {
-    return null;
-  });
+  return Promise.resolve(null);
 }
 function postWithAdapter(adapter, payload) {
   if (adapter && typeof adapter.post === "function") {
@@ -157,13 +89,7 @@ function postWithAdapter(adapter, payload) {
       return null;
     });
   }
-  return fetch("/events", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  }).catch(function () {
-    return null;
-  });
+  return Promise.resolve(null);
 }
 // Where-was-I, persisted (debounced) on every meaningful move so a reopen —
 // tomorrow or after a crash — lands exactly here.
@@ -247,76 +173,20 @@ export function persistNodesBulk(list) {
     }),
   });
 }
-export function connectSse() {
+export function connectTransport() {
   if (transportDisposed) return null;
   closeConnections();
   const epoch = ++transportEpoch;
   if (transportAdapter && typeof transportAdapter.connect === "function") {
     webTransport = transportAdapter.connect({
       after: hydration.last_event_id || 0,
-      onOpen: function () {
-        handleTransportOpen(epoch);
-      },
       onMessage: function (msg) {
         if (isCurrentTransport(epoch)) handleServer(msg);
-      },
-      onError: function () {
-        if (!isCurrentTransport(epoch) || closed) return;
-        if (incrementSseFails() >= 2 && !connLost) {
-          setConnLost(true);
-          refreshStatus();
-        }
       },
     });
     return webTransport;
   }
-  // Pass the hydration checkpoint so any event broadcast between page-serve and
-  // this connect is replayed (the first connect has no Last-Event-ID header).
-  const after = hydration.last_event_id || 0;
-  sse = new EventSource("/sse?after=" + after);
-  sse.onopen = function () {
-    handleTransportOpen(epoch);
-  };
-  sse.onmessage = function (ev) {
-    if (!isCurrentTransport(epoch)) return;
-    try {
-      handleServer(JSON.parse(ev.data));
-    } catch (e) {}
-  };
-  // EventSource retries forever on its own; after a couple of failures probe
-  // the server once — if it's gone (agent process died), say so instead of
-  // letting pending asks shimmer into eternity. Recovers via onopen.
-  sse.onerror = function () {
-    if (!isCurrentTransport(epoch) || closed) return;
-    if (incrementSseFails() >= 2 && !connLost) {
-      if (healthProbeController) healthProbeController.abort();
-      healthProbeController = typeof AbortController === "function" ? new AbortController() : null;
-      const probe = healthProbeController;
-      fetch("/health", { cache: "no-store", signal: probe ? probe.signal : undefined })
-        .then(function (r) {
-          if (!r.ok) throw new Error("bad status");
-        })
-        .catch(function (err) {
-          if (err && err.name === "AbortError") return;
-          if (isCurrentTransport(epoch) && !closed && !connLost) {
-            setConnLost(true);
-            refreshStatus();
-          }
-        })
-        .finally(function () {
-          if (healthProbeController === probe) healthProbeController = null;
-        });
-    }
-  };
-  return sse;
-}
-function handleTransportOpen(epoch) {
-  if (!isCurrentTransport(epoch)) return;
-  resetSseFails();
-  if (connLost) {
-    setConnLost(false);
-    refreshStatus();
-  }
+  return null;
 }
 /** @type {number | ReturnType<typeof setTimeout>} */
 let streamRenderRaf = 0;
@@ -356,16 +226,6 @@ function isCurrentTransport(epoch) {
   return !transportDisposed && epoch === transportEpoch;
 }
 function closeConnections() {
-  if (healthProbeController) {
-    healthProbeController.abort();
-    healthProbeController = null;
-  }
-  if (sse) {
-    try {
-      sse.close();
-    } catch (e) {}
-    sse = null;
-  }
   if (webTransport && typeof webTransport.close === "function") {
     try {
       webTransport.close();
@@ -426,10 +286,6 @@ function renderStreamSurfaces(node, firstChunk) {
 }
 
 function handleServer(msg) {
-  if (msg.type === "preferences") {
-    applyPreferencePatch(msg.values);
-    return;
-  }
   const result = applyServerEvent({ nodes: nodes, register: registerNode }, msg, {
     createPending: function (message) {
       const pos = message.position || {};
@@ -516,7 +372,7 @@ function handleServer(msg) {
       if (p && p.bodyEl) upgradeMarks(p.bodyEl, node.id);
     } else if (result.type === "node_progress") {
       if (result.invalidated.has("stream")) scheduleStreamRender(node, result.firstChunk);
-    } else if (result.type === "node_work_state" || result.type === "node_search_status") {
+    } else if (result.type === "node_search_status") {
       if (!result.invalidated.has("status")) return;
       cancelQueuedStreamRender(node.id);
       renderStreamSurfaces(node, true);
@@ -557,100 +413,13 @@ function handleServer(msg) {
     }
     return;
   }
-  if (msg.type === "agent_status") {
-    setAgentAttached(!!msg.attached);
-    setAgentReason(msg.reason || null);
-    refreshStatus();
-  } else if (msg.type === "context_usage") {
-    renderContextUsage(msg);
-  } else if (msg.type === "session_closed") {
-    setClosedState(true, msg.reason || "session_closed");
-    renderContextUsage(null);
-    // Stop EventSource from reconnecting forever to the now-dead endpoint.
-    transportEpoch += 1;
-    closeConnections();
-    refreshStatus();
-  }
 }
 
-// ===========================================================================
-// status banner (agent liveness / session end) — non-modal, reading stays open
-// ===========================================================================
-let bannerKey = null;
-let bannerDismissed = {};
-function setBanner(key, title, msg) {
-  bannerKey = key;
-  if (bannerDismissed[key]) {
-    bannerNotice.hide();
-    return;
-  }
-  bannerNotice.show({
-    title: title,
-    message: msg,
-    onDismiss: function () {
-      if (bannerKey) bannerDismissed[bannerKey] = true;
-    },
-  });
-}
-function clearBanner() {
-  bannerKey = null;
-  bannerNotice.hide();
-}
-function hasPendingAsks() {
-  for (const k in nodes) if (nodes[k].status === "pending") return true;
-  return false;
-}
 export function refreshStatus() {
   const phase = sessionPhase();
   document.body.classList.toggle("agent-down", phase !== "live");
   document.body.classList.toggle("session-over", phase === "closed" || phase === "frozen");
-  // Once the session is over the server is gone, so new asks can't be taken —
-  // but every question already asked is saved and re-queued on reopen.
-  const savedNote = hasPendingAsks() ? " Your unanswered questions are saved and will be answered there." : "";
-  if (phase === "frozen") {
-    clearBanner(); // a snapshot needs no liveness story — the copy explains itself
-  } else if (phase === "closed") {
-    if (closedReason === "done")
-      setBanner(
-        "done",
-        "Session ended",
-        "This Rabbithole is saved. Reopen it from your terminal any time to keep exploring." + savedNote,
-      );
-    else if (closedReason === "superseded")
-      setBanner(
-        "superseded",
-        "Reopened elsewhere",
-        "This Rabbithole was just reopened in another tab — continue there. This view is now read-only.",
-      );
-    else
-      setBanner(
-        "closed",
-        "The agent has left",
-        "Everything answered so far is saved. Reopen this Rabbithole from your terminal to keep exploring." + savedNote,
-      );
-  } else if (phase === "away") {
-    if (connLost)
-      setBanner(
-        "connlost",
-        "Connection lost",
-        "Can't reach the agent session — it may have exited. Your Rabbithole is saved; reopen it from your terminal to continue.",
-      );
-    else if (agentReason === "stalled")
-      setBanner(
-        "stalled",
-        "The agent went quiet",
-        "No response for a while — it may have stopped. You can keep asking: questions are saved and answered when the agent returns.",
-      );
-    else
-      setBanner(
-        "cancelled",
-        "The agent stopped listening",
-        "The tool call was cancelled. You can keep asking — questions are saved and answered when the agent picks this hole back up.",
-      );
-  } else {
-    clearBanner();
-    bannerDismissed = {};
-  }
+  bannerNotice.hide();
   if (mode === "reader") renderMarginNotes();
   updateComposerState();
   updateSelectionComposerState();

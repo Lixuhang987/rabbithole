@@ -1,11 +1,25 @@
 # Data and trust
 
-Rabbithole is local-first. The web host stores documents in the browser. The local host stores them on the user's machine. Portability is explicit: a user exports a Rabbithole to move editable data, or a frozen snapshot to share a read-only experience.
+Documents live in the browser. Native generation history lives in Codex's
+configured local home. A session reference is machine-local and cannot make
+history portable across backends or devices.
 
-Markdown is canonical document content. Rendered HTML is derived and sanitized. Assets are referenced by stable names, and one reference view governs deletion, undo, portability, and snapshots so those paths cannot disagree.
+Markdown is canonical; rendered HTML is derived and sanitized. One asset reference
+view governs deletion, undo and exports. Imported HTML remains inert.
 
-Credentials are host configuration, never document content. Provider keys and bridge pairing material are excluded from persistence and snapshot projections. The subscription bridge uses loopback binding, bearer authentication, and origin checks as separate controls.
+The browser pairs with the loopback bridge using a bearer token. Loopback binding,
+authentication and origin gates are separate controls. Codex owns model-provider
+credentials; the browser stores only its pairing configuration and model choices.
+Neither configuration nor native session references enters portable documents.
 
-Persistence is conservative. Known older data is migrated forward. Data from a newer schema is refused clearly instead of being reconstructed or truncated. Snapshot projection is default-deny for personal extension state.
+The local `backend_conversation` extension identifies backend, native session and
+history scope. A successful terminal completion is required before binding, and
+host attempt identity prevents cancelled, deleted or superseded runs from binding.
+EOF alone is not completion. Retries create anew or fork the original source.
 
-Generated network-policy documentation records the current browser egress and fetch-proxy boundaries. The two lists serve different threats and are intentionally not interchangeable.
+Current document schemas are validated; future versions fail clearly. Settings and
+session references have no compatibility migration. Snapshot projection retains
+page-shaping PDF/note/canvas state while clearing personal state.
+
+[Data contracts](compatibility.md) owns stored/portable boundaries; generated
+[network policy](generated/csp.md) separates browser egress from relay SSRF limits.

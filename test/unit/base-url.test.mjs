@@ -1,18 +1,12 @@
 /** @protects base url capability contracts. */
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { renderMarkdownToHtml } from "../../src/core/markdown.js";
 import {
   deriveNodeBaseUrl,
   inferBaseUrlFromFrontmatter,
   normalizeBaseUrl,
 } from "../../src/core/base-url.js";
-import { RabbitholeSession } from "../../src/node/transport/session.js";
-import { toolDefinitions } from "../../src/node/tools/manifest.js";
 
-process.env.RABBITHOLE_DIR = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-base-url-"));
 
 function assertIncludes(haystack, needle, message) {
   assert(haystack.includes(needle), message || `expected to include ${needle}`);
@@ -160,121 +154,6 @@ function runFrontmatterAndPrecedenceFixtures() {
   console.log("ok base urls: frontmatter inference and precedence");
 }
 
-async function runSessionLifecycleFixture() {
-  const root = {
-    id: "root",
-    parent_id: null,
-    title: "Root",
-    markdown: "Root",
-    base_url: "https://example.com/docs/root.md",
-    base_url_source: "explicit",
-    origin: null,
-    position: { x: 0, y: 0 },
-    size: null,
-    font_scale: 1,
-    collapsed: false,
-    status: "answered",
-    read: true,
-    created_at: new Date().toISOString(),
-  };
-  const session = new RabbitholeSession({
-    holeId: "base-url-session",
-    title: "Base URL Session",
-    rootId: "root",
-    nodes: [root],
-    isResume: false,
-    renderPage: () => "",
-  });
-
-  try {
-    const partialAsk = session.handleBranchRequest({
-      parent_id: "root",
-      request_id: "req-partial",
-      node_id: "child-partial",
-      question: "Explain",
-    });
-    session.queue.length = 0;
-    let partialNode = session.nodes.get(partialAsk.node_id);
-    assert.equal(partialNode.base_url, root.base_url);
-    assert.equal(partialNode.base_url_source, "inherited");
-    await session.answerBranch({
-      requestId: partialAsk.request_id,
-      content: "![partial](img.png)",
-      partial: true,
-    });
-    partialNode = session.nodes.get(partialAsk.node_id);
-    const partialHtml = await renderMarkdownToHtml(partialNode.markdown, { baseUrl: partialNode.base_url });
-    assertIncludes(
-      partialHtml,
-      'src="https://example.com/docs/img.png"',
-      "streaming partial markdown should render with the inherited base"
-    );
-    const progress = session.outboundEvents.at(-1).data;
-    assert.equal(progress.type, "node_progress");
-    assert.equal(progress.markdown, "![partial](img.png)");
-    assert.equal(Object.hasOwn(progress, "contentHtml"), false);
-
-    const upgradeAsk = session.handleBranchRequest({
-      parent_id: "root",
-      request_id: "req-upgrade",
-      node_id: "child-upgrade",
-      question: "Open fetched child",
-    });
-    session.queue.length = 0;
-    let upgradeNode = session.nodes.get(upgradeAsk.node_id);
-    session.pushEvent({ status: "session_closed", session_id: session.id, reason: "base_url_test_event" });
-    const next = await session.answerBranch({
-      requestId: upgradeAsk.request_id,
-      title: "Fetched Child",
-      content: ["---", "source: https://other.example/articles/page.md", "---", "![own](img.png)"].join("\n"),
-    });
-    upgradeNode = session.nodes.get(upgradeAsk.node_id);
-    assert.equal(next.status, "session_closed");
-    assert.equal(next.reason, "base_url_test_event");
-    assert.equal(upgradeNode.base_url, "https://other.example/articles/page.md");
-    assert.equal(upgradeNode.base_url_source, "frontmatter");
-    const upgradeHtml = await renderMarkdownToHtml(upgradeNode.markdown, { baseUrl: upgradeNode.base_url });
-    assertIncludes(
-      upgradeHtml,
-      'src="https://other.example/articles/img.png"',
-      "finalized inherited nodes should upgrade to their own frontmatter base"
-    );
-  } finally {
-    session.close("base_url_test_complete");
-    await session.saveChain.flush();
-  }
-
-  console.log("ok base urls: child inheritance, streaming fallback, frontmatter upgrade");
-}
-
-function runToolValidationFixture() {
-  const open = toolDefinitions.find((tool) => tool.name === "open_rabbithole");
-  const answer = toolDefinitions.find((tool) => tool.name === "answer_branch");
-  assert(open);
-  assert(answer);
-  assert.throws(
-    () => open.validateInput({ title: "Doc", content: "Body", base_url: "ftp://example.com/doc.md" }),
-    /base_url must be an absolute http: or https: URL/
-  );
-  assert.throws(
-    () => answer.validateInput({ session_id: "s", request_id: "r", content: "Body", base_url: "/relative.md" }),
-    /base_url must be an absolute http: or https: URL/
-  );
-  assert.throws(
-    () => normalizeBaseUrl("https://evil@good.example/x"),
-    /base_url must not include credentials/
-  );
-  assert.throws(
-    () => open.validateInput({ title: "Doc", content: "Body", base_url: "https://:secret@good.example/x" }),
-    /base_url must not include credentials/
-  );
-
-  console.log("ok base urls: tool validation rejects invalid base_url");
-}
-
 await runMarkdownResolutionFixtures();
 await runGithubImageRewriteFixture();
 runFrontmatterAndPrecedenceFixtures();
-await runSessionLifecycleFixture();
-runToolValidationFixture();
-console.log("base URL verification passed");

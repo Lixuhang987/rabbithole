@@ -1,25 +1,4 @@
-/**
- * Shared generation adapter vocabulary.
- *
- * Runtime authority for the browser provider surfaces and their text/search
- * streams: {@link ../../web/provider/openai-compatible.js}. Current consumers and
- * title extraction are {@link ../../web/transport/direct-host.js},
- * {@link ../../web/provider/title-sentinel.js}, and {@link ../../web/app.js}.
- * The MCP path is normalized by
- * {@link ../../node/transport/generation-ingress.js} before entering the same
- * `Run`; it has no browser-style `Provider` and receives partial/final
- * tool calls carrying `content`, `partial`, and `title` instead.
- *
- * Browser brains emit this vocabulary: branch adapters contain sentinel
- * parsing, and answer adapters also pass transient search progress. The MCP host
- * remains a separate wire ingress with its own persistence policy.
- * Transport-level run tagging uses `ProgressRun` from {@link ./engine.js}; it
- * is intentionally not redeclared here.
- * Hosts intercept search progress before `Run`; tool state is never persisted.
- * `Run` runtime behavior is authoritative in
- * {@link ../hole/run.js}; `DocEvent` output shapes remain authoritative
- * in {@link ../hole/reduce.js} and are described by {@link ./engine.js}.
- */
+/** Browser generation events; the native bridge validates completion before the host binds a session. */
 
 import type { NodeAnsweredEvent, NodeProgressEvent } from "./engine.js";
 
@@ -46,17 +25,12 @@ export interface SearchGenerationEvent {
 export interface ConversationGenerationEvent {
   type: "conversation";
   nodeId: string;
-  conversation: import("../conversation.js").CodexConversation;
+  conversation: import("../conversation.js").BackendConversation;
 }
 
 export type GenerationEvent = TextGenerationEvent | TitleGenerationEvent | SearchGenerationEvent | ConversationGenerationEvent;
 
-/**
- * Browser generation surface shared by today's OpenAI-compatible and
- * Anthropic brains. Inputs remain opaque here because prompt builders own their
- * shapes; the stable adapter boundary is the three method names, abort signal,
- * and generated event stream.
- */
+/** Browser host generation surface. Product prompts belong to the bridge. */
 export interface Provider {
   answerBranch(context: unknown, signal: AbortSignal): AsyncIterable<GenerationEvent>;
   authorExplainer(context: unknown, signal: AbortSignal): AsyncIterable<GenerationEvent>;

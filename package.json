@@ -24,7 +24,6 @@
     "check:design": "node scripts/check-design.mjs",
     "check:design-doc": "node scripts/generate-design-doc.mjs --check",
     "check:bridge-live": "node scripts/bridge-live-check.mjs",
-    "check:install-live": "node scripts/install-journey-check.mjs",
     "check:vision-live": "node scripts/vision-live-check.mjs",
     "check:isolation-live": "node test/run.mjs isolation-live",
     "check:purity": "node scripts/check-ui-purity.mjs",
@@ -44,17 +43,13 @@
     "eval": "node test/evals/run-eval.mjs"
   },
   "keywords": [
-    "mcp",
-    "mcp-server",
     "learning",
     "canvas",
-    "claude-code",
     "codex",
     "agent"
   ],
   "bin": {
-    "rabbithole": "bin/rabbithole.js",
-    "rabbithole-mcp": "bin/mcp-server.js"
+    "rabbithole": "bin/rabbithole.js"
   },
   "files": [
     "bin",

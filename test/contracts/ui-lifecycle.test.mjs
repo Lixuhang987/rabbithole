@@ -28,7 +28,6 @@ try {
       nodes: [],
       view_state: null,
       frozen: true,
-      agent_attached: false,
     };
     const first = RabbitholeUiTest.createRabbitholeUi({ hydration });
     await first.dispose();

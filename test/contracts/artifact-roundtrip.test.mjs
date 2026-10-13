@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { FsStore } from "../../src/node/fs-store.js";
+import { browserStore } from "../support/browser-store.mjs";
 import { extractNodeAssetRefs } from "../../src/core/assets.js";
 import { createSnapshotProjection } from "../../src/core/snapshot-projection.js";
 import { snapshotProjectionToFrozenHydration } from "../../src/core/snapshot-projection.js";
@@ -15,16 +15,8 @@ const corpusDir = new URL("../fixtures/corpus/", import.meta.url);
 const fixtureNames = (await fs.readdir(corpusDir)).filter((name) => name.endsWith(".rabbithole")).sort();
 assert.equal(fixtureNames.length, 19, "the curated corpus must contain exactly 19 portable fixtures");
 
-async function storeAt(label) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `rabbithole-artifact-roundtrip-${label}-`));
-  // FsStore deliberately reads RABBITHOLE_DIR at operation time, so each store
-  // round trip is completed before selecting the next isolated directory.
-  process.env.RABBITHOLE_DIR = dir;
-  return { store: new FsStore(), dir };
-}
-function selectDir(dir) {
-  process.env.RABBITHOLE_DIR = dir;
-}
+async function storeAt(_label) { return { store: browserStore(), dir: null }; }
+function selectDir(_dir) {}
 function normalized(payload) {
   const copy = structuredClone(payload);
   // Defined fixed-point normalization:
@@ -87,7 +79,7 @@ for (const name of fixtureNames) {
   expected.assets = Object.fromEntries(Object.entries(expected.assets).filter(([assetName]) => snapshot.referenced.includes(assetName)));
   assert.deepEqual(
     normalized(snapshotExport), normalized(expected),
-    `${name}: portable -> FsStore -> canonical snapshot HTML -> web snapshot import -> portable is a fixed point; referenced assets are byte-exact and unreferenced assets drop at the snapshot hop by design (referenced=${JSON.stringify(snapshot.referenced)}, before=${JSON.stringify(exported1)}, after=${JSON.stringify(snapshotExport)})`
+    `${name}: portable -> IndexedDB -> canonical snapshot HTML -> web snapshot import -> portable is a fixed point; referenced assets are byte-exact and unreferenced assets drop at the snapshot hop by design (referenced=${JSON.stringify(snapshot.referenced)}, before=${JSON.stringify(exported1)}, after=${JSON.stringify(snapshotExport)})`
   );
 }
 console.log(`ok artifact round trip: all ${fixtureNames.length} corpus fixtures are normalized three-projection fixed points and export-idempotent`);
@@ -95,16 +87,16 @@ console.log(`ok artifact round trip: all ${fixtureNames.length} corpus fixtures 
 {
   const source = JSON.parse(await fs.readFile(new URL("01-empty-root.rabbithole", corpusDir), "utf8"));
   const bag = { future_primitive: { attempts: [0, null, "雪", { correct: false }] } };
-  const conversation = { version: 1, threadId: "local-thread", scopeId: "local-history" };
-  source.hole.nodes[0].extensions = { ...bag, codex_conversation: conversation };
+  const conversation = { backend: "codex", sessionId: "local-thread", scopeId: "local-history" };
+  source.hole.nodes[0].extensions = { ...bag, backend_conversation: conversation };
   const local = structuredClone(source.hole);
   const directExport = createPortableProjection(local, source.assets);
   assert.deepEqual(directExport.hole.nodes[0].extensions, bag, "portable projection strips local conversation references only");
-  assert.deepEqual(local.nodes[0].extensions.codex_conversation, conversation, "projection leaves local state intact");
+  assert.deepEqual(local.nodes[0].extensions.backend_conversation, conversation, "projection leaves local state intact");
   assert.deepEqual(snapshotProjectionToFrozenHydration(source).nodes[0].extensions, bag, "frozen hydration strips local references even from raw old snapshots");
   const localStore = await storeAt("conversation-local");
   await localStore.store.saveHole(local);
-  assert.deepEqual((await localStore.store.loadHole(local.hole_id)).nodes[0].extensions.codex_conversation, conversation, "local persistence retains history association");
+  assert.deepEqual((await localStore.store.loadHole(local.hole_id)).nodes[0].extensions.backend_conversation, conversation, "local persistence retains history association");
   const localSnapshot = await exporterSnapshot(localStore.store, await localStore.store.loadHole(local.hole_id));
   assert.equal(localSnapshot.html.includes("local-thread"), false, "shared HTML has no local conversation reference");
   const portableStore = await storeAt("extensions-portable");

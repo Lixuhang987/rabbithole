@@ -9,6 +9,7 @@ import {
   spawnBridgeProcess,
   withTimeout,
 } from "./bridge-live-support.mjs";
+import { streamBridgeEvents } from "../src/web/provider/bridge-provider.js";
 import { assertNoDeletedSubscriptionMechanisms } from "../test/support/subscription-source-guard.mjs";
 
 const EXPECTED_ANSWER = "RABBIT 7319";
@@ -90,49 +91,7 @@ function chooseVisionModel(state, agentId) {
   const models = state.agents.find((agent) => agent.id === agentId)?.models || [];
   const visionModels = models.filter((model) => model.images === true);
   assert.ok(visionModels.length, `${agentId} did not report a vision-capable model`);
-  if (agentId === "claude") {
-    return visionModels.find((model) => model.id === "claude/sonnet") || visionModels[0];
-  }
   return visionModels[0];
-}
-
-async function readChatStream(response, backend) {
-  if (!response.ok) {
-    throw new Error(`${backend} vision request returned HTTP ${response.status}: ${await response.text()}`);
-  }
-  assert.ok(response.body, `${backend} vision response had no body`);
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let pending = "";
-  let answer = "";
-  let done = false;
-  while (!done) {
-    const chunk = await reader.read();
-    if (chunk.done) break;
-    pending += decoder.decode(chunk.value, { stream: true });
-    while (true) {
-      const boundary = /\r?\n\r?\n/.exec(pending);
-      if (!boundary) break;
-      const block = pending.slice(0, boundary.index);
-      pending = pending.slice(boundary.index + boundary[0].length);
-      const data = block.split(/\r?\n/)
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trimStart())
-        .join("\n");
-      if (!data) continue;
-      if (data === "[DONE]") {
-        done = true;
-        break;
-      }
-      const frame = JSON.parse(data);
-      if (frame.error) {
-        throw new Error(`${backend} vision turn failed (${frame.error.code}): ${frame.error.message}`);
-      }
-      answer += frame.choices?.[0]?.delta?.content || "";
-    }
-  }
-  assert.equal(done, true, `${backend} vision stream ended without [DONE]`);
-  return answer.trim();
 }
 
 async function runVisionTurn({ url, token, backend, model, imageDataUrl }) {
@@ -140,29 +99,19 @@ async function runVisionTurn({ url, token, backend, model, imageDataUrl }) {
   const timer = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
   const prompt = "Read the image. It contains one uppercase English word and one four-digit number on separate lines. Reply with exactly the word, one space, and the number. Do not infer them from this request.";
   try {
-    const response = await fetch(`${url}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: model.id,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: imageDataUrl, detail: "high" } },
-          ],
-        }],
-        stream: true,
-        reasoning_effort: model.reasoning?.options?.includes("low")
-          ? "low"
-          : model.reasoning?.default,
-      }),
-      signal: controller.signal,
-    });
-    const answer = await readChatStream(response, backend);
+    let markdown = "";
+    let completed = false;
+    for await (const event of streamBridgeEvents({
+      url: `${url}/bridge/generate`, token, signal: controller.signal,
+      body: { backend, model: model.id,
+        reasoning: model.reasoning?.options?.includes("low") ? "low" : model.reasoning?.default,
+        input: { kind: "ask", question: prompt, attachments: [{ kind: "image", data_url: imageDataUrl }] } },
+    })) {
+      if (event.type === "text") markdown += event.delta;
+      if (event.type === "conversation") completed = true;
+    }
+    assert.equal(completed, true, "vision request must complete a native session");
+    const answer = markdown.replace(/^TITLE:[^\n]*\n+/, "").trim();
     assert.equal(
       answer.toUpperCase(),
       EXPECTED_ANSWER,
@@ -188,10 +137,8 @@ const cacheExistedBefore = await fs.access(cachePath).then(() => true, () => fal
 
 /** @type {NodeJS.ProcessEnv} */
 const bridgeEnv = { ...process.env, RABBITHOLE_DIR: bridgeDirectory };
-delete bridgeEnv.RABBITHOLE_BRIDGE_CLAUDE_BIN;
 delete bridgeEnv.RABBITHOLE_BRIDGE_CODEX_BIN;
 delete bridgeEnv.CODEX_HOME;
-delete bridgeEnv.CLAUDE_CONFIG_DIR;
 
 const bridgeRun = spawnBridgeProcess({
   env: bridgeEnv,
@@ -213,14 +160,7 @@ try {
   const readyState = await readReadyState(connection.url, connection.token);
   const png = createTestPng();
   const imageDataUrl = `data:image/png;base64,${png.toString("base64")}`;
-  const claudeModel = chooseVisionModel(readyState, "claude");
   const codexModel = chooseVisionModel(readyState, "codex");
-  const claudeAnswer = await runVisionTurn({
-    ...connection,
-    backend: "claude",
-    model: claudeModel,
-    imageDataUrl,
-  });
   const codexAnswer = await runVisionTurn({
     ...connection,
     backend: "codex",
@@ -228,7 +168,6 @@ try {
     imageDataUrl,
   });
   answers = [
-    { backend: "claude", model: claudeModel.id, answer: claudeAnswer },
     { backend: "codex", model: codexModel.id, answer: codexAnswer },
   ];
 } catch (error) {

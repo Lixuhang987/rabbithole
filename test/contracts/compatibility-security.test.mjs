@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
-import { getGenerationSetupStatus, setupFingerprint } from "../../src/web/settings/setup-readiness.js";
+import { getGenerationSetupStatus } from "../../src/web/settings/setup-readiness.js";
 import { ensureWebDist } from "../support/build.mjs";
 import { serveStatic } from "../support/static-server.mjs";
 
@@ -35,7 +35,7 @@ const HOSTILE = [
   `![offline asset](asset:${ASSET})`,
 ].join("\n");
 
-verifySetupReadinessFingerprint();
+verifySetupReadiness();
 ensureWebDist();
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-compatibility-security-"));
 const hostilePath = path.join(tmp, "hostile.rabbithole");
@@ -54,25 +54,9 @@ try {
   await fs.rm(tmp, { recursive: true, force: true });
 }
 
-function verifySetupReadinessFingerprint() {
-  const completed = {
-    preset: "local",
-    base_url: "http://localhost:11434/v1",
-    model: "llama3.2",
-    session_only: true,
-  };
-  completed.generation_setup = setupFingerprint(completed);
-  assert.equal(getGenerationSetupStatus(completed).ready, true, "matching setup fingerprint should be ready");
-  /** @type {Array<[string, Record<string, string>]>} */
-  const setupChanges = [
-    ["provider", { preset: "openrouter" }],
-    ["endpoint", { base_url: "http://localhost:12345/v1" }],
-    ["model", { model: "qwen3:8b" }],
-  ];
-  for (const [field, patch] of setupChanges) {
-    const status = getGenerationSetupStatus({ ...completed, ...patch });
-    assert.deepEqual({ ready: status.ready, reason: status.reason }, { ready: false, reason: "setup_incomplete" }, `${field} changes should invalidate completed setup`);
-  }
+function verifySetupReadiness() {
+  assert.equal(getGenerationSetupStatus({ backend: "codex", model: "gpt-test", token: "paired" }).ready, true);
+  assert.equal(getGenerationSetupStatus({ backend: "codex", model: "", token: "paired" }).ready, false);
 }
 
 async function verifyLiveAndBuildSnapshot() {
@@ -98,8 +82,7 @@ async function verifyLiveAndBuildSnapshot() {
   assert.equal(importedAssetType, "image/gif", "portable import derives asset MIME metadata from its validated filename");
 
   await page.evaluate((secret) => {
-    localStorage.setItem("rh-web-api-keys", JSON.stringify({ openrouter: secret }));
-    localStorage.setItem("rh-web-settings", JSON.stringify({ preset: "openrouter", session_only: false }));
+    localStorage.setItem("rh-web-settings", JSON.stringify({ backend: "codex", token: secret, model: "test" }));
   }, SECRET);
   const snapshot = await page.evaluate(() => window.__rabbitholeTest.exportSnapshot());
   const snapshotPayload = JSON.parse(snapshot.match(/<script type="application\/vnd\.rabbithole\+json" id="rabbithole-portable">([\s\S]*?)<\/script>/)[1]);

@@ -1296,7 +1296,7 @@ function installTouchZoom(element, getZoom, setZoom) {
 export function syncPdfTranscriptionControls(root, capability) {
   if (!root?.querySelectorAll) return;
   const available = capability?.available !== false;
-  const reason = String(capability?.reason || "Set up a vision-capable PDF transcription model in Model settings.");
+  const reason = String(capability?.reason || "Choose a vision-capable model in Model settings.");
   const containers = root.matches?.(".doc-content.rh-pdf")
     ? [root]
     : Array.from(root.querySelectorAll(".doc-content.rh-pdf"));

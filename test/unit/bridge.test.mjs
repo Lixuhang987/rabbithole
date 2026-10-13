@@ -4,25 +4,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { parseClaudeEvent } from "../../src/node/bridge/claude.js";
 import {
   codexIsolationArgs,
   parseCodexEvent,
-} from "../../src/node/bridge/codex.js";
+} from "../../src/node/bridge/agents/codex.js";
 import { isAllowedOrigin } from "../../src/node/bridge/cors.js";
-import {
-  buildClaudeInput,
-  buildCodexInput,
-  countImageParts,
-  joinSystemMessages,
-  serializeTranscript,
-} from "../../src/node/bridge/messages.js";
-import {
-  claudeAliasDisplayName,
-  codexModelEntry,
-  parseClaudeAliases,
-  routeModelId,
-} from "../../src/node/bridge/models.js";
+import { codexModelEntry } from "../../src/node/bridge/models.js";
 import {
   BridgeStateStore,
   readyAgent,
@@ -30,42 +17,6 @@ import {
   unavailableAgent,
 } from "../../src/node/bridge/state.js";
 import { readOrCreateBridgeToken, tokenMatches } from "../../src/node/bridge/token.js";
-
-const messages = [
-  { role: "system", content: "First rule." },
-  { role: "user", content: "Hello" },
-  { role: "assistant", content: [{ type: "text", text: "Hi" }] },
-  {
-    role: "user",
-    content: [
-      { type: "text", text: "What color?" },
-      { type: "image_url", image_url: { url: "data:image/png;base64,AQID" } },
-      { type: "image_url", image_url: { url: "https://example.test/image.png" } },
-    ],
-  },
-];
-
-assert.equal(joinSystemMessages(messages), "First rule.");
-assert.equal(
-  serializeTranscript(messages),
-  "Conversation transcript:\n<user>Hello</user>\n<assistant>Hi</assistant>\n<user>What color?</user>"
-);
-assert.equal(countImageParts(messages), 2);
-const claudeInput = buildClaudeInput(messages);
-assert.equal(claudeInput.imageCount, 1);
-assert.equal(claudeInput.imagePartCount, 2);
-assert.deepEqual(claudeInput.input.message.content[1], {
-  type: "image",
-  source: { type: "base64", media_type: "image/png", data: "AQID" },
-});
-const codexInput = buildCodexInput(messages);
-assert.equal(codexInput.imageCount, 1);
-assert.equal(codexInput.imagePartCount, 2);
-assert.deepEqual(codexInput.input[1], {
-  type: "image",
-  url: "data:image/png;base64,AQID",
-  detail: "auto",
-});
 
 assert.equal(codexModelEntry({
   model: "vision",
@@ -75,54 +26,6 @@ assert.equal(codexModelEntry({
   model: "text",
   inputModalities: ["text"],
 }).images, false);
-assert.deepEqual(routeModelId("claude/sonnet"), { backend: "claude", model: "sonnet" });
-assert.deepEqual(routeModelId("codex/gpt-5"), { backend: "codex", model: "gpt-5" });
-assert.equal(routeModelId("gpt-5"), null);
-
-const claudeModelFixture = await fs.readFile(
-  new URL("./fixtures/claude-model-output.txt", import.meta.url),
-  "utf8"
-);
-const aliases = parseClaudeAliases({ result: claudeModelFixture });
-/* Deep-equal the FULL list so any future silent filtering fails here. `opusplan` is a distinct
-   routing mode and must survive; a first implementation dropped it as "redundant". */
-assert.deepEqual(aliases, [
-  "sonnet",
-  "opus",
-  "haiku",
-  "fable",
-  "sonnet[1m]",
-  "opus[1m]",
-  "fable[1m]",
-  "opusplan",
-]);
-assert.deepEqual(
-  parseClaudeAliases("Available: sonnet, token with whitespace, opus[1m]"),
-  ["sonnet", "opus[1m]"]
-);
-/* `best` and `default` are the ONLY filtered aliases — an unknown alias must pass through. */
-assert.deepEqual(
-  parseClaudeAliases("Available: best, newmodel, default, opusplan, or a full model ID."),
-  ["newmodel", "opusplan"]
-);
-/* No version numbers: the label is derived from the alias, not a table. */
-assert.equal(claudeAliasDisplayName("opus[1m]"), "Opus · 1M context");
-assert.equal(claudeAliasDisplayName("sonnet"), "Sonnet");
-assert.equal(claudeAliasDisplayName("newmodel"), "Newmodel");
-
-assert.deepEqual(parseClaudeEvent({
-  type: "system",
-  subtype: "init",
-  tools: [],
-  mcp_servers: [],
-}), { type: "init", tools: [], mcpServers: [] });
-assert.deepEqual(parseClaudeEvent({
-  type: "stream_event",
-  event: {
-    type: "content_block_delta",
-    delta: { type: "text_delta", text: "OK" },
-  },
-}), { type: "delta", text: "OK" });
 assert.deepEqual(parseCodexEvent({
   method: "turn/completed",
   params: {

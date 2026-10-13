@@ -1,6 +1,6 @@
 /** @protects canvas edge scroll and anchored Command-wheel zoom capability contracts. */
 import assert from "node:assert/strict";
-import { routeProvider, seedConfiguredOpenRouter } from "../support/provider-mock.mjs";
+import { routeProvider, seedConfiguredBridge } from "../support/provider-mock.mjs";
 import { bootWebApp } from "../support/web-app-harness.mjs";
 
 const app = await bootWebApp();
@@ -19,7 +19,7 @@ try {
 async function verifyEdgeScrollCarriesTheCard() {
   const context = await browser.newContext({ viewport: { width: 1000, height: 800 } });
   try {
-    await seedConfiguredOpenRouter(context);
+    await seedConfiguredBridge(context);
     const page = await context.newPage();
     await routeProvider(page);
     await page.goto(baseUrl, { waitUntil: "networkidle" });

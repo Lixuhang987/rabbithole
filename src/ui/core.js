@@ -33,10 +33,6 @@ export let mode = "canvas";
 export let view = holeStore.state.view;
 export let closed = false;
 export let closedReason = null;
-let agentAttached = true;
-export let agentReason = null;
-export let connLost = false;
-let sseFails = 0;
 export let canvasBuilt = false; // canvas DOM is built lazily on first entry
 export let canvasFramed = false; // frame-all runs once; afterwards the view is preserved
 export let viewAdjusted = false; // only user-adjusted camera state is persisted
@@ -118,10 +114,6 @@ export function initCore(inputHydration, hooks) {
   view = holeStore.state.view;
   closed = frozen;
   closedReason = frozen ? "frozen" : null;
-  agentAttached = hydration.agent_attached !== false;
-  agentReason = null;
-  connLost = false;
-  sseFails = 0;
   canvasBuilt = false;
   canvasFramed = false;
   viewAdjusted = false;
@@ -199,10 +191,6 @@ function resetCoreState() {
   view = holeStore.state.view;
   closed = false;
   closedReason = null;
-  agentAttached = true;
-  agentReason = null;
-  connLost = false;
-  sseFails = 0;
   canvasBuilt = false;
   canvasFramed = false;
   viewAdjusted = false;
@@ -239,22 +227,6 @@ export function setClosedState(value, reason) {
   closed = !!value;
   closedReason = reason || null;
   holeStore.patch({ closed, closedReason });
-}
-export function setAgentAttached(value) {
-  agentAttached = !!value;
-}
-export function setAgentReason(value) {
-  agentReason = value || null;
-}
-export function setConnLost(value) {
-  connLost = !!value;
-}
-export function resetSseFails() {
-  sseFails = 0;
-}
-export function incrementSseFails() {
-  sseFails += 1;
-  return sseFails;
 }
 export function setCanvasBuilt(value) {
   canvasBuilt = !!value;
@@ -359,7 +331,6 @@ export function resetNodeFontScale(node) {
 export function sessionPhase() {
   if (frozen) return "frozen";
   if (closed) return "closed";
-  if (connLost || !agentAttached) return "away";
   return "live";
 }
 let reduceMotion = false,
@@ -453,17 +424,8 @@ export function buildLoading(node) {
   st.innerHTML =
     LOADING_BUNNY_HTML +
     '<span class="shimmer-text ll-live">' +
-    (node && node.queued
-      ? "Waiting for previous answer"
-      : node && node.delegated
-        ? "Working in sub-agent…"
-        : node?._searchStatus === "reading"
-          ? "Reading page…"
-          : node?._searchStatus
-            ? "Searching the web…"
-            : "Thinking") +
+    (node?._searchStatus === "reading" ? "Reading page…" : node?._searchStatus ? "Searching the web…" : "Thinking") +
     "</span>" +
-    '<span class="ll-stalled">Saved — waiting for the agent</span>' +
     '<span class="ll-closed">Saved — answered when you reopen this hole</span>' +
     '<span class="ll-frozen">Unanswered when this snapshot was exported</span>' +
     '<span class="loading-time" data-start="' +
@@ -530,15 +492,8 @@ export function fillStreaming(dc, node, surfaceKey) {
   st.className = "stream-status";
   st.innerHTML =
     '<span class="shimmer-text ll-live">' +
-    (node && node.delegated
-      ? "Working in sub-agent…"
-      : node?._searchStatus === "reading"
-        ? "Reading page…"
-        : node?._searchStatus
-          ? "Searching the web…"
-          : "Writing") +
+    (node?._searchStatus === "reading" ? "Reading page…" : node?._searchStatus ? "Searching the web…" : "Writing") +
     "</span>" +
-    '<span class="ll-stalled">Paused — waiting for the agent</span>' +
     '<span class="ll-closed">Saved — answered in full when you reopen this hole</span>' +
     '<span class="ll-frozen">Unfinished when this snapshot was exported</span>' +
     '<span class="loading-time" data-start="' +

@@ -4,8 +4,8 @@
  * The gear holds global preferences. The card ⋯ menu holds per-card settings.
  * ⌘K holds navigation and actions. Everything here follows from that rule.
  *
- * The skeleton and the Appearance section are shared: they ship in the MCP
- * page, in the web app, and in frozen snapshots (appearance is a way of
+ * The skeleton and the Appearance section are shared by the web app
+ * and frozen snapshots (appearance is a way of
  * looking, and looking survives into a snapshot). Hosts compose the rest —
  * the web app registers Model — so sections are data and the surface is one.
  */

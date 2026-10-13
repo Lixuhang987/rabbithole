@@ -1,3 +1,5 @@
+> Historical plan. Superseded by [backend session unification](backend-session-unification.md).
+
 # Codex node thread fork execution plan
 
 Implements the accepted [local spec](../proposals/codex-node-thread-fork.md).

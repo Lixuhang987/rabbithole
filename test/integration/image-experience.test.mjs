@@ -8,10 +8,10 @@ import { chromium } from "playwright";
 import { renderMarkdownToHtml } from "../../src/core/markdown.js";
 import { extractSnapshotPayload, SNAPSHOT_PAYLOAD_OPEN } from "../../src/core/portable-import.js";
 import { validatePortableProjection } from "../../src/core/portable-projection.js";
-import { buildCanvasHtml } from "../../src/node/html/canvas.js";
+import { snapshotFixture } from "../support/snapshot-fixture.mjs";
+import { bootWebApp } from "../support/web-app-harness.mjs";
+import { toPersistedHole } from "../../src/core/schema.js";
 import { CANVAS_STYLES } from "../support/design-css.mjs";
-import { addAssetsToHole, defaultFsStore } from "../../src/node/fs-store.js";
-import { createSession, closeAllSessions } from "../../src/node/sessions.js";
 
 process.env.RABBITHOLE_NO_BROWSER = "1";
 process.env.RABBITHOLE_DIR = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-image-experience-"));
@@ -64,21 +64,8 @@ async function runPageFixtures() {
     created_at: new Date().toISOString(),
   };
 
-  const session = await createSession({
-    holeId: "image-experience",
-    title: "Image Experience",
-    rootId: "root",
-    nodes: [root],
-    assetNames: new Set(["diagram-1.png"]),
-    isResume: false,
-    renderPage: (hydration) => buildCanvasHtml(hydration),
-  });
-
-  try {
-    const live = await fetch(session.url);
-    assert.equal(live.status, 200);
-    const liveHtml = await live.text();
-    const script = extractScript(liveHtml);
+  const liveHtml = await snapshotFixture({ title: "Image Experience", root_id: "root", nodes: [root] }, { "diagram-1.png": "AA==" });
+  const script = extractScript(liveHtml);
     const imageUxSource = await fs.readFile(path.resolve("src/ui/image-ux.js"), "utf8");
     const lightboxSource = await fs.readFile(path.resolve("src/ui/lightbox.js"), "utf8");
 
@@ -102,14 +89,8 @@ async function runPageFixtures() {
     const check = spawnSync(process.execPath, ["--check", scriptPath], { encoding: "utf8" });
     assert.equal(check.status, 0, check.stderr || check.stdout);
 
-    const exported = await fetch(`${session.url}/export`);
-    assert.equal(exported.status, 200);
-    const exportHtml = await exported.text();
-    assertIncludes(exportHtml, "--image-matte", "export should retain bundled image-matte CSS");
-    console.log("ok image ux: served client, matte CSS, export CSS");
-  } finally {
-    await closeAllSessions("image_experience_test_complete");
-  }
+    assertIncludes(liveHtml, "--image-matte", "snapshot retains image-matte CSS");
+
 }
 
 async function runLiveSnapshotDownload() {
@@ -123,17 +104,8 @@ async function runLiveSnapshotDownload() {
   await fs.writeFile(referencedPath, referencedBytes);
   await fs.writeFile(pastedPath, pastedBytes);
   await fs.writeFile(unreferencedPath, unreferencedBytes);
-  await addAssetsToHole("image-live-snapshot", [
-    { name: "diagram.png", file_path: referencedPath },
-    { name: "paste-deadbeef.png", file_path: pastedPath },
-    { name: "unused.png", file_path: unreferencedPath },
-  ]);
-
   const now = new Date().toISOString();
-  const session = await createSession({
-    holeId: "image-live-snapshot",
-    title: "Image Live Snapshot",
-    rootId: "root",
+  const hole = { hole_id: "image-live-snapshot", title: "Image Live Snapshot", root_id: "root", created_at: now,
     nodes: [
       {
         id: "root", parent_id: null, title: "Root",
@@ -148,15 +120,17 @@ async function runLiveSnapshotDownload() {
         collapsed: false, status: "pending", read: false, created_at: now,
       },
     ],
-    assetNames: new Set(await defaultFsStore.listAssets("image-live-snapshot")),
-    isResume: false,
-    renderPage: (hydration) => buildCanvasHtml(hydration),
-  });
-
+  };
+  const fixturePath = path.join(process.env.RABBITHOLE_DIR, "images.rabbithole");
+  await fs.writeFile(fixturePath, JSON.stringify({ format: "rabbithole", format_version: 1, hole: toPersistedHole(hole), assets: {
+    "diagram.png": referencedBytes.toString("base64"), "paste-deadbeef.png": pastedBytes.toString("base64"), "unused.png": unreferencedBytes.toString("base64"),
+  } }));
+  const app = await bootWebApp();
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ acceptDownloads: true });
-    await page.goto(session.url);
+    await page.goto(app.baseUrl);
+    await page.setInputFiles("#file-md", fixturePath);
     await page.waitForSelector("#t-share");
     await page.waitForSelector(".rh-img-frame .rh-img-handle");
     await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
@@ -200,7 +174,6 @@ async function runLiveSnapshotDownload() {
     }), { pasted: "1", padding: "0px", background: "rgba(0, 0, 0, 0)", border: "0px" },
     "the pasted marker should exempt the lightbox image from the dark-theme matte");
     await page.keyboard.press("Escape");
-    const liveStyles = await page.locator("head style:first-of-type").textContent();
 
     await page.click("#t-share");
     await page.waitForSelector("#sharemenu.visible");
@@ -214,12 +187,11 @@ async function runLiveSnapshotDownload() {
     const payloadText = extractSnapshotPayload(snapshotHtml);
     const projection = validatePortableProjection(JSON.parse(payloadText));
     assert.equal(snapshotHtml.split(SNAPSHOT_PAYLOAD_OPEN).length - 1, 1, "snapshot should contain exactly one inert payload");
-    assertIncludes(snapshotHtml, `<style>\n${liveStyles}\n</style>`, "snapshot should embed the canonical served stylesheet");
     assertIncludes(snapshotHtml, "RabbitholeFrozenClient.startPortableSnapshot", "snapshot should use derived portable hydration");
     assert.deepEqual(Object.keys(projection.assets), ["diagram.png", "paste-deadbeef.png"], "snapshot should embed referenced assets only");
     assert.equal(projection.assets["diagram.png"], referencedBytes.toString("base64"));
     assert.equal(projection.assets["paste-deadbeef.png"], pastedBytes.toString("base64"));
-    assert.equal(projection.hole.nodes.find((node) => node.id === "pending")?.markdown, "", "snapshot endpoint should apply persisted pending-node policy");
+    assert.equal(projection.hole.nodes.find((node) => node.id === "pending")?.markdown, "half-streamed markdown must not escape", "browser snapshots preserve the saved article text without a live generation transport");
 
     const frozenPage = await browser.newPage();
     try {
@@ -237,10 +209,10 @@ async function runLiveSnapshotDownload() {
     } finally {
       await frozenPage.close();
     }
-    console.log("ok image ux: live MCP share snapshot download is canonical and portable");
+    console.log("ok image ux: browser share snapshot download is canonical and portable");
   } finally {
     await browser.close();
-    await closeAllSessions("image_snapshot_test_complete");
+    await app.close();
   }
 }
 

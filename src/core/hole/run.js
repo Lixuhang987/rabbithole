@@ -1,7 +1,7 @@
 /**
  * Pure provider-event accumulator and document-event builder.
  *
- * Browser branch/root/authoring and MCP hosts share this unit. Hosts continue
+ * Browser branch/root/authoring share this unit. Hosts continue
  * to own lifecycle, retries, aborts, timers, persistence, and id minting.
  */
 export class Run {

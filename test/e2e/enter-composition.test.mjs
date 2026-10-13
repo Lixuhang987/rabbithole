@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { routeProvider, seedConfiguredOpenRouter } from "../support/provider-mock.mjs";
+import { routeProvider, seedConfiguredBridge } from "../support/provider-mock.mjs";
 import { bootWebApp } from "../support/web-app-harness.mjs";
 
 const previousDir = process.env.RABBITHOLE_DIR;
@@ -58,155 +58,11 @@ async function verifyEnterCompositionAndNewlines() {
     await documentPage.context.close();
   }
 
-  await verifyPendingRootStandaloneComposer();
-}
-
-async function verifyPendingRootStandaloneComposer() {
-  process.env.RABBITHOLE_NO_BROWSER = "1";
-  const [{ createSession }, { buildCanvasHtml }, { defaultFsStore }] = await Promise.all([
-    import("../../src/node/sessions.js"),
-    import("../../src/node/html/canvas.js"),
-    import("../../src/node/fs-store.js"),
-  ]);
-  const holeId = `pending-root-e2e-${Date.now()}`;
-  await defaultFsStore.putAsset(holeId, "paste-selected.png", Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
-  const root = {
-    id: "root", parent_id: null, title: "Pending root", markdown: "", origin: null,
-    position: { x: 0, y: 0 }, size: null, font_scale: 1, collapsed: false,
-    status: "pending", read: true, created_at: new Date().toISOString(), extensions: {},
-  };
-  const selectedAttachment = {
-    id: "selected-attachment", parent_id: "root", title: "Selected attachment", markdown: "Rendered answer",
-    origin: { selected_text: "quoted source", question: "What is shown?", lens: null, anchor: null,
-      branch_type: "selection", attachment_assets: ["paste-selected.png"] },
-    position: { x: 360, y: 0 }, size: null, font_scale: 1, collapsed: false,
-    status: "answered", read: false, created_at: new Date().toISOString(), extensions: {},
-  };
-  const session = await createSession({
-    holeId, title: "Pending root E2E", rootId: "root", nodes: [root, selectedAttachment],
-    assetNames: new Set(["paste-selected.png"]), isResume: false,
-    renderPage: (hydration) => buildCanvasHtml(hydration),
-  });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  try {
-    await page.goto(session.url, { waitUntil: "domcontentloaded" });
-    const pendingRoot = session.nodes.get("root");
-    pendingRoot.markdown = "A partial answer that is still streaming.";
-    session.broadcast({ type: "node_progress", node_id: "root", markdown: pendingRoot.markdown });
-    await page.locator('.card[data-id="root"] .doc-content', { hasText: "still streaming" }).waitFor();
-    await selectText(page, "partial answer");
-    await page.waitForSelector("#ask.visible");
-    assert.equal(await page.locator("#ask .lens").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true,
-      "a streaming parent disables selection presets");
-    await page.click("#t-settings");
-    await page.click('[data-settings-section="asking"]');
-    await page.click('[data-asking-surface][data-set="selection"] [data-preset-button="explain"]');
-    assert.equal(await page.locator('[data-asking-surface][data-set="selection"] .asking-editor-fields > input').count(), 1,
-      "the preset Label row is one text input");
-    await page.fill("#asking-selection-explain-label", "Clarify pending");
-    assert.equal(await page.locator("#ask .lens").evaluateAll((buttons) => buttons.every((button) => button.disabled)), true,
-      "refreshing preset labels must preserve a pending surface's disabled state");
-    await page.click(".settings-sheet-close");
-    await selectText(page, "partial answer");
-    await page.waitForSelector("#ask.visible");
-    assert.equal(await page.locator("#ask-text").isEnabled(), true,
-      "a selection popover on a streaming answer must remain writable");
-    await page.fill("#ask-text", "Note on the partial answer");
-    assert.deepEqual(await page.locator("#ask .ask-commit").evaluateAll((buttons) =>
-      buttons.map((button) => ({ commit: button.dataset.commit, disabled: button.disabled }))),
-    [{ commit: "note", disabled: false }, { commit: "ask", disabled: true }],
-    "a streaming selection must allow Note while Ask remains reserved for the later queue-based flow");
-    await page.click('#ask .ask-commit[data-commit="note"]');
-    const streamingNote = page.locator('.note-dot[aria-label*="partial answer"]');
-    await streamingNote.waitFor();
-    const streamingNoteId = await streamingNote.getAttribute("data-note");
-    let streamingStored = null;
-    for (let attempt = 0; attempt < 40 && !streamingStored; attempt++) {
-      streamingStored = (await defaultFsStore.loadHole(holeId))?.nodes.find((node) => node.id === streamingNoteId) || null;
-      if (!streamingStored) await page.waitForTimeout(50);
-    }
-    assert.equal(streamingStored?.markdown, "Note on the partial answer",
-      "a note dropped on streamed text must persist immediately as-is");
-    assert.equal(streamingStored?.extensions?.note?.docked, true, "the streamed selection note must stay docked");
-    assert.deepEqual({
-      kind: streamingStored?.origin?.kind,
-      selectedText: streamingStored?.origin?.selected_text,
-      branchType: streamingStored?.origin?.branch_type,
-      anchoredLength: streamingStored?.origin?.anchor.offset_end - streamingStored?.origin?.anchor.offset_start,
-    }, { kind: "note", selectedText: "partial answer", branchType: "selection", anchoredLength: "partial answer".length },
-    "the streamed selection note must preserve its selected-text anchor");
-    pendingRoot.markdown += " More text arrived.";
-    session.broadcast({ type: "node_progress", node_id: "root", markdown: pendingRoot.markdown });
-    await page.locator('.card[data-id="root"] .doc-content', { hasText: "More text arrived" }).waitFor();
-    assert.equal(await page.locator(`mark[data-child="${streamingNoteId}"].mark-note`).count(), 1,
-      "later stream chunks must preserve the saved note anchor");
-
-    await page.locator('.card[data-id="selected-attachment"] .origin-quote .origin-attachment-strip img').waitFor();
-    assert.equal(await page.locator('.card[data-id="selected-attachment"] .origin-quote').innerText(), "“What is shown?”",
-      "a selection ask must quote its human question while retaining attachment thumbnails");
-
-    const sourceCard = page.locator('.card[data-id="selected-attachment"]');
-    await sourceCard.locator(".nc-handle").evaluate((button) => button.click());
-    await sourceCard.locator(".nc-inner textarea").fill("Persisted MCP follow-up note");
-    await sourceCard.locator(".nc-inner textarea").press("Enter");
-    const persistedCard = page.locator(".card-note", { hasText: "Persisted MCP follow-up note" });
-    await persistedCard.waitFor();
-    const persistedId = await persistedCard.getAttribute("data-id");
-    let persistedNode = null;
-    for (let attempt = 0; attempt < 40 && !persistedNode; attempt++) {
-      persistedNode = (await defaultFsStore.loadHole(holeId))?.nodes.find((node) => node.id === persistedId) || null;
-      if (!persistedNode) await page.waitForTimeout(50);
-    }
-    assert.deepEqual({ markdown: persistedNode?.markdown, parentId: persistedNode?.parent_id,
-      size: persistedNode?.size, docked: persistedNode?.extensions?.note?.docked ?? false },
-    { markdown: "Persisted MCP follow-up note", parentId: "selected-attachment", size: { w: 420, h: 460 }, docked: false },
-    "Enter in an MCP-backed card follow-up must persist a visible child note window before clearing the draft");
-
-    let point = await findCanvasBackground(page);
-    await page.mouse.dblclick(point.x, point.y);
-    let draft = page.locator(".card.note-draft");
-    let editor = draft.locator(".note-editor");
-    await editor.fill("Note while the root is pending");
-    assert.deepEqual(await draft.locator(".ask-commit").evaluateAll((buttons) => buttons.map((button) => button.disabled)), [false, true],
-      "a pending root must disable only standalone Ask, not Note");
-    assert.equal(await editor.getAttribute("placeholder"), "Ask or note…", "the pending root must keep the standalone live placeholder");
-    await draft.locator('[data-commit="note"]').click();
-    await page.locator(".card-note .doc-content", { hasText: "Note while the root is pending" }).waitFor();
-
-    point = await findCanvasBackground(page);
-    await page.mouse.dblclick(point.x, point.y);
-    draft = page.locator(".card.note-draft");
-    editor = draft.locator(".note-editor");
-    await editor.fill("Ask after root answer");
-    assert.equal(await draft.locator('[data-commit="ask"]').isDisabled(), true);
-    const answeredRoot = session.nodes.get("root");
-    answeredRoot.status = "answered";
-    answeredRoot.markdown = "The root is now answered.";
-    session.broadcast({ type: "node_answered", node_id: "root", parent_id: null, title: "Answered root",
-      markdown: answeredRoot.markdown, origin: null, base_url: null, base_url_source: null });
-    await page.waitForFunction(() => {
-      const ask = document.querySelector('.card.note-draft [data-commit="ask"]');
-      return ask && !ask.disabled;
-    });
-    assert.equal(await draft.locator('[data-commit="ask"]').isDisabled(), false,
-      "node_answered must refresh and unlock an open standalone Ask draft");
-
-    session.close("done");
-    await page.waitForFunction(() => document.querySelector(".card.note-draft .note-editor")?.placeholder === "Session ended");
-    assert.equal(await editor.getAttribute("placeholder"), "Session ended",
-      "an uncommitted standalone draft must not claim it was saved when the session closes");
-    console.log("ok enter composition: pending root Note/Ask lock, node_answered refresh, selected-text thumbnails, and honest closed copy");
-  } finally {
-    await context.close();
-    await session.close("enter_composition_test_complete");
-  }
 }
 
 async function openTestPage(streams) {
   const context = await browser.newContext();
-  await seedConfiguredOpenRouter(context);
+  await seedConfiguredBridge(context);
   const page = await context.newPage();
   const state = { providerCalls: 0, providerBodies: [] };
   await routeProvider(page, {
@@ -641,7 +497,7 @@ async function pasteImage(page, selector, surface) {
 }
 
 function assertImageRequest(body) {
-  const content = body.messages.at(-1).content;
-  assert.deepEqual(content.map((part) => part.type), ["text", "image_url"]);
-  assert.match(content[1].image_url.url, /^data:image\/png;base64,/);
+  const content = body.input.attachments;
+  assert.deepEqual(content.map((part) => part.kind), ["image"]);
+  assert.match(content[0].data_url, /^data:image\/png;base64,/);
 }

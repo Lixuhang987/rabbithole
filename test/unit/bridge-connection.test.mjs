@@ -28,11 +28,11 @@ let unauthorized = 0;
 let disconnected = 0;
 let probeWanted = false;
 const pingResults = [];
-const settings = { preset: "subscriptions", base_url: "http://bridge/v1", token: "paired" };
+const settings = { preset: "subscriptions", base_url: "http://bridge", token: "paired" };
 
 const connection = createBridgeConnection({
   loadSettings: () => settings,
-  isSubscription: (value) => value.preset === "subscriptions",
+  isConfigured: (value) => value.preset === "subscriptions",
   consumeEvents: (_url, _token, options) => {
     const turn = deferred();
     streams.push({ ...turn, options });

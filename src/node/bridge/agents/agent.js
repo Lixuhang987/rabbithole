@@ -1,14 +1,14 @@
 import { readyAgent, unavailableAgent } from "../state.js";
 
-/** Normalizes either CLI's token counters to the bridge's OpenAI-compatible wire shape. */
-export function openAiUsage(usage) {
+/** Normalizes native token counters for completion metadata. */
+export function tokenUsage(usage) {
   if (!usage || typeof usage !== "object") return undefined;
   const prompt = Number(usage.inputTokens ?? usage.input_tokens) || 0;
   const completion = Number(usage.outputTokens ?? usage.output_tokens) || 0;
   return {
-    prompt_tokens: prompt,
-    completion_tokens: completion,
-    total_tokens: Number(usage.totalTokens ?? usage.total_tokens) || prompt + completion,
+    inputTokens: prompt,
+    outputTokens: completion,
+    totalTokens: Number(usage.totalTokens ?? usage.total_tokens) || prompt + completion,
   };
 }
 

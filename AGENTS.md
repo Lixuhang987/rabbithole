@@ -1,52 +1,43 @@
-# Notes for agents working in this repo
+# Notes for agents developing Rabbithole
 
-If you were sent here to **install** Rabbithole for a user, stop — you don't
-need to clone or build anything. Follow the Quick start in [README.md](./README.md)
-(one `claude mcp add` / `codex mcp add` line). This file is for agents
-**developing** the repo.
+Rabbithole is a browser document canvas with a paired local Codex bridge. The
+browser owns documents and IndexedDB; Codex owns native answer history. Read
+[Architecture](docs/02-architecture.md) before changing those boundaries and
+[Data contracts](docs/compatibility.md) before changing stored or portable data.
 
-## What this is
+- `src/core/`: host-independent document engine, rendering, artifacts, contracts.
+- `src/ui/`: browser runtime shared by live documents and frozen snapshots.
+- `src/web/`: browser host, native bridge provider, ingestion and IndexedDB.
+- `src/node/bridge/`: authenticated loopback transport and native Codex sessions.
+- `src/node/shared/`: Node helpers needed by the bridge and artifact tools.
+- `dist/`: committed browser bundles; regenerate after UI changes.
 
-An MCP server (stdio) that opens a branching-document canvas in the browser.
-Plain ES modules, a small esbuild-based browser build, and script-driven tests.
-
-- `bin/mcp-server.js` — entry; just imports `src/node/mcp/server.js`
-- `src/core/` — host-independent document engine, renderer, artifacts, and
-  contracts
-- `src/ui/` — browser runtime shared by live pages and frozen snapshots
-- `src/node/` — MCP wiring (server name `rabbithole`), filesystem storage,
-  sessions, local HTTP/SSE transport, and Node PDF ingestion
-- `src/web/` — static BYOK browser host, provider adapters, and IndexedDB store
-- `src/core/html/` — shared self-contained shell, tokens, and stylesheet source
-- `src/core/html/icons.js` — canonical repository for all product-owned SVG icons and brand marks
-- `dist/` — committed live and frozen UI bundles; regenerate after UI changes
-- `test/` — capability-oriented suites documented in `docs/testing.md`
-- `website/public/` — live public assets copied by `build:publish`
-
-## Run / debug
+## Development
 
 ```bash
 npm install
-RABBITHOLE_NO_BROWSER=1 node bin/mcp-server.js   # speaks MCP on stdio
-npm run build                                    # regenerate committed bundles
-npm test                                         # deterministic default suite
+npm run build
+node bin/rabbithole.js bridge --no-open
+npm test
 ```
 
-Storage is JSON files under `~/.rabbithole/` (`RABBITHOLE_DIR` overrides).
-Logs go to stderr — stdout is reserved for the MCP protocol; never print to
-stdout.
+Serve `web/dist/` separately. Bridge pairing data lives under `~/.rabbithole/`
+(`RABBITHOLE_DIR` overrides); Codex retains native history in its configured home.
 
 ## Conventions
 
-- The product name is **Rabbithole** — one word, no space, in all copy.
-- Node ≥ 18, ES modules everywhere.
-- The canvas page must stay fully self-contained (one HTML response, no
-  external assets) — that constraint is load-bearing for export/snapshots.
-- stdout is reserved for MCP protocol messages; application logs go to stderr.
-- Preserve old `.rabbithole` files and snapshots according to
-  `docs/compatibility.md`; future formats must fail clearly rather than truncate.
-- Put every product-owned SVG icon or brand mark in `src/core/html/icons.js` and
-  render it with `iconSvg()`. Do not add inline icon geometry to shell, UI, web,
-  settings, or website files. Structural/document SVG (for example the canvas
-  edge layer or user-authored content) is not an icon and remains at its owning
-  trust boundary.
+- Spell **Rabbithole** as one word. Use ES modules and support Node ≥18.
+- Keep frozen snapshots self-contained and the shared core independent of Node
+  and the DOM.
+- All generation uses the semantic `/bridge/generate` contract. Creates and
+  forks each own a new session; only completed current attempts bind articles.
+- Codex is the implemented backend. Claude Code and OpenCode are TODOs.
+- This architecture removes compatibility execution and settings/reference
+  migrations. Refuse future document formats clearly; never truncate them.
+- Keep credentials, pairing tokens and native session references out of portable
+  documents. Application diagnostics use stderr; CLI stdout carries its banner.
+- Put product-owned SVG icons/brand marks in `src/core/html/icons.js` and render
+  them with `iconSvg()`. Structural/user-authored SVG stays at its trust boundary.
+
+[Testing](docs/testing.md) owns verification guidance. Regenerate `dist/` and
+[generated docs](docs/generated/module-map.md) with source changes.

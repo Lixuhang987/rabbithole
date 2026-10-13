@@ -1,11 +1,25 @@
 # Architecture
 
-Rabbithole is organized as a shared domain kernel surrounded by adapters.
+The browser host owns the document graph and persistence; the local bridge owns
+native generation. All entry surfaces converge on semantic task input through
+`/bridge/generate`. Backend, model and reasoning are explicit configuration.
+The frontend never builds system messages or serializes native conversation history.
 
-The kernel owns documents, questions, anchors, tree relationships, persistence projections, rendering rules, and event reduction. It has no opinion about a terminal agent, a model endpoint, a filesystem, or a browser database.
+Codex is the implemented backend. Creates start persistent native sessions;
+generated-article Asks fork their associated sessions. Imported articles have no
+baseline: every Ask creates independently with the full readable body. Only a
+successful current completion binds the resulting session to its answer node.
+Unavailable or cross-backend history fails rather than being reconstructed.
+Claude Code and OpenCode adapters are TODOs.
 
-The two hosts supply those opinions. The local host owns MCP listening, loopback transport, filesystem storage, and native PDF work. The web host owns provider generation, browser persistence, portable imports, and browser ingestion. A shared engine contains the mutation and asset-lifecycle behavior that must remain identical.
+The shared kernel owns documents, anchors, tree relationships, asset ownership,
+rendering and artifact projections. It remains independent of Node, the DOM and
+backend execution. Reader and canvas are views of the same graph.
 
-The interface is another projection of the same graph. Reader and canvas surfaces subscribe to one state owner; cards, marks, menus, and composers hold view state without redefining the document model.
+Live browser transport is in-page and explicitly injected. The public MCP host,
+filesystem document store and HTTP canvas transport have been removed. Codex's
+bridge-owned Ego browser tool remains internal to backend execution.
 
-The build has two obligations that shape everything else: installed source must execute without compilation, and every served or exported canvas must be self-contained. Build artifacts therefore package browser behavior while the shared and local-host source remains plain JavaScript.
+Native histories and local node associations survive reopening. Portable files
+and frozen snapshots exclude those associations. Frozen snapshots embed all
+needed assets/runtimes; live browser assets load from the static app's origin.

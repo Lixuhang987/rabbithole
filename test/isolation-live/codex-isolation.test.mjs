@@ -11,8 +11,8 @@ import { fileURLToPath } from "node:url";
 import {
   CodexAppServer,
   codexIsolationArgs,
-} from "../../src/node/bridge/codex.js";
-import { resolveExecutable } from "../../src/node/bridge/process-utils.js";
+} from "../../src/node/bridge/agents/codex.js";
+import { resolveExecutable } from "../../src/node/bridge/agents/isolation.js";
 import { assertNoDeletedSubscriptionMechanisms } from "../support/subscription-source-guard.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -195,7 +195,7 @@ try {
   const searchEvents = [];
   let streamed = "";
   const answer = await appServer.turn({
-    model: "rabbithole-isolation-model", messages: [{ role: "user", content: "Search offline" }],
+    model: "rabbithole-isolation-model", input: [{ type: "text", text: "Search offline" }], instructions: "Reply directly.",
     reasoningEffort: "medium", signal: new AbortController().signal,
     onDelta: (text) => { streamed += text; }, onSearch: (event) => searchEvents.push(event),
   });
@@ -212,25 +212,25 @@ try {
   process.stdout.write("native search: alpha/search roundtrip, source citations, isolated tools=web\n");
 
 
-  const beforeBaseline = providerRequests.length;
-  const baseline = await appServer.turn({
-    model: "rabbithole-isolation-model", messages: [{ role: "user", content: "IMPORTED-ARTICLE: persistent baseline." }],
+  const beforeArticle = providerRequests.length;
+  const article = await appServer.turn({
+    model: "rabbithole-isolation-model", input: [{ type: "text", text: "IMPORTED-ARTICLE: persistent article." }], instructions: "Reply directly.",
     reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {},
-    conversation: { version: 1, operation: "baseline", nodeId: "imported" },
+    sourceSession: null,
   });
-  assert.equal(providerRequests.length, beforeBaseline, "baseline injection does not invoke the model");
-  assert.ok(baseline.conversation?.threadId);
+  assert.equal(providerRequests.length, beforeArticle + 1, "article generation invokes the model in a persistent session");
+  assert.ok(article.session?.sessionId);
   appServer.close();
   await fs.writeFile(configPath, 'web_search = "disabled"\n' + providerConfig + isolationFixture);
   appServer = new CodexAppServer({ executable, env, cwd, version: "0.4.0-test" });
   await appServer.ensureStarted();
   const child = await appServer.turn({
-    model: "rabbithole-isolation-model", messages: [{ role: "user", content: "FORK-CHECK: first child." }],
+    model: "rabbithole-isolation-model", input: [{ type: "text", text: "FORK-CHECK: first child." }], instructions: "Reply directly.",
     reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {},
-    conversation: { version: 1, operation: "fork", nodeId: "child", source: baseline.conversation },
+    sourceSession: article.session,
   });
   assert.equal(child.text, "Fork verified.");
-  assert.notEqual(child.conversation.threadId, baseline.conversation.threadId);
+  assert.notEqual(child.session.sessionId, article.session.sessionId);
   assert.match(JSON.stringify(providerRequests.at(-1).input), /IMPORTED-ARTICLE/);
   assert.deepEqual(providerRequests.at(-1).tools, [], "fork uses current search-off configuration");
   appServer.close();
@@ -238,15 +238,15 @@ try {
   appServer = new CodexAppServer({ executable, env, cwd, version: "0.4.0-test" });
   await appServer.ensureStarted();
   const descendant = await appServer.turn({
-    model: "rabbithole-isolation-model", messages: [{ role: "user", content: "FORK-CHECK: descendant." }],
+    model: "rabbithole-isolation-model", input: [{ type: "text", text: "FORK-CHECK: descendant." }], instructions: "Reply directly.",
     reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {},
-    conversation: { version: 1, operation: "fork", nodeId: "descendant", source: child.conversation },
+    sourceSession: child.session,
   });
-  assert.equal(descendant.conversation.scopeId, baseline.conversation.scopeId);
+  assert.equal(descendant.session.scopeId, article.session.scopeId);
   assert.match(JSON.stringify(providerRequests.at(-1).input), /first child/);
   assert.match(JSON.stringify(providerRequests.at(-1).input), /Fork verified/);
   assert.deepEqual(providerRequests.at(-1).tools.map((tool) => tool.name), ["web"], "descendant uses current search-on configuration");
-  process.stdout.write("persistent baseline: no model call; restart fork: inherited article and child answer\n");
+  process.stdout.write("persistent article: model completion; restart fork: inherited article and child answer\n");
 
   appServer.close();
   await fs.mkdir(path.dirname(egoSkill), { recursive: true });
@@ -259,9 +259,9 @@ try {
   await appServer.ensureStarted();
   const beforeEgo = providerRequests.length;
   const egoAnswer = await appServer.turn({
-    model: "rabbithole-isolation-model", messages: [{ role: "user", content: "EGO-CHECK: browse using the selected skill." }],
+    model: "rabbithole-isolation-model", input: [{ type: "text", text: "EGO-CHECK: browse using the selected skill." }], instructions: "Reply directly.",
     reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {},
-    conversation: { version: 1, operation: "fork", nodeId: "ego-child", source: baseline.conversation },
+    sourceSession: article.session,
   });
   assert.equal(egoAnswer.text, "Browser verified.");
   const egoRequests = providerRequests.slice(beforeEgo);
@@ -274,7 +274,7 @@ try {
   assert.equal(egoToolNames.some((name) => /exec_command|shell|user_server/.test(name)), false);
   assert.match(JSON.stringify(egoRequests[1].input), /EGO_TOOL_ROUNDTRIP/);
   assert.equal(await fs.readFile(configPath, "utf8"), 'web_search = "disabled"\n' + providerConfig + isolationFixture);
-  process.stdout.write(`ego-browser: one skill, no shell/user MCP, legacy-source fork tool round trip; tools=${JSON.stringify(egoToolNames)}\n`);
+  process.stdout.write(`ego-browser: one skill, no shell/user MCP, article fork tool round trip; tools=${JSON.stringify(egoToolNames)}\n`);
 
   const started = process.hrtime.bigint();
   const mcp = await execFileAsync(executable, ["mcp", ...codexIsolationArgs(), "-c", 'mcp_servers={"user_server"={enabled=false}}', "list", "--json"], {

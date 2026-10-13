@@ -1,4 +1,5 @@
 import { composerActionsMarkup } from "../../core/html/markup.js";
+import { pdfArticleNeedsConversion } from "../../core/pdf-shared.js";
 import { displayQuestionForOrigin } from "../ask-presets.js";
 import { applyComposerState } from "../composer-state.js";
 import { buildDocContent, CANVAS_BASE, nodes, READER_BASE, rootId, sessionPhase } from "../core.js";
@@ -123,6 +124,7 @@ export function updateStandaloneNoteComposer(node) {
       phase: sessionPhase(),
       pending: !!parent && parent.status === "pending",
       unavailable: !parent || !!parent.source?.converting,
+      askUnavailable: pdfArticleNeedsConversion(parent),
       disabled: !!node._noteUploading || !!node._noteNormalizing,
     },
     r.STANDALONE_COMPOSER_COPY,

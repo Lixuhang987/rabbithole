@@ -35,14 +35,12 @@ export class HoleEngine {
 
   toHole() { return holeStateToHole(this.state); }
 
-  /** @param {{lastEventId?: number, agentAttached?: boolean, contextUsage?: any, suppressRootOrigin?: boolean, cloneExtensions?: boolean}} [options] */
+  /** @param {{lastEventId?: number, suppressRootOrigin?: boolean, cloneExtensions?: boolean}} [options] */
   hydration(options = {}) {
     return {
       title: this.state.title,
       root_id: this.state.root_id,
       last_event_id: options.lastEventId || 0,
-      agent_attached: options.agentAttached ?? true,
-      ...(options.contextUsage ? { context_usage: options.contextUsage } : {}),
       view_state: this.state.view_state,
       nodes: holeStateToHydrationNodes(this.state, {
         suppressRootOrigin: options.suppressRootOrigin,

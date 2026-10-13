@@ -1,9 +1,7 @@
 import { systemClock } from "../core/clock.js";
-import { providerFor, settingsForProvider } from "./provider/provider-registry.js";
 import { SETTINGS_KEY, loadSettings, saveSettings } from "./settings/settings.js";
-import { getApiKey } from "./settings/credential-store.js";
 import { takeBridgeTokenFromFragment } from "./settings/bridge-pairing.js";
-import { getGenerationSetupStatus, invalidateGenerationSetup } from "./settings/setup-readiness.js";
+import { getGenerationSetupStatus } from "./settings/setup-readiness.js";
 import { installTestSeam } from "./test-seam.js";
 import { IdbStore } from "./store/idb-store.js";
 import { openDialog } from "../ui/primitives/dialog.js";
@@ -54,7 +52,6 @@ let railOpen = false;
 let blankZoom = 1;
 let composerDialog = null;
 let settingsController = null;
-let ollamaRecoveryController = null;
 let settingsRuntimePromise = null;
 let settingsWarmScheduled = false;
 let workspaceRuntimePromise = null;
@@ -70,7 +67,6 @@ let initialBridgePairing = false;
 consumeInitialBridgePairing();
 let currentPdfTranscriptionCapability = { available: false, status: "checking", model: "", reason: "Checking PDF transcription support…" };
 let pdfTranscriptionCheckToken = 0;
-const subscriptionModelUnknownRetries = new Set();
 const injectedAutoTidyClock = window.__rabbitholeTest?.autoTidyClock || null;
 
 applyInitialWebTheme();
@@ -82,11 +78,12 @@ boot().catch((err) => {
 function consumeInitialBridgePairing() {
   const pairing = takeBridgeTokenFromFragment();
   if (!pairing?.token) return;
-  const paired = settingsForProvider("subscriptions", loadSettings());
+  const paired = loadSettings();
   saveSettings({
     ...paired,
+    backend: "codex",
     token: pairing.token,
-    ...(pairing.port ? { base_url: `http://127.0.0.1:${pairing.port}/v1` } : {}),
+    ...(pairing.port ? { base_url: `http://127.0.0.1:${pairing.port}` } : {}),
   });
   initialBridgePairing = true;
 }
@@ -174,7 +171,7 @@ function initAppChrome() {
     if (event.key !== SETTINGS_KEY) return;
     refreshCurrentProvider();
     syncGenerationSetupUi();
-    settingsController?.syncSubscriptionStream();
+    settingsController?.syncConnection();
   });
   // Pasting the pairing link into an already-open tab's address bar changes
   // only the hash — no reload, so the load-time consumption never runs.
@@ -206,7 +203,7 @@ function initAppChrome() {
   });
   projectMenu?.addEventListener("keydown", moveProjectMenuFocus);
   const settingsTrigger = document.getElementById("t-settings");
-  /* BYOK is a property of this host, not of the product: the shared sheet ships
+  /* Model settings belong to this browser host; the shared sheet ships
      Appearance everywhere and the web app registers Model on top of it. The
      gear itself is wired by the sheet, in both hosts. */
   registerSettingsSection({ id: "model", label: "Model", order: 10, mount: mountModelSettings });
@@ -452,7 +449,7 @@ async function openModelSetup({ trigger, status = "", onReady = null } = {}) {
   const blankSetup = document.getElementById("blank-start-setup");
   const safeTrigger = trigger instanceof HTMLButtonElement && trigger.disabled ? (blankSetup?.offsetParent !== null ? blankSetup : document.getElementById("t-settings")) : trigger;
   const controller = await loadSettingsController();
-  controller.open({ trigger: safeTrigger || document.getElementById("t-settings"), purpose: status ? "recovery" : "setup", status, onReady });
+  controller.open({ trigger: safeTrigger || document.getElementById("t-settings"), status, onReady });
 }
 
 /* The user clicked the pairing link the bridge printed. Landing silently on a
@@ -464,8 +461,8 @@ async function beginBridgePairingSetup() {
   const controller = await loadSettingsController();
   controller.beginPairingSetup({
     trigger,
-    onComplete: ({ agentLabel, plan }) => {
-      showToast({ message: `Connected — answers come from ${agentLabel}${plan ? ` (${plan})` : ""}.` });
+    onComplete: () => {
+      showToast({ message: "Connected — answers come from Codex." });
     },
   });
 }
@@ -619,10 +616,9 @@ async function createFromAsk(question) {
   } catch (err) {
     const message = err?.message || String(err);
     if (isAuthLikeError(err)) {
-      invalidateGenerationSetup();
       syncGenerationSetupUi();
       const controller = await loadSettingsController();
-      controller.open({ trigger: document.getElementById("t-settings"), purpose: "recovery", status: message, onReady: action, focusKey: true });
+      controller.open({ trigger: document.getElementById("t-settings"), status: message, onReady: action });
     } else {
       setIngestStatus(`Ask failed. ${message}`, "error");
     }
@@ -743,9 +739,8 @@ async function maybeAuthorDocument({
     return hole;
   }
   const settings = loadSettings();
-  const key = getApiKey(settings);
   setIngestStatus("Improving structure with the model...", "busy");
-  const provider = runtime.createProvider(settings, key);
+  const provider = runtime.createProvider(settings);
   const root = hole.nodes[0];
   root.status = "pending";
   root.markdown = "";
@@ -1060,19 +1055,12 @@ function refreshCurrentProvider(settings = loadSettings()) {
 function providerForSettings(settings) {
   const runtime = loadedWorkspaceRuntime;
   if (!runtime) return null;
-  const preset = providerFor(settings.preset);
-  const key = preset.id === "subscriptions" ? String(settings.token || "").trim() : getApiKey(settings);
-  if (preset.requires_key && !key) return null;
-  if (preset.id === "subscriptions" && !key) return null;
-  if (preset.requires_base_url && !runtime.isHttpUrl(settings.base_url)) return null;
-  if (!String(settings.model || preset.model || "").trim()) return null;
-  return runtime.createProvider(settings, key);
+  if (!settings.token || !settings.model) return null;
+  return runtime.createProvider(settings);
 }
 
-function providerRequiredErrorForSettings(settings) {
-  return providerFor(settings.preset).id === "subscriptions"
-    ? { message: "Connect Claude Code or Codex to keep asking.", code: "subscription_unpaired" }
-    : null;
+function providerRequiredErrorForSettings(_settings) {
+  return { message: "Connect Codex and choose a model to keep asking.", code: "bridge_unpaired" };
 }
 
 function currentHoleNeedsPdfTranscription() {
@@ -1091,100 +1079,29 @@ async function refreshPdfTranscriptionCapability(settings = loadSettings()) {
   syncPdfTranscriptionControls(document, currentPdfTranscriptionCapability);
   let detected = await runtime.detectPdfTranscriptionCapability(settings);
   if (token !== pdfTranscriptionCheckToken) return currentPdfTranscriptionCapability;
-  if (detected.recommendedModel) {
-    const next = { ...settings, transcribe_model: detected.recommendedModel };
-    saveSettings({ ...next, api_key: getApiKey(settings) });
-    refreshCurrentProvider(next);
-    detected = await runtime.detectPdfTranscriptionCapability(next);
-    if (token !== pdfTranscriptionCheckToken) return currentPdfTranscriptionCapability;
-  }
   currentPdfTranscriptionCapability = detected;
   syncPdfTranscriptionControls(document, detected);
   return detected;
 }
 
-async function handleBranchAuthRequired({ node, error, retry }) {
-  const settings = loadSettings();
+async function handleBranchAuthRequired({ node, retry }) {
   const controller = await loadSettingsController();
-  if (providerFor(settings.preset).id === "subscriptions") {
-    controller.open({
-      trigger: document.getElementById("t-settings"),
-      purpose: "recovery",
-      onReady: () => retryBranch(node, retry),
-    });
-    controller.showBridgeUnauthorized({ onReady: () => retryBranch(node, retry) });
-    return;
-  }
-  invalidateGenerationSetup();
-  syncGenerationSetupUi();
-  controller.open({
-    trigger: document.getElementById("t-settings"),
-    purpose: "recovery",
-    status: error?.message || "Reconnect your model to continue.",
-    focusKey: providerFor(loadSettings().preset).requires_key,
-    onReady: () => retryBranch(node, retry),
-  });
+  controller.open({ trigger: document.getElementById("t-settings"), onReady: () => retryBranch(node, retry) });
+  controller.showBridgeUnauthorized({ onReady: () => retryBranch(node, retry) });
 }
 
 async function handleBranchProviderFailure({ node, error, retry }) {
-  const settings = loadSettings();
-  if (providerFor(settings.preset).id === "subscriptions") {
-    const controller = await loadSettingsController();
-    const runtime = await loadWorkspaceRuntime();
-    const agentId = settings.agent === "claude" || settings.agent === "codex"
-      ? settings.agent
-      : runtime.bridgeAgentOf(settings.model) || "claude";
-    const label = runtime.BRIDGE_AGENT_LABELS[agentId];
-    if (error?.code === "model_unknown") {
-      if (!subscriptionModelUnknownRetries.has(node.id) && controller.recoverUnknownModel(agentId)) {
-        subscriptionModelUnknownRetries.add(node.id);
-        retryBranch(node, retry);
-      }
-      return;
-    }
-    if (error?.code === "model_no_images") {
-      showToast({
-        message: `${label} cannot use this image with the selected model.`,
-        actionLabel: "Ask text-only",
-        timeoutMs: 10000,
-        onAction: () => retryBranch(node, () => retry?.({ withoutAttachment: true })),
-      });
-      return;
-    }
-    if (error?.code === "turn_failed") {
-      showToast({
-        message: `${label} could not finish the answer.`,
-        actionLabel: `Retry with ${label}`,
-        timeoutMs: 10000,
-        onAction: () => retryBranch(node, retry),
-      });
-      return;
-    }
-    if (error?.code === "payload_too_large") return;
-    if (error?.code === "agent_signed_out" || error?.code === "agent_missing") {
-      controller.recoverBridgeAgent(agentId, {
-        trigger: document.getElementById("t-settings"),
-        onReady: () => retryBranch(node, retry),
-      });
-      return;
-    }
-    showToast({ message: `${label} stopped responding.` });
+  if (["agent_signed_out", "agent_missing", "model_unknown"].includes(error?.code)) {
+    (await loadSettingsController()).recoverBridge({ trigger: document.getElementById("t-settings"), onReady: () => retryBranch(node, retry) });
     return;
   }
-  if (providerFor(settings.preset).id !== "local") return;
-  showToast({
-    message: error?.message || "Couldn't reach the local model.",
-    actionLabel: "Troubleshoot",
-    timeoutMs: 10000,
-    onAction: async () => {
-      const recovery = await loadOllamaRecoveryController();
-      recovery.open({
-        settings: loadSettings(),
-        trigger: document.getElementById("t-settings"),
-        onResolved: () => retryBranch(node, retry),
-      });
-    },
-  });
+  if (error?.code === "model_no_images") {
+    showToast({ message: error.message, actionLabel: "Ask text-only", timeoutMs: 10000,
+      onAction: () => retryBranch(node, () => retry?.({ withoutAttachment: true })) });
+    return;
+  }
+  showToast({ message: error?.message || "Codex stopped responding.", actionLabel: "Retry", timeoutMs: 10000,
+    onAction: () => retryBranch(node, retry) });
 }
 
 function mountModelSettings(host) {
@@ -1206,14 +1123,6 @@ function loadSettingsRuntime() {
   if (!settingsRuntimePromise) {
     settingsRuntimePromise = import("./settings/settings-runtime.js").then(({ createWebSettingsRuntime }) => {
       const runtime = createWebSettingsRuntime({
-        onOllamaResolved: async ({ model, transcribeModel }) => {
-          const current = loadSettings();
-          saveSettings({ ...current, model, transcribe_model: transcribeModel, api_key: getApiKey(current) });
-          settingsController?.completeLocalSetup?.();
-          refreshCurrentProvider();
-          syncGenerationSetupUi();
-          if (currentHoleNeedsPdfTranscription()) await refreshPdfTranscriptionCapability();
-        },
         onSettingsChange: () => {
           refreshCurrentProvider();
           syncGenerationSetupUi();
@@ -1224,13 +1133,11 @@ function loadSettingsRuntime() {
         },
       });
       settingsController = runtime.controller;
-      ollamaRecoveryController = runtime.recovery;
-      settingsController.syncSubscriptionStream();
+      settingsController.syncConnection();
       return runtime;
     }).catch((error) => {
       settingsRuntimePromise = null;
       settingsController = null;
-      ollamaRecoveryController = null;
       throw error;
     });
   }
@@ -1239,10 +1146,6 @@ function loadSettingsRuntime() {
 
 async function loadSettingsController() {
   return (await loadSettingsRuntime()).controller;
-}
-
-async function loadOllamaRecoveryController() {
-  return (await loadSettingsRuntime()).recovery;
 }
 
 function warmSettingsRuntime() {

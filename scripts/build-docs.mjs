@@ -5,7 +5,6 @@ import { createSnapshotProjection } from "../src/core/snapshot-projection.js";
 import { buildSnapshotHtml } from "../src/core/snapshot-html.js";
 import { toPersistedHole } from "../src/core/schema.js";
 import { makeNode } from "../src/core/hole/node.js";
-import { toolDefinitions } from "../src/node/mcp/tools.js";
 import { getDompurifyScript, getMermaidScript, getUiAssets } from "../src/node/shared/dist-assets.js";
 import { FETCH_PROXY_ALLOWED_HOSTS, WEB_CONNECT_SOURCES } from "../policy/origins.js";
 
@@ -24,7 +23,6 @@ outputs.set("module-map.md", moduleMap(sourceFiles));
 outputs.set("test-map.md", testMap(protects));
 outputs.set("tokens.md", tokenMap(tokenSource));
 outputs.set("env.md", await envMap());
-outputs.set("mcp-tools.md", mcpToolMap());
 outputs.set("commands.md", commandMap(packageJson.scripts || {}));
 outputs.set("csp.md", cspMap());
 outputs.set("../tour.html", await buildTour());
@@ -111,17 +109,6 @@ async function envMap() {
   return out + "\n";
 }
 
-function mcpToolMap() {
-  let out = heading("MCP tools");
-  for (const tool of toolDefinitions) {
-    const summary = String(tool.description || "").split(/(?<=[.!?])\s/)[0];
-    out += `## ${tool.name}\n\n${summary}\n\n`;
-    const fields = Object.keys(tool.input || {});
-    out += fields.length ? `Inputs: ${fields.map((field) => `\`${field}\``).join(", ")}\n\n` : "Inputs: none.\n\n";
-  }
-  return out;
-}
-
 function commandMap(scripts) {
   let out = heading("Commands");
   out += "| Command | Expansion |\n| --- | --- |\n";
@@ -134,7 +121,7 @@ function cspMap() {
   let out = heading("Network policy");
   out += "## Browser connect sources\n\n";
   out += WEB_CONNECT_SOURCES.map((source) => `- \`${source}\``).join("\n") + "\n\n";
-  out += "The browser list is broad so users can choose custom model endpoints; script execution remains self-only.\n\n";
+  out += "Browser HTTPS supports ingestion; loopback HTTP supports the paired bridge.\n\n";
   out += "## Fetch-proxy hosts\n\n";
   out += FETCH_PROXY_ALLOWED_HOSTS.map((host) => `- \`${host}\``).join("\n") + "\n\n";
   out += "The proxy list is a separate server-side SSRF boundary and is intentionally narrow.\n";
@@ -152,12 +139,12 @@ async function buildTour() {
   const nodes = [
     tourNode("tour-root", null, "How Rabbithole works", 0, 0, `# How Rabbithole works
 
-Rabbithole keeps one document graph and projects it into reading, canvas, live-agent, web-provider, and frozen forms.
+Rabbithole keeps one document graph and projects it into reading, canvas and frozen forms.
 
 \`\`\`mermaid
 flowchart LR
   Ask[Question at a place] --> Reducer[One reducer]
-  Reducer --> Hosts[Two hosts]
+  Reducer --> Hosts[Browser host]
   Hosts --> Canvas[One interface]
   Canvas --> Snapshot[Offline snapshot]
 \`\`\`
@@ -170,13 +157,13 @@ Every host sends the same event vocabulary through the same state transition. Th
 \`\`\`js
 ${reducerExcerpt}
 \`\`\``),
-    tourNode("tour-hosts", "tour-root", "Two hosts, one engine", 700, 0, `# Two hosts, one engine
+    tourNode("tour-hosts", "tour-root", "Browser host and local bridge", 700, 0, `# Browser host and local bridge
 
-The local MCP session and browser-only provider host share the document engine. Their adapters retain only what genuinely differs: agent listening on one side and model generation on the other.
+The browser host owns document persistence and routes generation through one local bridge. Native Codex sessions own answer history and independent forks.
 
 \`\`\`mermaid
 flowchart TB
-  MCP[MCP adapter] --> Engine[Hole engine]
+  Bridge[Local bridge] --> Codex[Native Codex sessions]
   Web[Web adapter] --> Engine
   Engine --> Store[Store port]
   Engine --> UI[Browser event stream]
@@ -185,9 +172,9 @@ flowchart TB
 \`\`\`js
 ${engineExcerpt}
 \`\`\``),
-    tourNode("tour-bridge", "tour-hosts", "Subscription bridge", 1400, -100, `# Subscription bridge
+    tourNode("tour-bridge", "tour-hosts", "Native session bridge", 1400, -100, `# Native session bridge
 
-The optional loopback bridge lets the web host use a signed-in coding-agent subscription. Backend-specific process details sit behind one agent contract; authentication and origin policy remain at the HTTP boundary.
+The paired loopback bridge creates or forks persistent Codex sessions. Semantic task input has one protocol; authentication and origin policy remain at the HTTP boundary.
 
 \`\`\`js
 ${bridgeExcerpt}
@@ -265,6 +252,7 @@ async function scanDocumentPaths() {
   const missing = [];
   for (const document of docs) {
     const source = await fs.readFile(path.join(root, document), "utf8");
+    if (document.startsWith("docs/proposals/") || document === "docs/plans/codex-node-thread-fork.md") continue; // Historical paths describe retired implementations.
     for (const candidate of documentedPaths(source)) {
       const normalized = candidate.replace(/^\.\//, "").replace(/:(?:L)?\d+(?:-\d+)?$/, "").replace(/[),.;:]$/, "");
       if (!normalized || normalized.includes("*") || normalized.includes("{") || normalized.includes("<")) continue;
