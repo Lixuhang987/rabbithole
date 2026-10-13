@@ -58,6 +58,7 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/integration/bridge-failure-modes.test.mjs` — native bridge search failures, cancellation, concurrency and backend availability.
 - `test/integration/bridge-http.test.mjs` — native bridge requests, independent article sessions, persistence and isolation.
 - `test/integration/bridge-long-answer.test.mjs` — long subscribed answers complete while cancellation remains explicit.
+- `test/integration/codex-cache-proxy.test.mjs` — private Codex cache affinity transport, streaming and lifecycle.
 - `test/integration/codex-ego-browser.test.mjs` — the Codex ego-browser skill's executable MCP adapter and reference/image round trips.
 - `test/integration/generation-lifecycle.test.mjs` — generation lifecycle capability contracts.
 - `test/integration/image-experience.test.mjs` — image experience capability contracts.

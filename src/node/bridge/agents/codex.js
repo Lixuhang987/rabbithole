@@ -13,6 +13,7 @@ import { createNdjsonReader } from "../../shared/ndjson.js";
 import { tokenUsage, probeAgent } from "./agent.js";
 import { SearchCitations, searchSources } from "./codex-search.js";
 import { discoverEgoBrowser, egoBrowserInstructions } from "./ego-browser.js";
+import { createCodexCacheProxy } from "./codex-cache-proxy.js";
 
 const INITIALIZE_TIMEOUT_MS = 20_000;
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -184,6 +185,10 @@ export class CodexAppServer {
     this.closed = false;
     this.historyScopePromise = null;
     this.egoBrowser = null;
+    this.cacheRoots = new Map();
+    this.cacheProxy = null;
+    this.providerOverrides = {};
+    this.modelProvider = null;
   }
 
   async ensureStarted() {
@@ -232,7 +237,6 @@ export class CodexAppServer {
         timeoutCode: "agent_missing",
       });
       this.notify("initialized", {});
-      this.initialized = true;
       const modes = await this.request("collaborationMode/list");
       this.modeList = modes;
       this.executeMode = findDefaultMode(modes);
@@ -240,8 +244,12 @@ export class CodexAppServer {
         throw new BridgeError("Codex does not expose Default mode.", "turn_failed", 500);
       }
       await this.refreshAccount();
+      await this.configureCacheTransport();
+      if (this.closed || child !== this.child) throw new BridgeError("Codex shut down.", "turn_failed", 500);
+      this.initialized = true;
     } catch (error) {
       terminateChild(child);
+      await this.cacheProxy?.close();
       throw error;
     }
   }
@@ -264,7 +272,7 @@ export class CodexAppServer {
       clearTimeout(pending.timer);
       if (message.error) {
         this.lastProtocolError = message.error;
-        const missingHistory = pending.method === "thread/fork"
+        const missingHistory = ["thread/fork", "thread/read"].includes(pending.method)
           && /no rollout found|thread.*(?:not found|does not exist|archived)|(?:not found|archived).*thread|no persisted history/i.test(message.error.message || "");
         pending.reject(missingHistory
           ? new BridgeError("The article's Codex history is unavailable.", "conversation_unavailable", 409)
@@ -361,6 +369,7 @@ export class CodexAppServer {
     this.pending.clear();
     for (const turn of this.turns.values()) turn.reject(failure);
     this.turns.clear();
+    void this.cacheProxy?.close();
   }
 
   request(method, params = {}, {
@@ -465,6 +474,59 @@ export class CodexAppServer {
     return this.historyScopePromise;
   }
 
+  async configureCacheTransport() {
+    await this.cacheProxy?.close();
+    this.cacheProxy = null;
+    this.providerOverrides = {};
+    const { config } = await this.request("config/read", { includeLayers: false });
+    const providerId = config.model_provider || "openai";
+    this.modelProvider = providerId;
+    const provider = config.model_providers?.[providerId];
+    if (provider?.wire_api && provider.wire_api !== "responses") return;
+    let upstream = provider?.base_url;
+    if (providerId === "openai") {
+      upstream = config.openai_base_url || (this.account?.type === "chatgpt"
+        ? "https://chatgpt.com/backend-api/codex" : "https://api.openai.com/v1");
+    }
+    // Providers without a Responses endpoint retain their native transport.
+    if (!upstream) return;
+    this.cacheProxy = await createCodexCacheProxy({ upstream, roots: this.cacheRoots });
+    this.providerOverrides = {
+      ...(providerId === "openai" ? { openai_base_url: this.cacheProxy.baseUrl } : {
+        [`model_providers.${providerId}.base_url`]: this.cacheProxy.baseUrl,
+        [`model_providers.${providerId}.supports_websockets`]: false,
+      }),
+      "features.responses_websockets": false,
+      "features.responses_websockets_v2": false,
+      "features.enable_request_compression": false,
+    };
+  }
+
+  async cacheRoot(threadId) {
+    const lineage = [];
+    const visited = new Set();
+    let current = threadId;
+    while (!this.cacheRoots.has(current)) {
+      if (typeof current !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(current) || visited.has(current)) {
+        throw new BridgeError("Codex fork ancestry is invalid.", "conversation_unavailable", 409);
+      }
+      visited.add(current);
+      lineage.push(current);
+      const { thread } = await this.request("thread/read", { threadId: current, includeTurns: false });
+      if (thread?.id !== current || !Object.hasOwn(thread, "forkedFromId")) {
+        throw new BridgeError("Codex fork ancestry is unavailable.", "conversation_unavailable", 409);
+      }
+      if (!thread.forkedFromId) {
+        this.cacheRoots.set(current, thread.sessionId || current);
+        break;
+      }
+      current = thread.forkedFromId;
+    }
+    const root = this.cacheRoots.get(current);
+    for (const id of lineage) this.cacheRoots.set(id, root);
+    return root;
+  }
+
   async releaseThread(threadId) {
     // Unsubscribe releases the live runtime after its idle period, preserving history.
     if (threadId && this.child && !this.closed) {
@@ -494,19 +556,23 @@ export class CodexAppServer {
       }
       if (signal?.aborted) throw abortError(signal);
       const fork = !!sourceSession;
+      const root = fork && this.cacheProxy ? await this.cacheRoot(sourceSession.sessionId) : null;
       const threadResult = await this.request(fork ? "thread/fork" : "thread/start", {
         ...(fork ? { threadId: sourceSession.sessionId, excludeTurns: true } : { environments: [], dynamicTools: [], selectedCapabilityRoots: [] }),
         model,
+        modelProvider: this.modelProvider,
         cwd: requestCwd,
         approvalPolicy: "never",
         sandbox: "danger-full-access",
         ephemeral: false,
+        config: this.providerOverrides,
         developerInstructions: developerInstructions,
       });
       threadId = threadResult?.thread?.id;
       if (!threadId) {
         throw new BridgeError("Codex could not start the response.", "turn_failed", 500);
       }
+      if (this.cacheProxy) this.cacheRoots.set(threadId, root || threadResult.thread.sessionId || threadId);
       if (signal?.aborted) throw abortError(signal);
       const reference = { backend: "codex", sessionId: threadId, scopeId };
 
@@ -585,10 +651,13 @@ export class CodexAppServer {
     }
   }
 
-  close() {
+  async close() {
     this.closed = true;
     if (this.child) terminateChild(this.child);
     this.onCrash(this.child);
+    await this.startPromise?.catch(() => {});
+    await this.cacheProxy?.close();
+    this.cacheRoots.clear();
   }
 }
 
@@ -680,6 +749,6 @@ export class CodexBackend {
   }
 
   close() {
-    this.appServer.close();
+    return this.appServer.close();
   }
 }

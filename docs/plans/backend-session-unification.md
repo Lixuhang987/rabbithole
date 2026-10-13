@@ -69,6 +69,11 @@ obsolete tests and keep meaningful core assertions from mixed suites.
    feasible. Run Standards and Spec reviews against the pinned baseline in
    parallel, fix actionable findings, reverify affected checks and commit.
 
+## Fork cache affinity follow-up
+
+Accepted follow-up: preserve independent native histories while sharing the
+root request cache identity. See [implementation plan](fork-cache-affinity.md).
+
 ## Verification record
 
 Record baseline, red/green results, final checks and review results here as work

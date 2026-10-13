@@ -12,6 +12,13 @@ successful current completion binds the resulting session to its answer node.
 Unavailable or cross-backend history fails rather than being reconstructed.
 Claude Code and OpenCode adapters are TODOs.
 
+For Responses providers, the bridge privately forwards Codex HTTP requests and
+shares the root `Session-Id` and `prompt_cache_key` across a fork tree. Native
+thread identity and history remain independent. Codex ancestry metadata restores
+this cache affinity after restart; the browser stores no additional identity.
+Runtime endpoint overrides leave user configuration unchanged. Shared identity
+permits cache reuse but cannot guarantee an upstream cache hit.
+
 The shared kernel owns documents, anchors, tree relationships, asset ownership,
 rendering and artifact projections. It remains independent of Node, the DOM and
 backend execution. Reader and canvas are views of the same graph.

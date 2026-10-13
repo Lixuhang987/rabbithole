@@ -89,7 +89,7 @@ function complete(threadId, turnId) {
     params: {
       threadId,
       turnId,
-      tokenUsage: { last: { inputTokens: 9, outputTokens: 2, totalTokens: 11 } },
+      tokenUsage: { last: { inputTokens: 9, cachedInputTokens: 5, outputTokens: 2, totalTokens: 11 } },
     },
   });
   emit({
@@ -114,6 +114,12 @@ process.stdin.on("data", (chunk) => {
       emit({ id, result: { userAgent: "codex-cli 0.144.0-fake" } });
     } else if (method === "initialized") {
       // notification
+    } else if (method === "config/read") {
+      emit({ id, result: { config: { model_provider: "fake", model_providers: { fake: { name: "Fake", wire_api: "responses", base_url: "http://127.0.0.1:1/v1" } } } } });
+    } else if (method === "thread/read") {
+      const thread = threads.get(params.threadId);
+      emit(thread ? { id, result: { thread: { id: params.threadId, forkedFromId: thread.forkedFromId ?? null } } }
+        : { id, error: { code: -32600, message: "no rollout found for thread id " + params.threadId } });
     } else if (method === "account/read") {
       emit({
         id,
@@ -181,7 +187,7 @@ process.stdin.on("data", (chunk) => {
         continue;
       }
       const threadId = `thread-${++threadCounter}`;
-      threads.set(threadId, { ...source, ...params, history: structuredClone(source.history) });
+      threads.set(threadId, { ...source, ...params, forkedFromId: params.threadId, history: structuredClone(source.history) });
       saveHistory();
       recordProtocol(method, params, threadId);
       emit({ id, result: { thread: { id: threadId, ephemeral: params.ephemeral } } });

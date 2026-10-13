@@ -80,9 +80,10 @@ try {
 
   const large = 'ECHO_LARGE ' + '文'.repeat(6 * 1024 * 1024) + ' ARTICLE_TAIL';
   const echoed = await generate({ kind: 'explain', question: large });
-  assert.equal(echoed.status, 200);
+  assert.equal(echoed.status, 200, JSON.stringify(echoed.error));
   assert.ok(echoed.events.filter((event) => event.type === 'text').map((event) => event.delta).join('').includes(large));
   assert.equal(echoed.events.at(-1).type, 'completed');
+  assert.equal(echoed.events.at(-1).usage.cachedInputTokens, 5);
   const image = 'data:image/png;base64,AQID';
   const noImages = await generate({ kind: 'ask', question: 'Read this', attachments: [{ kind: 'image', data_url: image }] }, { model: 'gpt-second' });
   assert.equal(noImages.error.code, 'model_no_images');

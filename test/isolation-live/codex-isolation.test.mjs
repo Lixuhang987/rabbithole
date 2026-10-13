@@ -33,6 +33,7 @@ const captured = new Promise((resolve, reject) => {
   rejectCaptured = reject;
 });
 const providerRequests = [];
+const providerHeaders = [];
 const searchRequests = [];
 let searchResponses = 0;
 const stub = http.createServer((req, res) => {
@@ -50,6 +51,7 @@ const stub = http.createServer((req, res) => {
           return;
         }
         providerRequests.push(body);
+        providerHeaders.push(req.headers);
         if (JSON.stringify(body.input).includes("EGO-CHECK")) {
           const received = JSON.stringify(body.input).includes("EGO_TOOL_ROUNDTRIP");
           const item = received
@@ -188,7 +190,7 @@ try {
   assert.equal(/mcp__|tool_search/i.test(JSON.stringify(providerRequest)), false);
   process.stdout.write(`acceptance A tools=${JSON.stringify(capturedToolNames)}\n`);
 
-  appServer.close();
+  await appServer.close();
   await fs.writeFile(configPath, 'web_search = "live"\n' + providerConfig + isolationFixture + '\n[features]\nstandalone_web_search = true\n');
   appServer = new CodexAppServer({ executable, env, cwd, version: "0.4.0-test" });
   await appServer.ensureStarted();
@@ -220,7 +222,11 @@ try {
   });
   assert.equal(providerRequests.length, beforeArticle + 1, "article generation invokes the model in a persistent session");
   assert.ok(article.session?.sessionId);
-  appServer.close();
+  const rootIdentity = providerHeaders.at(-1)["session-id"];
+  const rootCacheKey = providerRequests.at(-1).prompt_cache_key;
+  assert.equal(rootIdentity, article.session.sessionId);
+  assert.equal(rootCacheKey, rootIdentity);
+  await appServer.close();
   await fs.writeFile(configPath, 'web_search = "disabled"\n' + providerConfig + isolationFixture);
   appServer = new CodexAppServer({ executable, env, cwd, version: "0.4.0-test" });
   await appServer.ensureStarted();
@@ -230,10 +236,13 @@ try {
     sourceSession: article.session,
   });
   assert.equal(child.text, "Fork verified.");
+  assert.equal(providerHeaders.at(-1)["session-id"], rootIdentity, "fork reuses root cache session after restart");
+  assert.equal(providerRequests.at(-1).prompt_cache_key, rootCacheKey);
+  assert.equal(providerHeaders.at(-1)["thread-id"], child.session.sessionId);
   assert.notEqual(child.session.sessionId, article.session.sessionId);
   assert.match(JSON.stringify(providerRequests.at(-1).input), /IMPORTED-ARTICLE/);
   assert.deepEqual(providerRequests.at(-1).tools, [], "fork uses current search-off configuration");
-  appServer.close();
+  await appServer.close();
   await fs.writeFile(configPath, 'web_search = "live"\n' + providerConfig + isolationFixture + '\n[features]\nstandalone_web_search = true\n');
   appServer = new CodexAppServer({ executable, env, cwd, version: "0.4.0-test" });
   await appServer.ensureStarted();
@@ -243,12 +252,25 @@ try {
     sourceSession: child.session,
   });
   assert.equal(descendant.session.scopeId, article.session.scopeId);
+  assert.notEqual(descendant.session.sessionId, child.session.sessionId);
+  assert.equal(providerHeaders.at(-1)["session-id"], rootIdentity, "descendant resolves original root after second restart");
+  assert.equal(providerHeaders.at(-1)["thread-id"], descendant.session.sessionId);
+  assert.equal(providerRequests.at(-1).prompt_cache_key, rootCacheKey);
   assert.match(JSON.stringify(providerRequests.at(-1).input), /first child/);
   assert.match(JSON.stringify(providerRequests.at(-1).input), /Fork verified/);
   assert.deepEqual(providerRequests.at(-1).tools.map((tool) => tool.name), ["web"], "descendant uses current search-on configuration");
+  const sibling = await appServer.turn({
+    model: "rabbithole-isolation-model", input: [{ type: "text", text: "FORK-CHECK: sibling." }], instructions: "Reply directly.",
+    reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {}, sourceSession: article.session,
+  });
+  assert.notEqual(sibling.session.sessionId, child.session.sessionId);
+  assert.equal(providerHeaders.at(-1)["session-id"], rootIdentity);
+  assert.equal(providerHeaders.at(-1)["thread-id"], sibling.session.sessionId);
+  assert.equal(providerRequests.at(-1).prompt_cache_key, rootCacheKey);
+  assert.doesNotMatch(JSON.stringify(providerRequests.at(-1).input), /first child/);
   process.stdout.write("persistent article: model completion; restart fork: inherited article and child answer\n");
 
-  appServer.close();
+  await appServer.close();
   await fs.mkdir(path.dirname(egoSkill), { recursive: true });
   await fs.writeFile(egoSkill, "---\nname: ego-browser\ndescription: Browse with Ego.\n---\n\nEGO_SKILL_INSTRUCTIONS\n");
   const otherSkill = path.join(home, ".agents/skills/unrelated-skill/SKILL.md");
@@ -268,8 +290,9 @@ try {
   assert.equal(egoRequests.length, 2, "installed Codex completes the MCP browser round trip");
   assert.match(JSON.stringify(egoRequests[0].input), /EGO_SKILL_INSTRUCTIONS/);
   assert.equal(/UNRELATED_SKILL_(?:DESCRIPTION|BODY)/.test(JSON.stringify(egoRequests)), false);
-  const egoToolNames = egoRequests[0].tools.map((tool) => tool.name);
-  const egoNamespace = egoRequests[0].tools.find((tool) => tool.name === "mcp__rabbithole_ego_browser");
+  const egoTools = egoRequests.flatMap((request) => [...(request.tools || []), ...(request.input.find((item) => item.type === "additional_tools")?.tools || [])]);
+  const egoToolNames = egoTools.map((tool) => tool.name);
+  const egoNamespace = egoTools.find((tool) => tool.name === "mcp__rabbithole_ego_browser");
   assert.deepEqual(egoNamespace?.tools?.map((tool) => tool.name), ["ego_browser"], JSON.stringify(egoToolNames));
   assert.equal(egoToolNames.some((name) => /exec_command|shell|user_server/.test(name)), false);
   assert.match(JSON.stringify(egoRequests[1].input), /EGO_TOOL_ROUNDTRIP/);
@@ -291,12 +314,33 @@ try {
   const cachePath = path.join(data, "codex-models.json");
   const cacheExists = await fs.access(cachePath).then(() => true, () => false);
   assert.equal(cacheExists, false);
+  await appServer.close();
+  const builtinConfig = 'model = "rabbithole-isolation-model"\nmodel_provider = "openai"\nweb_search = "disabled"\n'
+    + `openai_base_url = "http://127.0.0.1:${stubPort}/builtin/v1"\n`;
+  await fs.writeFile(configPath, builtinConfig);
+  await fs.writeFile(path.join(baseEnv.CODEX_HOME, "auth.json"), JSON.stringify({ OPENAI_API_KEY: "offline-test-key" }));
+  appServer = new CodexAppServer({ executable, env, cwd, version: "0.4.0-test" });
+  await appServer.ensureStarted();
+  const builtinRoot = await appServer.turn({
+    model: "rabbithole-isolation-model", input: [{ type: "text", text: "FORK-CHECK: builtin root." }], instructions: "Reply directly.",
+    reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {},
+  });
+  const builtinChild = await appServer.turn({
+    model: "rabbithole-isolation-model", input: [{ type: "text", text: "FORK-CHECK: builtin child." }], instructions: "Reply directly.",
+    reasoningEffort: "medium", signal: new AbortController().signal, onDelta() {}, sourceSession: builtinRoot.session,
+  });
+  assert.equal(providerHeaders.at(-1)["session-id"], builtinRoot.session.sessionId);
+  assert.equal(providerHeaders.at(-1)["thread-id"], builtinChild.session.sessionId);
+  assert.equal(providerRequests.at(-1).prompt_cache_key, builtinRoot.session.sessionId);
+  assert.equal(providerHeaders.at(-1).authorization, "Bearer offline-test-key");
+  assert.equal(await fs.readFile(configPath, "utf8"), builtinConfig);
+  process.stdout.write("builtin OpenAI: private runtime endpoint, independent fork and shared cache identity\n");
   process.stdout.write(
       `acceptance C mcp=${JSON.stringify(mcpList)} elapsed_ms=${elapsedMs.toFixed(1)} `
     + `cache_exists=${cacheExists} source_guard=clean\n`
   );
 } finally {
-  appServer.close();
+  await appServer.close();
   await new Promise((resolve) => stub.close(resolve));
   await fs.rm(temporaryRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }

@@ -7,6 +7,8 @@ export function tokenUsage(usage) {
   const completion = Number(usage.outputTokens ?? usage.output_tokens) || 0;
   return {
     inputTokens: prompt,
+    ...(usage.cachedInputTokens !== undefined || usage.cached_input_tokens !== undefined
+      ? { cachedInputTokens: Number(usage.cachedInputTokens ?? usage.cached_input_tokens) || 0 } : {}),
     outputTokens: completion,
     totalTokens: Number(usage.totalTokens ?? usage.total_tokens) || prompt + completion,
   };
