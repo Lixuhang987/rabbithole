@@ -63,7 +63,7 @@ function requestError(error) {
   return bridgeError(error);
 }
 
-/** @param {{port?: number, env?: NodeJS.ProcessEnv, version?: string, logger?: {warn?: (...args: any[]) => void}, newToken?: boolean, stateRefreshMs?: number}} [options] */
+/** @param {{port?: number, env?: NodeJS.ProcessEnv, version?: string, logger?: {warn?: (...args: any[]) => void}, newToken?: boolean, stateRefreshMs?: number, onRestart?: () => void}} [options] */
 export async function createBridge({
   port = 41414,
   env = process.env,
@@ -71,6 +71,7 @@ export async function createBridge({
   logger,
   newToken = false,
   stateRefreshMs,
+  onRestart,
 } = {}) {
   const { token, created: tokenCreated } = await readOrCreateBridgeToken({
     env,
@@ -101,32 +102,24 @@ export async function createBridge({
   });
   let actualPort = port;
   let closing = false;
-  let restartPromise = null;
+  let restarting = false;
   const activeControllers = new Set();
 
-  async function restart() {
+  function requestRestart(res) {
     if (closing) throw new BridgeError("Bridge is shutting down.", "bridge_restarting", 503);
-    if (restartPromise) return restartPromise;
+    if (restarting) throw new BridgeError("Bridge is restarting. Try again shortly.", "bridge_restarting", 503);
     if (activeControllers.size) {
       throw new BridgeError("Wait for current answers to finish, then restart the bridge.", "bridge_busy", 409);
     }
-    restartPromise = (async () => {
-      // Construct replacements before closing the working backends.
-      const nextCodex = await CodexBackend.create({ env, cwd: codexCwd, bridgeVersion: version });
-      await state.refreshPromise;
-      if (closing) {
-        await Promise.allSettled([nextCodex.close()]);
-        throw new BridgeError("Bridge is shutting down.", "bridge_restarting", 503);
-      }
-      await Promise.allSettled([codex.close()]);
-      codex = nextCodex;
-      return state.replaceBackends({ codex });
-    })().finally(() => { restartPromise = null; });
-    return restartPromise;
+    if (!onRestart) throw new BridgeError("Start the bridge through the Rabbithole CLI to restart it.", "restart_unavailable", 503);
+    restarting = true;
+    // Flush the acknowledgement before closing HTTP and its state streams.
+    res.once("finish", onRestart);
+    sendJson(res, 200, { ok: true, instanceId: state.instanceId });
   }
 
   function assertAvailable() {
-    if (closing || restartPromise) {
+    if (closing || restarting) {
       throw new BridgeError("Bridge is restarting. Try again shortly.", "bridge_restarting", 503);
     }
   }
@@ -271,7 +264,7 @@ export async function createBridge({
           models: await models(),
         });
       } else if (req.method === "POST" && url.pathname === "/bridge/restart") {
-        sendJson(res, 200, { ok: true, state: await restart() });
+        requestRestart(res);
       } else if (req.method === "POST" && url.pathname === "/bridge/generate") {
         await handleGenerate(req, res, body);
       } else {

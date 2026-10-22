@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 const REFRESH_MS = 15_000;
 const STATES = new Set(["starting", "missing", "signed_out", "ready", "error"]);
 
@@ -59,6 +61,7 @@ export class BridgeStateStore {
   /** @param {{version: string, backends: any, logger?: any, refreshMs?: number}} input */
   constructor({ version, backends, logger, refreshMs = REFRESH_MS }) {
     this.version = version;
+    this.instanceId = randomUUID();
     this.backends = backends;
     this.logger = logger;
     this.refreshMs = refreshMs;
@@ -68,6 +71,7 @@ export class BridgeStateStore {
     this.closed = false;
     this.value = {
       bridge: version,
+      instanceId: this.instanceId,
       agents: [
         ...Object.values(backends).map((backend) => backend.initialState()),
       ].map(assertAgentState),
@@ -96,6 +100,7 @@ export class BridgeStateStore {
     ]).then((agents) => {
       const next = {
         bridge: this.version,
+        instanceId: this.instanceId,
         agents: agents.map(assertAgentState),
       };
       if (JSON.stringify(next) !== JSON.stringify(this.value)) {
@@ -111,20 +116,6 @@ export class BridgeStateStore {
       this.schedule();
     });
     return this.refreshPromise;
-  }
-
-  async replaceBackends(backends) {
-    clearTimeout(this.timer);
-    await this.refreshPromise;
-    if (this.closed) return this.value;
-    clearTimeout(this.timer);
-    this.backends = backends;
-    this.value = {
-      bridge: this.version,
-      agents: Object.values(backends).map((backend) => backend.initialState()).map(assertAgentState),
-    };
-    for (const listener of this.listeners) listener(this.value);
-    return this.refresh();
   }
 
   close() {

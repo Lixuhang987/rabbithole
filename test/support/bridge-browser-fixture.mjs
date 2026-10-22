@@ -26,8 +26,8 @@ export async function installBridgeFetchStub(context) {
       return new Headers(options?.headers || {}).get("Authorization") || "";
     }
     function push(state) {
-      currentState = state;
-      const bytes = encoder.encode(`data: ${JSON.stringify(state)}\n\n`);
+      currentState = { ...state, instanceId: state.instanceId || currentState?.instanceId || 'initial-instance' };
+      const bytes = encoder.encode(`data: ${JSON.stringify(currentState)}\n\n`);
       for (const stream of [...streams]) {
         try { stream.enqueue(bytes); } catch { streams.delete(stream); }
       }
@@ -96,8 +96,12 @@ export async function installBridgeFetchStub(context) {
         const result = restartQueue.shift() || {};
         await new Promise((resolve) => setTimeout(resolve, 300));
         if (result.error) return new Response(JSON.stringify({ error: { message: result.error } }), { status: 409, headers: { "Content-Type": "application/json" } });
-        push(currentState);
-        return new Response(JSON.stringify({ ok: true, state: currentState }), { status: 200, headers: { "Content-Type": "application/json" } });
+        const previous = currentState;
+        closeStreams();
+        const instanceId = `restarted-${requests.filter((request) => request.kind === "restart").length}`;
+        push({ bridge: previous.bridge, instanceId, agents: [{ id: 'codex', state: 'starting' }] });
+        setTimeout(() => push({ ...previous, instanceId }), 300);
+        return new Response(JSON.stringify({ ok: true, instanceId: previous.instanceId }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
       if (url === generateUrl) {
         const body = JSON.parse(typeof options.body === "string" ? options.body : "{}");

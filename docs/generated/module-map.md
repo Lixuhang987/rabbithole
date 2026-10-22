@@ -76,11 +76,13 @@ This inventory is derived from the source tree.
 - `src/node/bridge/errors.js`
 - `src/node/bridge/events.js`
 - `src/node/bridge/input.js`
+- `src/node/bridge/launcher.js`
 - `src/node/bridge/main.js`
 - `src/node/bridge/models.js`
 - `src/node/bridge/server.js`
 - `src/node/bridge/state.js`
 - `src/node/bridge/token.js`
+- `src/node/bridge/worker.js`
 - `src/node/shared/dist-assets.js`
 - `src/node/shared/errno.js`
 - `src/node/shared/http-guard.js`

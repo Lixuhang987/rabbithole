@@ -79,7 +79,7 @@ export function createModelSettings({ trigger: defaultTrigger, onSettingsChange 
     else body = pairingMarkup();
     surface.innerHTML = `<section id="settings-panel"><div class="settings-section"><div class="settings-row"><span class="settings-label">Backend</span><strong>Codex</strong></div></div>
       <div id="bridge-surface" class="bridge-surface" data-state="${escapeHtml(current)}">${body}</div>
-      <div class="settings-section"><div class="settings-row"><span class="switch-copy"><strong>Bridge connection</strong><small>Restart after changing local Codex configuration.</small></span>${button('restart-bridge', restarting ? 'Restarting…' : 'Restart Bridge', `${restarting || current !== 'ready' ? 'disabled' : ''} ${restarting ? 'aria-busy="true"' : ''}`)}</div>
+      <div class="settings-section"><div class="settings-row"><span class="switch-copy"><strong>Bridge connection</strong><small>Restart to load bridge updates and local Codex configuration.</small></span>${button('restart-bridge', restarting ? 'Restarting…' : 'Restart Bridge', `${restarting || current !== 'ready' ? 'disabled' : ''} ${restarting ? 'aria-busy="true"' : ''}`)}</div>
       <p id="bridge-restart-status" class="field-hint" role="status">${escapeHtml(notice)}</p></div></section>`;
     wireField(surface, { id: 'bridge-pairing-token' });
     const tokenInput = surface.querySelector('#bridge-pairing-token');

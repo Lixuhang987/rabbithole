@@ -46,7 +46,7 @@ export async function pingBridge(baseUrl, { timeoutMs = 1_500 } = {}) {
   }
 }
 
-/** Restart CLI backends while preserving the paired HTTP listener. */
+/** Restart the HTTP-serving process and wait for its replacement's state. */
 export async function restartBridge(baseUrl, bearerToken) {
   const url = `${bridgeRootUrl(baseUrl)}/bridge/restart`;
   const response = await fetch(url, {
@@ -58,7 +58,28 @@ export async function restartBridge(baseUrl, bearerToken) {
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error?.message || `Restart failed (HTTP ${response.status}).`);
-  return payload.state;
+  if (typeof payload.instanceId !== "string" || !payload.instanceId) throw new Error("The bridge sent an invalid restart acknowledgement.");
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), deadline - Date.now());
+    /** @type {ReturnType<typeof normalizeBridgeState> | undefined} */ let nextState;
+    let unauthorized = false;
+    try {
+      const result = await consumeBridgeEvents(baseUrl, bearerToken, { signal: controller.signal, onState(state) {
+        if (state.instanceId && state.instanceId !== payload.instanceId && state.agents.every((agent) => agent.state !== "starting")) {
+          nextState = state;
+          controller.abort();
+        }
+      } });
+      unauthorized = result.reason === "unauthorized";
+    } catch { /* The old stream closes and connections can fail during replacement. */ }
+    finally { clearTimeout(timer); }
+    if (nextState) return nextState;
+    if (unauthorized) throw new Error("Pair this browser again using the link in the bridge terminal.");
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error("The bridge did not reconnect after restarting. Check the bridge terminal.");
 }
 
 /*
@@ -144,6 +165,7 @@ export function normalizeBridgeState(value) {
   if (!agents.length) throw new Error("The bridge state has no agents.");
   return {
     bridge: typeof value.bridge === "string" ? value.bridge : "",
+    ...(typeof value.instanceId === "string" ? { instanceId: value.instanceId } : {}),
     agents,
   };
 }

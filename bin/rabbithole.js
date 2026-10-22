@@ -34,8 +34,8 @@ if (command === "bridge" || !command) {
     usage();
     process.exitCode = 1;
   } else {
-    const { runBridge } = await import("../src/node/bridge/main.js");
-    await runBridge(options).catch((error) => {
+    const { launchBridge } = await import("../src/node/bridge/launcher.js");
+    await launchBridge(options).catch((error) => {
       process.stderr.write(`rabbithole bridge: ${error.message}\n`);
       process.exitCode = 1;
     });

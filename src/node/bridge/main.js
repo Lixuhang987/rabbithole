@@ -43,11 +43,13 @@ function printBanner({ url, pairUrl, opened, out = process.stdout }) {
     + `\n  ${dim("Keep this running while you use Rabbithole. Ctrl-C stops it.")}\n\n`);
 }
 
+/** @param {{port?: number, newToken?: boolean, autoOpen?: boolean, env?: NodeJS.ProcessEnv, onRestart?: () => void}} [options] */
 export async function runBridge({
   port = DEFAULT_PORT,
   newToken = false,
   autoOpen = true,
   env = process.env,
+  onRestart,
 } = {}) {
   const bridge = await createBridge({
     port,
@@ -55,6 +57,7 @@ export async function runBridge({
     env,
     version: BRIDGE_VERSION,
     logger: { warn },
+    onRestart,
   });
   await bridge.start();
   const pairUrl = pairingUrl(bridge.token, bridge.port);
@@ -67,7 +70,7 @@ export async function runBridge({
   // process-manager logs), which capture stderr through pipes — never a TTY. A
   // human's terminal is one, so they see the banner alone.
   if (!process.stderr.isTTY) {
-    log(`Rabbithole bridge listening on ${bridge.url}`);
+    log(`Rabbithole bridge listening on ${bridge.url} (pid ${process.pid})`);
     log(`Pairing token: ${bridge.token}`);
   }
 

@@ -39,7 +39,9 @@ The build updates the files served by NGINX. If its configuration changed, reloa
 nginx -s reload -c /opt/homebrew/etc/nginx/rabbithole.conf
 ```
 
-When bridge/backend source changed, restart the existing service to load it:
+After bridge/backend source changes, use Restart Bridge in Model settings to
+reload the HTTP-serving process. When updating the CLI launcher itself, or
+upgrading a service started before process restart support, restart the service:
 
 ```bash
 launchctl kickstart -k "gui/$(id -u)/local.rabbithole.bridge"

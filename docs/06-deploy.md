@@ -18,7 +18,9 @@ Ordinary restarts retain pairing; `--new-token` requires browsers to pair again.
 Codex inherits its normal provider, credentials and search configuration. The bridge
 overlays execution isolation without editing user files, with
 [ego-browser](deploy/codex-ego-browser.md) as its sole skill exception. Restart Bridge
-in Model settings reloads Codex configuration and refuses restart during generation.
+in Model settings replaces the HTTP-serving bridge process, loading updated bridge
+source and Codex configuration. It retains pairing and refuses active generation.
+The CLI launcher keeps foreground and service-manager ownership across restarts.
 Claude Code and OpenCode execution remain TODOs.
 
 Background services need explicit CLI paths, provider credential variables and

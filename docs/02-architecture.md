@@ -30,3 +30,8 @@ bridge-owned Ego browser tool remains internal to backend execution.
 Native histories and local node associations survive reopening. Portable files
 and frozen snapshots exclude those associations. Frozen snapshots embed all
 needed assets/runtimes; live browser assets load from the static app's origin.
+
+The CLI launcher owns bridge process lifetime. Restart Bridge replaces the
+HTTP-serving process after acknowledgment and shutdown, loading source afresh.
+Port, environment and pairing persist; ephemeral instance IDs let the browser
+distinguish a replacement from the old process during reconnection.
