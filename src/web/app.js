@@ -259,9 +259,11 @@ function initAppChrome() {
     if (closestEl(event.target, ".rail-open")) {
       event.preventDefault();
       if (!id || id === currentHoleId) return;
+      const documentStore = store;
+      if (!documentStore) return;
       await currentHost?.flushSave();
-      const hole = await store.loadHole(id);
-      if (hole) await startHole(hole);
+      const hole = await documentStore.loadHole(id);
+      if (hole) await startHole(hole, { sourceStore: documentStore });
     }
   });
   rail?.addEventListener("keydown", (event) => {
@@ -378,21 +380,26 @@ function moveProjectMenuFocus(event) {
   items[next].focus({ preventScroll: true });
 }
 
-async function openHistoryLocation() {
-  const holeId = holeIdFromPathname(location.pathname);
-  if (!store || holeId === currentHoleId) return;
-  await currentHost?.flushSave();
-  if (holeId) {
-    const hole = await store.loadHole(holeId);
-    if (hole) {
-      await startHole(hole, { replace: true });
-      return;
+function openHistoryLocation() {
+  const documentStore = store;
+  const transition = holeTransition.then(async () => {
+    const holeId = holeIdFromPathname(location.pathname);
+    if (!documentStore || documentStore !== store || holeId === currentHoleId) return;
+    await currentHost?.flushSave();
+    if (holeId) {
+      const hole = await documentStore.loadHole(holeId);
+      if (hole) {
+        await mountHole(hole, { replace: true });
+        return;
+      }
+      showToast({ message: "This Rabbithole was not found." });
     }
-    showToast({ message: "This Rabbithole was not found." });
-  }
-  await disposeCurrentHole();
-  resetHoleSurface();
-  showBlankCanvas();
+    await disposeCurrentHole();
+    resetHoleSurface();
+    showBlankCanvas();
+  });
+  holeTransition = transition.catch(() => {});
+  return transition;
 }
 
 function initComposer() {
@@ -619,12 +626,13 @@ async function runComposer() {
 }
 
 async function createFromComposerDocument(markdown, { improveStructure = false } = {}) {
+  const documentStore = store;
   if (!String(markdown || "").trim()) {
     setIngestStatus("Paste a document first.", "error");
     return;
   }
   try {
-    const hole = await maybeAuthorDocument({
+    const hole = await maybeAuthorDocument(documentStore, {
       title: "",
       markdown,
       sourceName: "pasted text",
@@ -632,13 +640,14 @@ async function createFromComposerDocument(markdown, { improveStructure = false }
       improveStructure,
     });
     setIngestStatus("");
-    await startHole(await store.loadHole(hole.hole_id) || hole);
+    await startHole(await documentStore.loadHole(hole.hole_id) || hole, { sourceStore: documentStore });
   } catch (err) {
     setIngestStatus(`Document import failed. ${err?.message || String(err)}`, "error");
   }
 }
 
 async function createFromAsk(question) {
+  const documentStore = store;
   if (!question) {
     setIngestStatus("Ask a question first.", "error");
     return;
@@ -648,9 +657,9 @@ async function createFromAsk(question) {
   try {
     setIngestStatus("Starting Rabbithole...", "busy");
     const hole = (await loadWorkspaceRuntime()).createPendingHoleFromQuestion(question);
-    await store.saveHole(hole);
+    await documentStore.saveHole(hole);
     setIngestStatus("Opening Rabbithole...", "busy");
-    await startHole(await store.loadHole(hole.hole_id) || hole);
+    await startHole(await documentStore.loadHole(hole.hole_id) || hole, { sourceStore: documentStore });
   } catch (err) {
     const message = err?.message || String(err);
     if (isAuthLikeError(err)) {
@@ -664,6 +673,7 @@ async function createFromAsk(question) {
 }
 
 async function createFromUrl(rawUrl) {
+  const documentStore = store;
   if (!rawUrl) {
     setIngestStatus("Enter a URL first.", "error");
     return;
@@ -673,7 +683,7 @@ async function createFromUrl(rawUrl) {
     setIngestStatus("Fetching URL...", "busy");
     const { hole } = await (await loadWorkspaceRuntime()).openUrlToStoredHole({
       rawUrl,
-      store,
+      store: documentStore,
       title: "",
       proxyBaseUrl: settings.fetch_proxy_url || "",
       onProgress: (progress) => {
@@ -682,13 +692,14 @@ async function createFromUrl(rawUrl) {
       },
     });
     setIngestStatus("");
-    await startHole(await store.loadHole(hole.hole_id) || hole);
+    await startHole(await documentStore.loadHole(hole.hole_id) || hole, { sourceStore: documentStore });
   } catch (err) {
     setIngestStatus(err?.message || String(err), "error");
   }
 }
 
 async function createFromFile(file) {
+  const documentStore = store;
   if (!store) { await openModelSetup(); return; }
   if (isRabbitholeFile(file)) return createFromRabbitholeFile(file);
   if (isSnapshotFile(file)) return createFromSnapshotFile(file);
@@ -704,66 +715,69 @@ async function createFromFile(file) {
   try {
     setIngestStatus("Reading markdown file...", "busy");
     const markdown = await file.text();
-    const hole = await maybeAuthorDocument({
+    const hole = await maybeAuthorDocument(documentStore, {
       title: file.name.replace(/\.[^.]+$/, ""),
       markdown,
       sourceName: file.name,
       kind: "file",
     });
     setIngestStatus("");
-    await startHole(await store.loadHole(hole.hole_id) || hole);
+    await startHole(await documentStore.loadHole(hole.hole_id) || hole, { sourceStore: documentStore });
   } catch (err) {
     setIngestStatus(`Markdown import failed. ${err?.message || String(err)}`, "error");
   }
 }
 
 async function createFromSnapshotFile(file) {
+  const documentStore = store;
   try {
     setIngestStatus("Importing Rabbithole snapshot...", "busy");
-    const imported = await (await loadWorkspaceRuntime()).importSnapshotFile(store, file, { mintHoleId: createWhimsicalHoleId });
+    const imported = await (await loadWorkspaceRuntime()).importSnapshotFile(documentStore, file, { mintHoleId: createWhimsicalHoleId });
     setIngestStatus("");
-    const hole = await store.loadHole(imported.hole_id);
+    const hole = await documentStore.loadHole(imported.hole_id);
     if (!hole) throw new Error("Imported snapshot could not be loaded.");
-    await startHole(hole);
+    await startHole(hole, { sourceStore: documentStore });
   } catch (err) {
     setIngestStatus(err?.message || String(err), "error");
   }
 }
 
 async function createFromRabbitholeFile(file) {
+  const documentStore = store;
   try {
     setIngestStatus("Importing Rabbithole file...", "busy");
-    const imported = await (await loadWorkspaceRuntime()).importRabbitholeFile(store, file, { mintHoleId: createWhimsicalHoleId });
+    const imported = await (await loadWorkspaceRuntime()).importRabbitholeFile(documentStore, file, { mintHoleId: createWhimsicalHoleId });
     setIngestStatus("");
-    const hole = await store.loadHole(imported.hole_id);
+    const hole = await documentStore.loadHole(imported.hole_id);
     if (!hole) throw new Error("Imported file could not be loaded.");
-    await startHole(hole);
+    await startHole(hole, { sourceStore: documentStore });
   } catch (err) {
     setIngestStatus(err?.message || String(err), "error");
   }
 }
 
 async function createFromPdfFile(file) {
+  const documentStore = store;
   try {
     setIngestStatus("Preparing PDF...", "busy");
     const runtime = await loadWorkspaceRuntime();
     const { hole } = await runtime.ingestPdfToStoredHole({
       source: file,
-      store,
+      store: documentStore,
       title: "",
       onProgress: ({ page, index, total }) => {
         if (page) setIngestStatus(`Preparing page ${index} of ${total}`, "busy");
       },
     });
     setIngestStatus("");
-    await startHole(await store.loadHole(hole.hole_id) || hole);
+    await startHole(await documentStore.loadHole(hole.hole_id) || hole, { sourceStore: documentStore });
   } catch (err) {
     const runtime = await loadWorkspaceRuntime().catch(() => null);
     setIngestStatus(runtime ? runtime.describePdfImportFailure(err) : (err?.message || String(err)), "error");
   }
 }
 
-async function maybeAuthorDocument({
+async function maybeAuthorDocument(store, {
   title = "",
   markdown = "",
   sourceName = "",
@@ -795,8 +809,10 @@ async function maybeAuthorDocument({
   } });
 }
 
-function startHole(hole, options = {}) {
-  const transition = holeTransition.then(() => mountHole(hole, options));
+function startHole(hole, { sourceStore = store, replace = false } = {}) {
+  const transition = holeTransition.then(() => {
+    if (sourceStore === store) return mountHole(hole, { replace });
+  });
   holeTransition = transition.catch(() => {});
   return transition;
 }
@@ -945,7 +961,13 @@ async function exportCurrentRabbithole() {
 async function renderRail({ refresh = true, firstHoleId = null } = {}) {
   const rail = document.getElementById("web-rail");
   if (!rail) return;
-  if (refresh || !railSummaries) railSummaries = await store.listHoles();
+  if (refresh || !railSummaries) {
+    const documentStore = store;
+    if (!documentStore) return;
+    const summaries = await documentStore.listHoles();
+    if (documentStore !== store) return;
+    railSummaries = summaries;
+  }
   const summaries = firstHoleId
     ? [...railSummaries].sort((a, b) => Number(b.hole_id === firstHoleId) - Number(a.hole_id === firstHoleId))
     : railSummaries;
@@ -1019,42 +1041,47 @@ function reconcileChildren(parent, next) {
   }
 }
 
-async function deleteHoleFromRail(holeId) {
-  if (!holeId) return;
-  const deletingCurrent = holeId === currentHoleId;
-  if (deletingCurrent) {
-    await disposeCurrentHole();
-    resetHoleSurface();
-  }
-  const hole = await store.loadHole(holeId);
-  if (!hole) return;
-  const assets = typeof store.getAssets === "function"
-    ? await store.getAssets(holeId)
-    : await Promise.all((await store.listAssets(holeId)).map(async (name) => ({ name, blob: await store.getAsset(holeId, name) })));
-  await store.deleteHole(holeId);
-  if (safeLocalStorageGet(LAST_HOLE_KEY) === holeId) localStorage.removeItem(LAST_HOLE_KEY);
-  await renderRail();
-  showToast({
-    message: `Deleted "${hole.title || "Untitled"}"`,
-    actionLabel: "Undo",
-    timeoutMs: 10000,
-    onAction: async () => {
-      await store.saveHole(hole);
-      const restorableAssets = assets.filter((asset) => asset.blob);
-      if (typeof store.putAssets === "function") await store.putAssets(holeId, restorableAssets);
-      else await Promise.all(restorableAssets.map((asset) => store.putAsset(holeId, asset.name, asset.blob)));
-      await renderRail();
-    },
-  });
-  if (deletingCurrent) {
-    const next = railSummaries?.[0];
-    if (next) {
-      const nextHole = await store.loadHole(next.hole_id);
-      if (nextHole) await startHole(nextHole, { replace: true });
-    } else {
-      showBlankCanvas();
+function deleteHoleFromRail(holeId) {
+  const documentStore = store;
+  const transition = holeTransition.then(async () => {
+    if (!holeId || !documentStore || documentStore !== store) return;
+    const deletingCurrent = holeId === currentHoleId;
+    if (deletingCurrent) {
+      await disposeCurrentHole();
+      resetHoleSurface();
     }
-  }
+    const hole = await documentStore.loadHole(holeId);
+    if (!hole) return;
+    const assets = typeof documentStore.getAssets === "function"
+      ? await documentStore.getAssets(holeId)
+      : await Promise.all((await documentStore.listAssets(holeId)).map(async (name) => ({ name, blob: await documentStore.getAsset(holeId, name) })));
+    await documentStore.deleteHole(holeId);
+    if (safeLocalStorageGet(LAST_HOLE_KEY) === holeId) localStorage.removeItem(LAST_HOLE_KEY);
+    await renderRail();
+    showToast({
+      message: `Deleted "${hole.title || "Untitled"}"`,
+      actionLabel: "Undo",
+      timeoutMs: 10000,
+      onAction: async () => {
+        await documentStore.saveHole(hole);
+        const restorableAssets = assets.filter((asset) => asset.blob);
+        if (typeof documentStore.putAssets === "function") await documentStore.putAssets(holeId, restorableAssets);
+        else await Promise.all(restorableAssets.map((asset) => documentStore.putAsset(holeId, asset.name, asset.blob)));
+        if (store === documentStore) await renderRail();
+      },
+    });
+    if (deletingCurrent) {
+      const next = railSummaries?.[0];
+      if (next) {
+        const nextHole = await documentStore.loadHole(next.hole_id);
+        if (nextHole) await mountHole(nextHole, { replace: true });
+      } else {
+        showBlankCanvas();
+      }
+    }
+  });
+  holeTransition = transition.catch(() => {});
+  return transition;
 }
 
 function toggleRail() {

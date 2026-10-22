@@ -20,3 +20,7 @@ Baseline: `b7cfb3c`; the owner authorized proceeding with existing baseline fail
 6. Commit implementation, review against `b7cfb3c` using code-review's separate Standards and Spec reviewers, fix actionable findings and commit corrections.
 
 Cumulative new independently executed cases: 1 (`backend-persistence.test.mjs`, fresh browser/process flow); maximum 4. Reuse existing test entries and preserve their behavioral assertions. Skip standalone absence tests for deleted IndexedDB code. Raw-disk inspection stays in store-contract hooks; UI actions stay in product controls.
+
+## Delivery status
+
+Implemented on `codex/backend-document-storage` in the isolated worktree. Implementation commit: `ba68988`; follow-up fixes preserve connection ownership and stabilize existing browser assertions. See [verification](verification.md) for results and the separate review reports. The original spec's specification-only wording records its earlier writing phase; the subsequent implement request authorized production changes.

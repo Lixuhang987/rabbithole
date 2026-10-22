@@ -976,6 +976,8 @@ async function verifyDockedNotes() {
     await popover.locator(".note-pop-view").waitFor();
     assert.equal((await popover.locator(".note-pop-view").innerText()).trim(), "The first docked note",
       "Escape from the editor reverts to the note as saved");
+    // Reverting mutates the surface; its anchor follows on the next animation frame.
+    await popover.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(null)))));
     const revertGlyph = await popover.evaluate((surface) => {
       const view = surface.querySelector(".note-pop-view");
       const range = document.createRange();
@@ -1263,6 +1265,7 @@ async function verifyDockedNoteTextGeometry() {
     );
     await page.locator("#reader-main .note-dot").last().click();
     await page.waitForSelector("#notepop.visible");
+    await page.waitForFunction(() => document.getElementById("notepop").contains(document.activeElement));
     await page.keyboard.press("Backspace");
     await page.waitForFunction(() => document.querySelectorAll("#reader-main .note-dot").length === 1);
     assertDockedNoteGeometry(

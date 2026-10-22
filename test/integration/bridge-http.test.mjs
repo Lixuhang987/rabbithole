@@ -6,7 +6,6 @@ import path from 'node:path';
 import { createProvider } from '../../src/web/provider/bridge-provider.js';
 import { DirectRabbitholeHost, createPendingHoleFromQuestion, createHoleFromMarkdown } from '../../src/web/transport/direct-host.js';
 import { createPortableProjection } from '../../src/core/portable-projection.js';
-import { toPersistedHole } from '../../src/core/schema.js';
 import { createSnapshotProjection } from '../../src/core/snapshot-projection.js';
 import { createBridge } from '../../src/node/bridge/server.js';
 import { HttpStore } from '../../src/web/store/http-store.js';
@@ -57,11 +56,8 @@ async function waitFor(predicate) {
   while (Date.now() < deadline) { const result = await predicate(); if (result) return result; await new Promise((resolve) => setTimeout(resolve, 10)); }
   throw new Error('Timed out waiting for native generation');
 }
-function hostFor(hole, provider = createProvider(settings()), saved = []) {
-  const store = new HttpStore(settings());
-  const saveHole = store.saveHole.bind(store);
-  store.saveHole = async (value) => { await saveHole(value); saved.push(structuredClone(value)); };
-  const host = new DirectRabbitholeHost({ hole, provider, store });
+function hostFor(hole, provider = createProvider(settings())) {
+  const host = new DirectRabbitholeHost({ hole, provider, store: new HttpStore(settings()) });
   hosts.push(host); return host;
 }
 async function ask(host, id, parent, question, extra = {}) {
@@ -92,9 +88,8 @@ try {
   const noImages = await generate({ kind: 'ask', question: 'Read this', attachments: [{ kind: 'image', data_url: image }] }, { model: 'gpt-second' });
   assert.equal(noImages.error.code, 'model_no_images');
 
-  const saved = [];
   const hole = createPendingHoleFromQuestion('SEARCH root context');
-  const host = hostFor(hole, createProvider(settings()), saved);
+  const host = hostFor(hole, createProvider(settings()));
   const progress = []; host.onEvent = (event) => progress.push(event);
   host.startRootAnswer();
   const article = await waitFor(() => host.state.nodes.get(hole.root_id)?.status === 'answered' && host.state.nodes.get(hole.root_id));
@@ -104,7 +99,8 @@ try {
   assert.match(article.markdown, /https:\/\/example.com\/search-result/);
   assert.doesNotMatch(article.markdown, /|I will search now/);
   assert.ok(progress.some((event) => event.type === 'node_search_status' && event.status === 'searching'));
-  const persisted = toPersistedHole(saved.at(-1));
+  await host.flushSave();
+  const persisted = await new HttpStore(settings()).loadHole(hole.hole_id);
   assert.deepEqual(persisted.nodes[0].extensions.backend_conversation, source);
   const store = { getAsset: async () => null };
   assert.equal((await createPortableProjection(persisted, {})).hole.nodes[0].extensions.backend_conversation, undefined);
@@ -123,7 +119,8 @@ try {
   assert.doesNotMatch(JSON.stringify((await turns()).at(-1).inheritedHistory), /SEARCH branch/);
   await ask(host, 'grandchild', child.id, 'Descendant question');
   assert.equal((await calls()).filter((call) => call.method === 'thread/fork').at(-1).params.threadId, childSession.sessionId);
-  const reopened = hostFor(saved.at(-1));
+  await host.flushSave();
+  const reopened = hostFor(await new HttpStore(settings()).loadHole(hole.hole_id));
   await ask(reopened, 'reopen', child.id, 'Ask after reopening');
   assert.equal((await calls()).filter((call) => call.method === 'thread/fork').at(-1).params.threadId, childSession.sessionId);
 
