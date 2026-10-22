@@ -24,7 +24,7 @@ launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/local.rabbithole.bridg
 
 ## Update this installation
 
-Use the canonical checkout; wait for active answers to finish before restarting the bridge. The NGINX root is the build directory itself, so avoid building while people are using this local page, and refresh existing tabs afterward. Keep the chosen hostname and port: browser documents and pairing settings are scoped to the origin; `localhost:3000` and `127.0.0.1:3000` have separate storage.
+Use the canonical checkout; wait for active answers to finish before restarting the bridge. The NGINX root is the build directory itself, so avoid building while people are using this local page, and refresh existing tabs afterward. `localhost:3000` and `127.0.0.1:3000` have separate pairing/preferences; pair each origin to the same bridge to open the same disk-backed documents. Preserve the bridge data directory across replacements. Old browser documents are not migrated.
 
 ```bash
 cd /Users/mu9/proj/rabbithole

@@ -1,14 +1,15 @@
 # Notes for agents developing Rabbithole
 
 Rabbithole is a browser document canvas with a paired local Codex bridge. The
-browser owns documents and IndexedDB; Codex owns native answer history. Read
+browser owns the active document graph; the bridge persists documents and assets
+on disk, and Codex owns native answer history. Read
 [Architecture](docs/02-architecture.md) before changing those boundaries and
 [Data contracts](docs/compatibility.md) before changing stored or portable data.
 
 - `src/core/`: host-independent document engine, rendering, artifacts, contracts.
 - `src/ui/`: browser runtime shared by live documents and frozen snapshots.
-- `src/web/`: browser host, native bridge provider, ingestion and IndexedDB.
-- `src/node/bridge/`: authenticated loopback transport and native Codex sessions.
+- `src/web/`: browser host, native bridge provider, ingestion and HTTP store.
+- `src/node/bridge/`: authenticated loopback transport, document store and native Codex sessions.
 - `src/node/shared/`: Node helpers needed by the bridge and artifact tools.
 - `dist/`: committed browser bundles; regenerate after UI changes.
 

@@ -1,9 +1,11 @@
 /** Browser mock of the external bridge stream and native search lifecycle. */
+import { installStoreRoutes } from './backend-store.mjs';
 const BRIDGE_EVENTS_URL = "http://127.0.0.1:41414/bridge/events";
 const BRIDGE_GENERATE_URL = "http://127.0.0.1:41414/bridge/generate";
 const BRIDGE_PING_URL = "http://127.0.0.1:41414/bridge/ping";
 
 export async function installBridgeFetchStub(context) {
+  await installStoreRoutes(context);
   await context.addInitScript(({ eventsUrl, generateUrl, pingUrl, restartUrl }) => {
     const realFetch = window.fetch.bind(window);
     const encoder = new TextEncoder();

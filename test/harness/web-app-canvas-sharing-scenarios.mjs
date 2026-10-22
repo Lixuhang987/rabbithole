@@ -59,6 +59,7 @@ async function verifyMobileCanvasNavigation(browserEngine, engineName) {
     isMobile: true,
   });
   try {
+    await seedConfiguredBridge(context);
     const page = await context.newPage();
     await routeProvider(page);
     await page.goto(baseUrl, { waitUntil: "networkidle" });
@@ -298,6 +299,7 @@ async function verifyRealChromiumReaderScroll(context, page) {
 async function verifyDesktopReaderLayout(browserEngine) {
   const context = await browserEngine.newContext({ viewport: { width: 1280, height: 900 } });
   try {
+    await seedConfiguredBridge(context);
     const page = await context.newPage();
     await routeProvider(page);
     await page.goto(baseUrl, { waitUntil: "networkidle" });
@@ -4366,7 +4368,7 @@ async function verifyCanvasBranching() {
   const reloadedRaw = await page.evaluate(() => window.__rabbitholeTest.readStoredHole().then((hole) => JSON.stringify(hole)));
   assert(reloadedRaw.includes("Euler identity connects rotation"));
   assert(reloadedRaw.includes("Second branch explains the geometric view"));
-  assert(!reloadedRaw.includes(MOCK_TOKEN), "IndexedDB hole record must not contain provider key");
+  assert(!reloadedRaw.includes(MOCK_TOKEN), "backend storage hole record must not contain provider key");
   assert(!page.url().includes(MOCK_TOKEN), "URL must not contain provider key");
 
   await page.waitForSelector("body.mode-canvas");

@@ -61,6 +61,12 @@ async function runHoleContract(store, hooks) {
   const listed = await store.listHoles();
   assert(listed.some((entry) => entry.hole_id === "contract-hole" && entry.node_count === 1));
 
+  await store.saveHole(hole({ hole_id: "order-b" }), { updatedAt: "2026-01-02T00:00:00.000Z" });
+  await store.saveHole(hole({ hole_id: "order-a" }), { updatedAt: "2026-01-02T00:00:00.000Z" });
+  await store.saveHole(hole({ hole_id: "order-new" }), { updatedAt: "2026-01-03T00:00:00.000Z" });
+  assert.deepEqual((await store.listHoles()).filter((entry) => entry.hole_id.startsWith("order-")).map((entry) => entry.hole_id),
+    ["order-new", "order-a", "order-b"], "summaries use explicit timestamps and a stable id tie-breaker");
+  for (const id of ["order-a", "order-b", "order-new", "contract-hole"]) await store.deleteHole(id);
   await store.deleteHole("contract-hole");
   assert.equal(await store.loadHole("contract-hole"), null);
   console.log("ok store contract: hole save/load/list/delete and schema stamping");
@@ -68,14 +74,18 @@ async function runHoleContract(store, hooks) {
 
 async function runNewerSchemaRefusalContract(store, hooks) {
   const future = { ...hole({ hole_id: "future-hole" }), schema_version: 3, updated_at: "2026-01-01T00:00:00.000Z" };
+  await assert.rejects(() => store.saveHole(future), (error) => error instanceof Error && error.message === NEWER_SCHEMA_MESSAGE);
+  assert.equal(await store.loadHole("future-hole"), null, "rejected saves must not create a replacement record");
   await hooks.writeRawHole("future-hole", future);
   await assert.rejects(() => store.loadHole("future-hole"), (/** @type {any} */ error) => error?.message === NEWER_SCHEMA_MESSAGE);
+  await store.deleteHole("future-hole");
   console.log("ok store contract: newer schema is refused with the update-to-open message");
 }
 
 async function runAssetContract(store) {
   await store.putAsset("asset-hole", "diagram-1.png", PNG_BYTES);
   assert.deepEqual(await store.listAssets("asset-hole"), ["diagram-1.png"]);
+  assert.deepEqual(await store.listHoles(), [], "asset-only directories are not documents");
   await assertBytes(await store.getAsset("asset-hole", "diagram-1.png"), PNG_BYTES);
   await store.putAsset("asset-hole", "diagram-2.png", new Uint8Array(PNG_BYTES_2));
   assert.deepEqual(await store.listAssets("asset-hole"), ["diagram-1.png", "diagram-2.png"]);
@@ -93,7 +103,14 @@ async function runStagingContract(store) {
   assert.deepEqual(adopted, ["page-001.png"]);
   await assertBytes(await store.getAsset("staged-hole", "page-001.png"), PNG_BYTES);
   await assert.rejects(() => store.adoptStagedAssets("staged-hole", staged.ingest_id), /Unknown ingest_id/);
-  console.log("ok store contract: staging create/put/adopt");
+  const discarded = await store.createStaging();
+  await store.putStagedAsset(discarded.ingest_id, "page-001.png", PNG_BYTES);
+  await store.discardStaging(discarded.ingest_id);
+  await store.discardStaging(discarded.ingest_id);
+  await assert.rejects(() => store.adoptStagedAssets("staged-hole", discarded.ingest_id), /Unknown ingest_id/);
+  await store.deleteHole("staged-hole");
+  assert.deepEqual(await store.listAssets("staged-hole"), []);
+  console.log("ok store contract: staging create/put/adopt/discard and owned-asset deletion");
 }
 
 async function runSafetyContract(store) {

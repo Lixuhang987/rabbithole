@@ -14,7 +14,9 @@ import {
 } from "./errors.js";
 import { generationRequest } from "./input.js";
 import { BridgeStateStore } from "./state.js";
-import { readOrCreateBridgeToken, tokenMatches } from "./token.js";
+import { bridgeDirectory, readOrCreateBridgeToken, tokenMatches } from "./token.js";
+import { FsStore } from "./store/fs-store.js";
+import { handleStoreRequest } from "./store/http.js";
 import {
   closeServerGracefully,
   parseRequestBody,
@@ -77,6 +79,7 @@ export async function createBridge({
     env,
     regenerate: newToken,
   });
+  const store = new FsStore({ directory: bridgeDirectory(env) });
   const codexCwd = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-bridge-codex-"));
   await fs.chmod(codexCwd, 0o700);
 
@@ -244,6 +247,12 @@ export async function createBridge({
       }
 
       applyCors(req, res);
+
+      if (url.pathname.startsWith("/bridge/store/")) {
+        assertAvailable();
+        await handleStoreRequest(req, res, url, store, sendJson);
+        return;
+      }
 
       let body;
       if (req.method === "POST") {

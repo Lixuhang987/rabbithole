@@ -159,13 +159,15 @@ ${reducerExcerpt}
 \`\`\``),
     tourNode("tour-hosts", "tour-root", "Browser host and local bridge", 700, 0, `# Browser host and local bridge
 
-The browser host owns document persistence and routes generation through one local bridge. Native Codex sessions own answer history and independent forks.
+The browser host owns the active document graph. Its HTTP store persists documents and attachments through the paired local bridge. Native Codex sessions own answer history and independent forks.
 
 \`\`\`mermaid
 flowchart TB
   Bridge[Local bridge] --> Codex[Native Codex sessions]
   Web[Web adapter] --> Engine
-  Engine --> Store[Store port]
+  Engine --> Store[HTTP store port]
+  Store --> Bridge
+  Bridge --> Disk[Document and asset files]
   Engine --> UI[Browser event stream]
 \`\`\`
 

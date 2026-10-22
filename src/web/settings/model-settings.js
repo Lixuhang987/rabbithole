@@ -11,8 +11,8 @@ import { fieldMarkup, wireField } from '../../ui/primitives/field.js';
 import { comboboxMarkup, wireCombobox } from '../../ui/primitives/combobox.js';
 import { isCommandEnter } from '../../ui/input-intent.js';
 
-/** @param {{trigger?: any, onSettingsChange?: () => void}} [options] */
-export function createModelSettings({ trigger: defaultTrigger, onSettingsChange = () => {} } = {}) {
+/** @param {{trigger?: any, onSettingsChange?: () => void, onBridgeState?: () => void, beforeRestart?: () => Promise<void>}} [options] */
+export function createModelSettings({ trigger: defaultTrigger, onSettingsChange = () => {}, onBridgeState = () => {}, beforeRestart = async () => {} } = {}) {
   let surface = null;
   let state = null;
   let view = 'idle';
@@ -28,6 +28,7 @@ export function createModelSettings({ trigger: defaultTrigger, onSettingsChange 
     probeWanted: () => !!surface && ['idle', 're_pair', 'bridge_down'].includes(view), reconnectFromProbe: () => view !== 're_pair',
     onState(next) {
       state = next; view = 'stream';
+      onBridgeState();
       const models = bridgeModelsForAgent(state, loadSettings().backend);
       const settings = loadSettings();
       const selected = models.find((model) => model.id === settings.model) || (!settings.model ? models[0] : null);
@@ -101,7 +102,7 @@ export function createModelSettings({ trigger: defaultTrigger, onSettingsChange 
     });
     surface.querySelector('#restart-bridge')?.addEventListener('click', async () => {
       restarting = true; notice = ''; render();
-      try { const currentSettings = loadSettings(); state = await restartBridge(currentSettings.base_url, currentSettings.token); }
+      try { await beforeRestart(); const currentSettings = loadSettings(); state = await restartBridge(currentSettings.base_url, currentSettings.token); }
       catch (error) { notice = error.message; }
       finally { restarting = false; render(); }
     });

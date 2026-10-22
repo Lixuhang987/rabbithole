@@ -1,4 +1,5 @@
 /** @protects mermaid rendering capability contracts. */
+import { seedStorageBridge } from "../support/backend-store.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -110,11 +111,12 @@ async function hoverVisual(page, blockId) {
 
 async function verifyWebApp() {
   const context = await browser.newContext();
+  await seedStorageBridge(context);
   const page = await context.newPage();
   const requests = [];
   await page.route("**/*", async (route) => {
     requests.push(route.request().url());
-    await route.continue();
+    await route.fallback();
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   assert(requests.some((url) => url.startsWith(baseUrl)), "web request capture must observe the app");

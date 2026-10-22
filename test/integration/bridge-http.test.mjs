@@ -9,6 +9,7 @@ import { createPortableProjection } from '../../src/core/portable-projection.js'
 import { toPersistedHole } from '../../src/core/schema.js';
 import { createSnapshotProjection } from '../../src/core/snapshot-projection.js';
 import { createBridge } from '../../src/node/bridge/server.js';
+import { HttpStore } from '../../src/web/store/http-store.js';
 
 const root = path.resolve(new URL('../..', import.meta.url).pathname);
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'rabbithole-native-'));
@@ -57,7 +58,10 @@ async function waitFor(predicate) {
   throw new Error('Timed out waiting for native generation');
 }
 function hostFor(hole, provider = createProvider(settings()), saved = []) {
-  const host = new DirectRabbitholeHost({ hole, provider, store: { saveHole: async (value) => saved.push(structuredClone(value)) } });
+  const store = new HttpStore(settings());
+  const saveHole = store.saveHole.bind(store);
+  store.saveHole = async (value) => { await saveHole(value); saved.push(structuredClone(value)); };
+  const host = new DirectRabbitholeHost({ hole, provider, store });
   hosts.push(host); return host;
 }
 async function ask(host, id, parent, question, extra = {}) {
@@ -191,8 +195,11 @@ try {
   assert.match(executions.at(-1).params.developerInstructions, /EGO_BROWSER_SKILL_BODY/);
   assert.equal(await fs.readFile(path.join(home, '.codex/config.toml'), 'utf8'), originalConfig);
 
+  await host.flushSave();
   await bridge?.close(); await startBridge();
-  const restarted = hostFor(saved.at(-1), createProvider(settings('gpt-second')));
+  const reloaded = await new HttpStore(settings()).loadHole(hole.hole_id);
+  assert.deepEqual(reloaded.nodes.find((node) => node.id === hole.root_id).extensions.backend_conversation, source);
+  const restarted = hostFor(reloaded, createProvider(settings('gpt-second')));
   const restartAnswer = await ask(restarted, 'restart', child.id, 'Ask after bridge restart');
   assert.equal(restartAnswer.extensions.backend_conversation.scopeId, source.scopeId);
   assert.equal((await turns()).at(-1).model, 'gpt-second');

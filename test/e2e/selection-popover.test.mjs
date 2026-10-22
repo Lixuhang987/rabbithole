@@ -1,4 +1,5 @@
 /** @protects selection popover capability contracts. */
+import { seedStorageBridge } from "../support/backend-store.mjs";
 import assert from "node:assert/strict";
 import { bootWebApp } from "../support/web-app-harness.mjs";
 import { assertSelectionPopoverUsable } from "../support/visible-selection.mjs";
@@ -8,6 +9,7 @@ const { browser, baseUrl } = app;
 
 try {
   const page = await browser.newPage();
+  await seedStorageBridge(page.context());
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: baseUrl });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.evaluate(() => window.__rabbitholeTest.createDocument([

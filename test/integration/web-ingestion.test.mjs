@@ -478,7 +478,7 @@ async function reloadReadyApp(page) {
 }
 
 async function waitForReadyApp(page) {
-  // The app's test seam is installed only after IndexedDB selection, rail
+  // The app's test seam is installed only after backend storage selection, rail
   // hydration, and the initial canvas/blank state have finished. Waiting for
   // this product-specific milestone is deterministic even when an intentionally
   // held model request keeps the browser from ever reaching `networkidle`.

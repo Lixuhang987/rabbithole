@@ -1,4 +1,5 @@
 /** @protects compatibility security capability contracts. */
+import { seedStorageBridge } from "../support/backend-store.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -61,13 +62,14 @@ function verifySetupReadiness() {
 
 async function verifyLiveAndBuildSnapshot() {
   const context = await browser.newContext();
+  const storage = await seedStorageBridge(context);
   const page = await context.newPage();
   const routedRequests = [];
   const external = [];
   await page.route("**/*", async (route) => {
     const url = route.request().url();
     routedRequests.push(url);
-    if (url.startsWith(baseUrl)) return route.continue();
+    if (url.startsWith(baseUrl) || url.startsWith(`${storage.bridge.url}/bridge/`)) return route.fallback();
     external.push(url);
     return route.abort();
   });

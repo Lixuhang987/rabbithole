@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { browserStore } from "../support/browser-store.mjs";
+import { documentStore } from "../support/document-store.mjs";
 import { extractNodeAssetRefs } from "../../src/core/assets.js";
 import { createSnapshotProjection } from "../../src/core/snapshot-projection.js";
 import { snapshotProjectionToFrozenHydration } from "../../src/core/snapshot-projection.js";
@@ -15,7 +15,7 @@ const corpusDir = new URL("../fixtures/corpus/", import.meta.url);
 const fixtureNames = (await fs.readdir(corpusDir)).filter((name) => name.endsWith(".rabbithole")).sort();
 assert.equal(fixtureNames.length, 19, "the curated corpus must contain exactly 19 portable fixtures");
 
-async function storeAt(_label) { return { store: browserStore(), dir: null }; }
+async function storeAt(_label) { return { store: documentStore(), dir: null }; }
 function selectDir(_dir) {}
 function normalized(payload) {
   const copy = structuredClone(payload);
@@ -79,7 +79,7 @@ for (const name of fixtureNames) {
   expected.assets = Object.fromEntries(Object.entries(expected.assets).filter(([assetName]) => snapshot.referenced.includes(assetName)));
   assert.deepEqual(
     normalized(snapshotExport), normalized(expected),
-    `${name}: portable -> IndexedDB -> canonical snapshot HTML -> web snapshot import -> portable is a fixed point; referenced assets are byte-exact and unreferenced assets drop at the snapshot hop by design (referenced=${JSON.stringify(snapshot.referenced)}, before=${JSON.stringify(exported1)}, after=${JSON.stringify(snapshotExport)})`
+    `${name}: portable -> backend storage -> canonical snapshot HTML -> web snapshot import -> portable is a fixed point; referenced assets are byte-exact and unreferenced assets drop at the snapshot hop by design (referenced=${JSON.stringify(snapshot.referenced)}, before=${JSON.stringify(exported1)}, after=${JSON.stringify(snapshotExport)})`
   );
 }
 console.log(`ok artifact round trip: all ${fixtureNames.length} corpus fixtures are normalized three-projection fixed points and export-idempotent`);

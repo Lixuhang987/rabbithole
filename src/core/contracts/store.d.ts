@@ -1,7 +1,7 @@
 import type { PersistedHole } from "./artifact.js";
 
 /**
- * Storage port implemented by `FsStore` and `IdbStore`.
+ * Storage port implemented by the bridge's `FsStore` and browser's `HttpStore`.
  *
  * Runtime authority: {@link ../store.js} (`RABBITHOLE_STORE_METHODS` and
  * `assertRabbitholeStore`). The assertion checks capabilities by method
@@ -42,7 +42,7 @@ export interface RabbitholeStore {
   listAssets(holeId: string): Promise<string[]>;
   /**
    * Implementations expose their native binary type: `FsStore` returns a Node
-   * `Buffer`, while `IdbStore` returns a browser `Blob`. Portable projection
+   * `Buffer`, while `HttpStore` returns a browser `Blob`. Portable projection
    * normalizes either representation at its boundary.
    */
   getAsset(holeId: string, name: string): Promise<Buffer | Blob | null>;
@@ -52,4 +52,6 @@ export interface RabbitholeStore {
   putStagedAsset(ingestId: string, name: string, bytes: AssetBytes): Promise<void>;
   adoptStagedAssets(holeId: string, ingestId: string): Promise<string[]>;
   discardStaging(ingestId: string): Promise<void>;
+  getAssets?(holeId: string): Promise<Array<{ name: string; blob: Buffer | Blob | null }>>;
+  putAssets?(holeId: string, assets: Array<{ name: string; blob?: AssetBytes; bytes?: AssetBytes }>): Promise<void>;
 }

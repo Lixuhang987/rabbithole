@@ -1,6 +1,8 @@
 # Data and trust
 
-Documents live in the browser. Native generation history lives in Codex's
+Documents and assets live in the paired bridge's data directory. The browser holds
+the active graph and accesses persistence through authenticated store requests.
+Native generation history lives in Codex's
 configured local home. A session reference is machine-local and cannot make
 history portable across backends or devices.
 

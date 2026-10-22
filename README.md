@@ -14,14 +14,16 @@ npx @shlokkhemani/rabbithole bridge
 
 Open the private pairing link printed by the bridge. Choose a model and reasoning
 in Model settings, then start with a question, URL, Markdown, PDF, or Rabbithole file.
-Keep the bridge running while asking questions.
+Keep the bridge running while using live documents.
 
 Codex uses its local provider configuration and authentication. Every generation
 creates a persistent native session; questions on generated articles fork their
 source session independently. Every Ask on imported Markdown or PDF starts a new
 session with the readable article. Unavailable history fails explicitly.
 
-Documents live in this browser's IndexedDB. Native history stays with Codex on this
+Documents and attachments live under `~/.rabbithole/` (`RABBITHOLE_DIR` overrides).
+After clearing browser data, pair again to reopen the same library. Existing
+browser-held documents are not migrated. Native history stays with Codex on this
 computer. Exports and offline snapshots omit local session references. The bridge
 binds to loopback and requires pairing. There is no Rabbithole account or hosted
 document store.

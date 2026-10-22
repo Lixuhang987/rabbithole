@@ -1,4 +1,5 @@
 /** @protects artifact portability capability contracts. */
+import { seedStorageBridge } from "../support/backend-store.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -95,6 +96,7 @@ try {
   assert.equal(await page.locator(".rail-export").count(), 0, "sidebar rows should reserve their full width for titles");
 
   const fresh = await browser.newContext({ acceptDownloads: true });
+  await seedStorageBridge(fresh);
   const importPage = await fresh.newPage();
   await importPage.goto(baseUrl, { waitUntil: "networkidle" });
   await importPage.setInputFiles("#file-md", shareExportPath);

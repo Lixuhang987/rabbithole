@@ -1,7 +1,8 @@
 # Deploy
 
-The browser app is static and stores documents in IndexedDB. Serving it does not
-start the local bridge: Codex generation requires a running bridge on the browser
+The browser app is static; documents and attachments live on disk behind the local
+bridge. Serving the app does not start the bridge: live document use and Codex
+generation require a running bridge on the browser
 user's computer. A bridge on a remote site server cannot reach a visitor's CLI.
 
 Build `web/dist/` with `npm run build`; `npm run build:publish` produces the site
@@ -11,7 +12,8 @@ may be cached. NGINX needs equivalent policy because it does not read `_headers`
 
 Stage assets before switching entry HTML, and retain older hashed chunks while old
 pages remain open. A browser build and a bridge update must deploy together when
-the generation contract changes. This release removes old request/settings paths.
+the generation or storage contract changes. This release replaces IndexedDB
+document storage without migrating old browser data.
 Wait for active answers, then restart the bridge to load backend source changes.
 Ordinary restarts retain pairing; `--new-token` requires browsers to pair again.
 
@@ -29,7 +31,10 @@ from proxies. Verify an actual answer from the managed bridge: ping and model
 listing alone do not prove generation or search access.
 
 Pairing links/logs contain private tokens; keep them out of static output and
-shared logs. Browser-origin changes create a separate document and pairing store.
+shared logs. Browser-origin changes require pairing again; the same bridge data
+directory exposes the same documents across allowed origins. Documents live under
+`documents/` and import assets under `staging/` in `RABBITHOLE_DIR` (default
+`~/.rabbithole/`); keep that directory persistent across service restarts.
 Native Codex history must remain reachable for saved generated articles to fork.
 
 See the [local NGINX runbook](deploy/local-nginx.md) for this installation and

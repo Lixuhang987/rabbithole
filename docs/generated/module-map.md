@@ -81,6 +81,8 @@ This inventory is derived from the source tree.
 - `src/node/bridge/models.js`
 - `src/node/bridge/server.js`
 - `src/node/bridge/state.js`
+- `src/node/bridge/store/fs-store.js`
+- `src/node/bridge/store/http.js`
 - `src/node/bridge/token.js`
 - `src/node/bridge/worker.js`
 - `src/node/shared/dist-assets.js`
@@ -206,7 +208,7 @@ This inventory is derived from the source tree.
 - `src/web/settings/setup-readiness.js`
 - `src/web/shell/shell.js`
 - `src/web/snapshot-runtime.js`
-- `src/web/store/idb-store.js`
+- `src/web/store/http-store.js`
 - `src/web/test-seam.js`
 - `src/web/transport/direct-host-base.js`
 - `src/web/transport/direct-host-generation.js`

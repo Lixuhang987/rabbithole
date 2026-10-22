@@ -1,11 +1,12 @@
-/** @protects indexeddb store capability contracts. */
+/** @protects filesystem and authenticated HTTP store contracts and document host persistence. */
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { assertRabbitholeStore } from "../../src/core/store.js";
-import { IdbStore } from "../../src/web/store/idb-store.js";
-import { createPendingHoleFromQuestion, DirectRabbitholeHost } from "../../src/web/transport/direct-host.js";
+import { FsStore } from "../../src/node/bridge/store/fs-store.js";
+import { DirectRabbitholeHost } from "../../src/web/transport/direct-host.js";
 import { runStoreContract } from "../support/store-contract.mjs";
-
-import "fake-indexeddb/auto";
+import { createStoreFixture } from "../support/backend-store.mjs";
 
 if (typeof globalThis.FileReader !== "function") {
   (/** @type {any} */ (globalThis)).FileReader = class {
@@ -27,51 +28,46 @@ if (typeof globalThis.FileReader !== "function") {
   };
 }
 
-Object.defineProperty(globalThis, "navigator", {
-  configurable: true,
-  value: {
-  storage: {
-    persist: async () => true,
-  },
-  },
-});
-
-await verifyFreshDatabaseInitialization();
-await verifyPersistencePermissionDoesNotBlockWrites();
-
-Object.defineProperty(globalThis, "navigator", {
-  configurable: true,
-  value: {
-    storage: {
-      persist: async () => true,
-    },
-  },
-});
-
-const store = assertRabbitholeStore(new IdbStore({ dbName: `rabbithole-indexeddb-store-${Date.now()}` }));
-
-await runStoreContract(store, {
-  readRawHole: (holeId) => rawHole("readonly", holeId),
-  writeRawHole: (_holeId, fixture) => rawHole("readwrite", fixture),
-  makeDeleteHost: async ({ root, childA, childB }) => {
-    const host = new DirectRabbitholeHost({
-      store,
-      hole: {
-        hole_id: "gc-hole",
-        title: "GC Hole",
-        root_id: "root",
-        created_at: "2026-01-01T00:00:00.000Z",
-        view_state: null,
-        nodes: [root, childA, childB],
+const fixture = await createStoreFixture();
+const store = fixture.store;
+try {
+  const endpoint = `${fixture.bridge.url}/bridge/store/holes`;
+  for (const { headers, expected } of [
+    { headers: {}, expected: 401 },
+    { headers: { Authorization: `Bearer ${fixture.bridge.token}`, Origin: "https://attacker.invalid" }, expected: 403 },
+    { headers: { Authorization: `Bearer ${fixture.bridge.token}`, Origin: "http://localhost:9000" }, expected: 200 },
+  ]) {
+    const response = await fetch(endpoint, { headers });
+    assert.equal(response.status, expected, "storage shares the bridge authentication and origin boundary");
+  }
+  const large = { hole_id: "large-hole", root_id: "root", nodes: [{ id: "root", markdown: "雪".repeat(1500000) }] };
+  await store.saveHole(large);
+  assert.equal((await store.loadHole("large-hole")).nodes[0].markdown, large.nodes[0].markdown, "full documents exceed the generic 4 MB JSON limit");
+  const pdf = new Uint8Array(5 * 1024 * 1024).fill(27);
+  await store.putAsset("large-hole", "source.pdf", pdf);
+  assert.deepEqual(new Uint8Array(await (await store.getAsset("large-hole", "source.pdf")).arrayBuffer()), pdf);
+  await store.deleteHole("large-hole");
+  for (const candidate of [new FsStore({ directory: fixture.directory }), store]) {
+    assertRabbitholeStore(candidate);
+    assert.deepEqual(await candidate.listHoles(), []);
+    await runStoreContract(candidate, {
+      readRawHole: async (id) => JSON.parse(await fs.readFile(path.join(fixture.directory, "documents", id, "hole.json"), "utf8")),
+      writeRawHole: async (id, value) => {
+        const folder = path.join(fixture.directory, "documents", id);
+        await fs.mkdir(folder, { recursive: true });
+        await fs.writeFile(path.join(folder, "hole.json"), JSON.stringify(value));
+      },
+      makeDeleteHost: async ({ root, childA, childB }) => {
+        const host = new DirectRabbitholeHost({ store: candidate, hole: {
+          hole_id: "gc-hole", title: "GC Hole", root_id: "root", created_at: "2026-01-01T00:00:00.000Z",
+          view_state: null, nodes: [root, childA, childB],
+        } });
+        return { deleteNode: (id) => host.handleDeleteNode({ node_id: id }), close: () => host.flushSave() };
       },
     });
-    return {
-      deleteNode: (nodeId) => host.handleDeleteNode({ node_id: nodeId }),
-      close: () => host.flushSave(),
-    };
-  },
-});
-
+    await fs.rm(path.join(fixture.directory, "documents"), { recursive: true, force: true });
+    await fs.rm(path.join(fixture.directory, "staging"), { recursive: true, force: true });
+  }
 {
   const registeredAssets = [];
   const revokedAssets = [];
@@ -97,7 +93,7 @@ await runStoreContract(store, {
   });
   assert.deepEqual(result, { ok: true, node_id: "standalone-note" });
   assert.equal(host.hydration().nodes.find((node) => node.id === "standalone-note")?.parent_id, null, "web hydration includes standalone notes");
-  assert.equal((await store.loadHole("web-note-create")).nodes.find((node) => node.id === "standalone-note")?.markdown, "Durable browser note", "web node_create must persist to IndexedDB before returning");
+  assert.equal((await store.loadHole("web-note-create")).nodes.find((node) => node.id === "standalone-note")?.markdown, "Durable browser note", "web node_create must persist to the backend before returning");
 
   await host.handleBrowserEvent({ type: "delete_node", node_id: "standalone-note" });
   await host.flushSave();
@@ -107,7 +103,7 @@ await runStoreContract(store, {
   assert.deepEqual(await host.adapter().putAsset("paste-web.png", pastedBlob), { ok: true, name: "paste-web.png" });
   assert.equal(registeredAssets[0].name, "paste-web.png", "the BYOK upload seam registers an immediately renderable URL");
   assert.deepEqual((await store.getAssets("web-note-create")).map(({ name, blob }) => [name, blob.size]),
-    [["paste-web.png", pastedBlob.size]], "the browser store can lease all Blob handles in one transaction");
+    [["paste-web.png", pastedBlob.size]], "the browser store can lease all Blob handles in one store call");
   await store.putAssets("web-note-create", [
     { name: "paste-batch-a.png", blob: pastedBlob },
     { name: "paste-batch-b.png", bytes: Uint8Array.of(4, 5) },
@@ -117,7 +113,7 @@ await runStoreContract(store, {
       .filter(({ name }) => name.startsWith("paste-batch-"))
       .map(({ name, blob }) => [name, blob.size]),
     [["paste-batch-a.png", 3], ["paste-batch-b.png", 2]],
-    "the browser store can persist multiple assets in one transaction",
+    "the browser store can persist multiple assets in one store call",
   );
   await assert.rejects(() => host.adapter().putAsset("figure.png", pastedBlob), /start with paste-/);
   await assert.rejects(() => host.adapter().putAsset("paste-source.pdf", pastedBlob), /image extension/);
@@ -163,69 +159,7 @@ await runStoreContract(store, {
   await assert.rejects(() => host.adapter().deleteAsset("figure.png"), /pasted image assets/);
   await host.dispose();
 }
-console.log("ok IndexedDB parentless nodes: standalone notes and away asks persist with null graph parents");
+console.log("ok the backend parentless nodes: standalone notes and away asks persist with null graph parents");
 
-async function verifyFreshDatabaseInitialization() {
-  const store = new IdbStore({ dbName: `rabbithole-indexeddb-initialization-${Date.now()}` });
-  assert.deepEqual(await store.listHoles(), [], "a fresh browser database should start empty");
-  const db = await store.open();
-  const tx = db.transaction(["holes", "hole-summaries", "assets", "staging", "meta"], "readonly");
-  const counts = await Promise.all(["holes", "hole-summaries", "assets", "staging", "meta"].map((name) => requestResult(tx.objectStore(name).count())));
-  assert.deepEqual(counts, [0, 0, 0, 0, 0], "all current browser stores should be initialized empty");
-  store.close();
-  console.log("ok IndexedDB initializes the complete current browser store");
-}
 
-async function verifyPersistencePermissionDoesNotBlockWrites() {
-  let persistCalls = 0;
-  Object.defineProperty(globalThis, "navigator", {
-    configurable: true,
-    value: {
-      storage: {
-        persist: () => {
-          persistCalls += 1;
-          return new Promise(() => {});
-        },
-      },
-    },
-  });
-
-  const dbName = `rabbithole-indexeddb-persist-${Date.now()}`;
-  const persistenceStore = new IdbStore({ dbName });
-  const hole = createPendingHoleFromQuestion("Why must optional persistence never block a write?");
-  await Promise.race([
-    persistenceStore.saveHole(hole),
-    new Promise((_, reject) => setTimeout(() => reject(new Error("saveHole waited for persistent-storage permission")), 1_000)),
-  ]);
-  assert.equal(persistCalls, 1, "persistent-storage permission should be requested once");
-  assert.equal((await persistenceStore.loadHole(hole.hole_id))?.hole_id, hole.hole_id, "the document should be saved while permission remains pending");
-  persistenceStore.close();
-  assert.equal((await persistenceStore.loadHole(hole.hole_id))?.hole_id, hole.hole_id, "the store should reopen after releasing its connection");
-  persistenceStore.close();
-  console.log("ok pending persistent-storage permission does not block IndexedDB writes");
-}
-
-function requestResult(request) {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function rawHole(mode, value) {
-  const db = await store.open();
-  const tx = db.transaction("holes", mode);
-  const request = mode === "readonly" ? tx.objectStore("holes").get(value) : tx.objectStore("holes").put(structuredClone(value));
-  const result = await new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-  await new Promise((resolve, reject) => {
-    tx.oncomplete = resolve;
-    tx.onabort = () => reject(tx.error);
-    tx.onerror = () => reject(tx.error);
-  });
-  return mode === "readonly" && result ? structuredClone(result) : result;
-}
-
-console.log("IndexedDB store contract verification passed");
+} finally { await fixture.close(); }

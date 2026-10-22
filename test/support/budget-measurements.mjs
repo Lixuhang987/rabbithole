@@ -1,3 +1,4 @@
+import { seedStorageBridge } from "./backend-store.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -169,6 +170,7 @@ async function measureSnapshots(browser, baseUrl, samples, onSample) {
   const timings = { snapshot_math_build_ms: [], snapshot_assets_build_ms: [] };
   for (const fixtureName of FIXTURES) {
     const context = await browser.newContext();
+    await seedStorageBridge(context);
     const page = await context.newPage();
     try {
       await page.goto(baseUrl, { waitUntil: "networkidle" });
@@ -244,11 +246,15 @@ async function measureStreamAndSave(browser, baseUrl) {
     const observed = await page.evaluate(() => ({ ...window.__budget, now: performance.now() }));
     const holeId = await page.evaluate(() => window.__rabbitholeTest.currentHoleId());
     const saveStart = observed.final || observed.now;
-    await page.waitForFunction(async ({ id, text }) => {
-      const hole = await window.__rabbitholeTest.readStoredHole(id);
-      return hole?.nodes?.some((node) => String(node.markdown || "").includes(text));
-    }, { id: holeId, text: finalText }, { polling: 20, timeout: 5000 });
-    const savedAt = await page.evaluate(() => performance.now());
+    const savedAt = await page.evaluate(async ({ id, text }) => {
+      const deadline = performance.now() + 5000;
+      while (performance.now() < deadline) {
+        const hole = await window.__rabbitholeTest.readStoredHole(id);
+        if (hole?.nodes?.some((node) => String(node.markdown || "").includes(text))) return performance.now();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      throw new Error("The final streamed answer was not persisted within 5 seconds.");
+    }, { id: holeId, text: finalText });
     return {
       stream_dom_batches: observed.batches,
       stream_update_ms: observed.now - started,

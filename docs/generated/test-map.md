@@ -40,12 +40,12 @@ Each description is harvested from the test file's `@protects` declaration.
 
 - `test/contracts/artifact-roundtrip.test.mjs` — artifact roundtrip capability contracts.
 - `test/contracts/assets.test.mjs` — asset Markdown resolution and trust boundaries.
+- `test/contracts/backend-store.test.mjs` — filesystem and authenticated HTTP store contracts and document host persistence.
 - `test/contracts/compatibility-security.test.mjs` — compatibility security capability contracts.
 - `test/contracts/css-integrity.test.mjs` — CSS source and generated-artifact integrity contracts.
 - `test/contracts/data-boundaries.test.mjs` — data boundaries capability contracts.
 - `test/contracts/docs-tour.test.mjs` — The offline, zero-network architecture tour.
 - `test/contracts/fetch-proxy-worker.test.mjs` — fetch proxy worker capability contracts.
-- `test/contracts/indexeddb-store.test.mjs` — indexeddb store capability contracts.
 - `test/contracts/node-projection.test.mjs` — node projection capability contracts.
 - `test/contracts/prompts.test.mjs` — complete semantic Ask input, images, visual sources and PDF transcription.
 - `test/contracts/reactions.test.mjs` — reaction notes as ordinary notes across context and artifact projections.
@@ -55,6 +55,7 @@ Each description is harvested from the test file's `@protects` declaration.
 ## integration
 
 - `test/integration/artifact-portability.test.mjs` — artifact portability capability contracts.
+- `test/integration/backend-persistence.test.mjs` — fresh-browser document, attachment and native-conversation reopening after bridge restart.
 - `test/integration/bridge-failure-modes.test.mjs` — native bridge search failures, cancellation, concurrency and backend availability.
 - `test/integration/bridge-http.test.mjs` — native bridge requests, independent article sessions, persistence and isolation.
 - `test/integration/bridge-long-answer.test.mjs` — long subscribed answers complete while cancellation remains explicit.

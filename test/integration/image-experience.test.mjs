@@ -1,4 +1,5 @@
 /** @protects image experience capability contracts. */
+import { seedStorageBridge } from "../support/backend-store.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -129,6 +130,7 @@ async function runLiveSnapshotDownload() {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ acceptDownloads: true });
+    await seedStorageBridge(page.context());
     await page.goto(app.baseUrl);
     await page.setInputFiles("#file-md", fixturePath);
     await page.waitForSelector("#t-share");

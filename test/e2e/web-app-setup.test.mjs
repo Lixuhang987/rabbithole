@@ -27,9 +27,9 @@ try {
   await page.click('#bridge-model'); await page.click('.model-option[data-value="gpt-fake"]');
   await page.click('#restart-bridge');
   await page.waitForFunction(() => window.__bridgeStub.requests.some((request) => request.kind === 'restart'));
-  await page.waitForSelector('.bridge-surface[data-state="starting"]');
   assert.equal(await page.locator('#restart-bridge').getAttribute('aria-busy'), 'true');
   await page.waitForSelector('#restart-bridge:not([disabled])');
+  await page.waitForSelector('.bridge-surface[data-state="ready"]');
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('rh-web-settings')).token), 'paired-token');
   await page.click('#complete-model-setup');
   await page.waitForSelector('#settings-sheet', { state: 'detached' });

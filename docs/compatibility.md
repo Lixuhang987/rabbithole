@@ -6,10 +6,10 @@ carry format-upgrade paths.
 
 ## Persisted holes
 
-IndexedDB records use `schema_version: 2`. The runtime authority
+Backend document records use `schema_version: 2`. The runtime authority
 is `src/core/schema.js`:
 
-- `toPersistedHole` creates the canonical record written by the browser store.
+- `toPersistedHole` creates the canonical record written by the bridge store.
 - `parsePersistedHole` clones and validates untrusted records and normalizes the
   documented PDF selection rectangle.
 - `validatePersistedHole` enforces the current document and node shape.
@@ -63,11 +63,16 @@ inert `application/vnd.rabbithole+json` script element. Snapshot projection:
 
 The frozen client derives hydration exclusively from that portable payload.
 
-## Browser storage
+## Local storage
 
-Browser documents live in the `rabbithole-browser` IndexedDB database. The
-current stores are `holes`, `hole-summaries`, `assets`, `staging`, and `meta`.
-Whimsical `hole_id` values are device-local URL locators, not network share
+The paired bridge owns `documents/<hole_id>/hole.json`, binary
+`documents/<hole_id>/assets/<name>`, and `staging/<ingest_id>/<name>` under
+`RABBITHOLE_DIR` (default `~/.rabbithole/`). Summaries derive from hole records.
+The browser's `HttpStore` uses authenticated GET/POST `/bridge/store/` routes;
+asset uploads/downloads carry binary bytes with filename-derived MIME types.
+Completed saves replace the hole record before HTTP acknowledgment. There is no
+IndexedDB document adapter, data migration, offline cache or synchronization.
+Whimsical `hole_id` values locate documents within that bridge, not network share
 tokens.
 
 Model choices and bridge pairing use `rh-web-settings`, separate from document
@@ -96,7 +101,7 @@ The contract suites covering these boundaries are:
 - `test/contracts/data-boundaries.test.mjs`
 - `test/contracts/artifact-roundtrip.test.mjs`
 - `test/contracts/compatibility-security.test.mjs`
-- `test/contracts/indexeddb-store.test.mjs`
+- `test/contracts/backend-store.test.mjs`
 
 ## Changing a format
 

@@ -1,3 +1,4 @@
+import { installStoreRoutes } from './backend-store.mjs';
 export const BRIDGE_URL = 'http://127.0.0.1:41414';
 export const MOCK_MODEL = 'gpt-fake';
 export const MOCK_TOKEN = 'browser-paired-token';
@@ -18,6 +19,7 @@ export function sse(chunks) {
 }
 /** @param {any} page @param {{streams?: string[][], onProviderCall?: (body:any) => void, providerDelayMs?: number}} [options] */
 export async function routeProvider(page, { streams = [], onProviderCall = null, providerDelayMs = 0 } = {}) {
+  await installStoreRoutes(page.context());
   // State streams stay open like the real bridge. A closed mock stream causes
   // reconnect churn and makes browser network-idle waits impossible.
   await page.addInitScript(({ bridgeUrl, state }) => {
@@ -44,6 +46,7 @@ export async function routeProvider(page, { streams = [], onProviderCall = null,
     const request = route.request();
     if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: corsHeaders(), body: '' });
     const url = new URL(request.url());
+    if (url.pathname.startsWith('/bridge/store/')) return route.fallback();
     if (url.pathname === '/bridge/generate') {
       onProviderCall?.(request.postDataJSON());
       const chunks = streams.shift() || ['# Fallback\n\nFallback streamed document.'];

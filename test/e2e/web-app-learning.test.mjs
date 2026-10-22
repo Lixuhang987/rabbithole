@@ -1,4 +1,5 @@
 /** @protects web app learning capability contracts. */
+import { seedStorageBridge } from "../support/backend-store.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -75,6 +76,7 @@ async function verifyBranchContentSizing() {
 
 async function verifyBannerGlass() {
   const context = await browser.newContext();
+  await seedStorageBridge(context);
   const page = await context.newPage();
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.keyboard.press("Escape");
@@ -127,6 +129,7 @@ async function verifyBannerGlass() {
 
 async function verifyStatefulCheckCycle() {
   const context = await browser.newContext();
+  await seedStorageBridge(context);
   const page = await context.newPage();
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.keyboard.press("Escape");
@@ -140,6 +143,8 @@ async function verifyStatefulCheckCycle() {
   const durableId = blockId || markdown.match(/```check id=([a-z0-9]{4,8})/)?.[1];
   assert(durableId, "Check should have a durable persisted id");
 
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("rh-web-settings")).model), "",
+    "reading and learner edits remain available with signed-out Codex and no model selected");
   const second = page.locator(".viz-check .rh-check-option:visible").nth(1);
   await second.focus();
   await page.keyboard.press("Enter");
@@ -150,7 +155,7 @@ async function verifyStatefulCheckCycle() {
   const learned = portable.hole.nodes[0].extensions.learn[durableId];
   assert.deepEqual(learned, { attempts: 1, last: { option: 1, correct: true }, revealed: true }, ".rabbithole export carries learner state");
   const stored = await page.evaluate(() => window.__rabbitholeTest.readStoredHole());
-  assert.deepEqual(stored.nodes[0].extensions.learn[durableId], learned, "real UI block_state flushes to IndexedDB");
+  assert.deepEqual(stored.nodes[0].extensions.learn[durableId], learned, "real UI block_state flushes to the backend");
 
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector(".viz-check .rh-check-option.is-correct:visible");
@@ -218,6 +223,7 @@ async function verifyNoticePrimitive() {
 
 async function verifySharedCanvasDialogs() {
   const context = await browser.newContext();
+  await seedStorageBridge(context);
   const page = await context.newPage();
   const imageUrl = "https://dialog-probe.invalid/palette-lightbox.png";
   await page.route(imageUrl, (route) => route.fulfill({

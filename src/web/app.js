@@ -3,7 +3,7 @@ import { SETTINGS_KEY, loadSettings, saveSettings } from "./settings/settings.js
 import { takeBridgeTokenFromFragment } from "./settings/bridge-pairing.js";
 import { getGenerationSetupStatus } from "./settings/setup-readiness.js";
 import { installTestSeam } from "./test-seam.js";
-import { IdbStore } from "./store/idb-store.js";
+import { HttpStore } from "./store/http-store.js";
 import { openDialog } from "../ui/primitives/dialog.js";
 import { openPopover } from "../ui/primitives/popover.js";
 import { escapeHtml } from "../core/utils.js";
@@ -42,7 +42,7 @@ const GITHUB_REPO_API_URL = "https://api.github.com/repos/shlokkhemani/rabbithol
 const GITHUB_STARS_CACHE_KEY = "rh-github-stars-v1";
 const GITHUB_STARS_CACHE_TTL = 6 * 60 * 60 * 1000;
 
-const store = new IdbStore();
+let store = null;
 let currentHost = null;
 let currentHoleId = null;
 let currentUi = null;
@@ -95,26 +95,12 @@ async function boot() {
   initComposer();
   initGlobalDrops();
 
-  const summariesPromise = store.listHoles().then((summaries) => {
-    railSummaries = summaries;
-    lastHoleCount = summaries.length;
-    return summaries;
-  });
-  const initial = await chooseInitialHole(summariesPromise);
-  if (initial) void Promise.all([loadCanvasRuntime(), loadWorkspaceRuntime()]);
-  await summariesPromise;
-  await renderRail({ refresh: false });
-  if (initial) {
-    await startHole(initial, { replace: true });
-  } else {
-    showBlankCanvas();
-    warmCanvasRuntime();
-    warmWorkspaceRuntime();
-  }
+  showBlankCanvas();
+  await syncLibrary().catch(showStorageError);
   if (initialBridgePairing) beginBridgePairingSetup();
   warmSettingsRuntime();
   installTestSeam({
-    store,
+    getStore: () => store,
     currentHoleId: () => currentHoleId,
     createDocument: createFromComposerDocument,
     waitForCanvasViewSettled: async () => (await loadCanvasRuntime()).whenViewAnimationSettled(),
@@ -135,6 +121,51 @@ async function boot() {
   });
 }
 
+function syncLibrary() {
+  const settings = loadSettings();
+  const transition = holeTransition.then(async () => {
+    if (!settings.token) {
+      if (store) {
+        await disposeCurrentHole();
+        store = null;
+        railSummaries = [];
+        await renderRail({ refresh: false });
+        showBlankCanvas();
+      }
+      return;
+    }
+    const next = new HttpStore(settings);
+    if (store?.baseUrl === next.baseUrl && store?.token === next.token) {
+      refreshCurrentProvider(settings);
+      return;
+    }
+    if (currentHost || currentUi) await disposeCurrentHole();
+    store = null;
+    const summaries = await next.listHoles();
+    store = next;
+    railSummaries = summaries;
+    lastHoleCount = summaries.length;
+    const initial = await chooseInitialHole(Promise.resolve(summaries));
+    await renderRail({ refresh: false });
+    if (initial) await mountHole(initial, { replace: true });
+    else {
+      showBlankCanvas();
+      warmCanvasRuntime();
+      warmWorkspaceRuntime();
+    }
+    syncGenerationSetupUi();
+  });
+  holeTransition = transition.catch(() => {});
+  return transition;
+}
+
+function refreshLibrary() { void syncLibrary().catch(showStorageError); }
+
+function showStorageError(error) {
+  showToast({ message: error?.message || "Document storage is unavailable." });
+  void openModelSetup({ status: error?.message || "Connect to the local bridge to open your documents." });
+}
+
 function renderShell() {
   toastNotice = mountWebShell();
   railOpen = false;
@@ -146,7 +177,9 @@ function renderShell() {
 async function chooseInitialHole(summariesPromise = store.listHoles()) {
   const pathHole = holeIdFromPathname(location.pathname);
   if (pathHole) {
-    return store.loadHole(pathHole);
+    const hole = await store.loadHole(pathHole);
+    if (!hole) showToast({ message: "This Rabbithole was not found." });
+    return hole;
   }
   const storedId = safeLocalStorageGet(LAST_HOLE_KEY);
   if (storedId) {
@@ -169,7 +202,7 @@ function initAppChrome() {
   // the "waiting to pair" panel advance the moment another tab pairs.
   window.addEventListener("storage", (event) => {
     if (event.key !== SETTINGS_KEY) return;
-    refreshCurrentProvider();
+    refreshLibrary();
     syncGenerationSetupUi();
     settingsController?.syncConnection();
   });
@@ -179,7 +212,7 @@ function initAppChrome() {
     initialBridgePairing = false;
     consumeInitialBridgePairing();
     if (!initialBridgePairing) return;
-    refreshCurrentProvider();
+    refreshLibrary();
     beginBridgePairingSetup();
   });
   document.addEventListener("visibilitychange", () => {
@@ -188,10 +221,10 @@ function initAppChrome() {
   window.addEventListener("pagehide", () => {
     // UI node/view updates have their own short debounce before they reach the
     // direct host. Start that flush first so flushSave captures the newest
-    // state synchronously, then keep IndexedDB open until both writes settle.
+    // state synchronously before capturing the host's write.
     const uiFlush = currentUi?.flush();
     const hostFlush = currentHost?.flushSave();
-    void Promise.allSettled([uiFlush, hostFlush].filter(Boolean)).finally(() => store.close());
+    void Promise.allSettled([uiFlush, hostFlush].filter(Boolean));
   });
   document.getElementById("t-rail")?.addEventListener("click", () => toggleRail());
   document.getElementById("t-new")?.addEventListener("click", (event) => requestNewRabbithole({ source: "button", trigger: /** @type {HTMLElement} */ (event.currentTarget) }));
@@ -347,7 +380,7 @@ function moveProjectMenuFocus(event) {
 
 async function openHistoryLocation() {
   const holeId = holeIdFromPathname(location.pathname);
-  if (holeId === currentHoleId) return;
+  if (!store || holeId === currentHoleId) return;
   await currentHost?.flushSave();
   if (holeId) {
     const hole = await store.loadHole(holeId);
@@ -355,6 +388,7 @@ async function openHistoryLocation() {
       await startHole(hole, { replace: true });
       return;
     }
+    showToast({ message: "This Rabbithole was not found." });
   }
   await disposeCurrentHole();
   resetHoleSurface();
@@ -437,7 +471,7 @@ function initGlobalDrops() {
 
 /** @param {{source?: string, value?: string, trigger?: HTMLElement | null}} [options] */
 function requestNewRabbithole({ source = "button", value = "", trigger } = {}) {
-  if (!getGenerationSetupStatus().ready) {
+  if (!store || !getGenerationSetupStatus().ready) {
     openModelSetup({ trigger });
     return;
   }
@@ -469,22 +503,26 @@ async function beginBridgePairingSetup() {
 
 function syncGenerationSetupUi() {
   const setup = getGenerationSetupStatus();
+  const ready = !!store && setup.ready;
   const blankNew = document.getElementById("blank-start-new");
   const blankNewWrap = document.getElementById("blank-start-new-wrap");
   const setupButton = document.getElementById("blank-start-setup");
   const status = document.getElementById("blank-start-status");
   if (blankNew) {
-    if (setup.ready) blankNew.removeAttribute("aria-describedby");
+    if (ready) blankNew.removeAttribute("aria-describedby");
     else blankNew.setAttribute("aria-describedby", "blank-start-status");
   }
-  if (blankNewWrap) blankNewWrap.toggleAttribute("data-setup-required", !setup.ready);
-  if (setupButton) setupButton.textContent = setup.ready ? "Model settings" : "Set up AI";
-  if (status) status.hidden = setup.ready;
+  if (blankNewWrap) blankNewWrap.toggleAttribute("data-setup-required", !ready);
+  if (setupButton) setupButton.textContent = !store ? "Connect local bridge" : setup.ready ? "Model settings" : "Set up AI";
+  if (status) {
+    status.textContent = !store ? "Connect the local bridge to open your documents." : "Set up AI before starting a Rabbithole.";
+    status.hidden = ready;
+  }
 }
 
 /** @param {{source?: string, value?: string, trigger?: HTMLElement | null}} [options] */
 function openComposer({ source = "button", value = "", trigger } = {}) {
-  if (!getGenerationSetupStatus().ready) {
+  if (!store || !getGenerationSetupStatus().ready) {
     openModelSetup({ trigger });
     return;
   }
@@ -651,6 +689,7 @@ async function createFromUrl(rawUrl) {
 }
 
 async function createFromFile(file) {
+  if (!store) { await openModelSetup(); return; }
   if (isRabbitholeFile(file)) return createFromRabbitholeFile(file);
   if (isSnapshotFile(file)) return createFromSnapshotFile(file);
   if (isPdfFile(file)) return createFromPdfFile(file);
@@ -1123,8 +1162,10 @@ function loadSettingsRuntime() {
   if (!settingsRuntimePromise) {
     settingsRuntimePromise = import("./settings/settings-runtime.js").then(({ createWebSettingsRuntime }) => {
       const runtime = createWebSettingsRuntime({
+        onBridgeState: refreshLibrary,
+        beforeRestart: async () => { await currentUi?.flush(); await currentHost?.flushSave(); },
         onSettingsChange: () => {
-          refreshCurrentProvider();
+          refreshLibrary();
           syncGenerationSetupUi();
           if (currentHoleNeedsPdfTranscription()) void refreshPdfTranscriptionCapability();
           else void loadWorkspaceRuntime().then((runtime) => {
@@ -1194,8 +1235,7 @@ async function createLiveAssetData(holeId) {
   const data = {};
   const urls = [];
   try {
-    // One IndexedDB transaction returns Blob handles for the complete lease.
-    // Opening an asset-heavy hole should not pay one transaction per image.
+    // Fetch the complete authenticated asset lease before mounting the document.
     const assets = typeof store.getAssets === "function"
       ? await store.getAssets(holeId)
       : await Promise.all((await store.listAssets(holeId)).map(async (name) => ({ name, blob: await store.getAsset(holeId, name) })));
