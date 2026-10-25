@@ -11,12 +11,12 @@ export const DOC_EVENT = vocabulary([
 
 export const WIRE_EVENT = vocabulary([
   "node_progress", "node_answered", "node_deleted", "node_search_status", "node_error",
-  "node_extensions_patch", "pdf_convert_progress",
+  "node_extensions_patch",
 ]);
 
 export const HOST_COMMAND = vocabulary([
   "branch_request", "node_create", "retry_branch", "node_update", "nodes_update", "block_state",
-  "node_extensions_patch", "convert_pdf", "convert_cancel", "delete_node", "view_state", "done",
+  "node_extensions_patch", "delete_node", "view_state", "done",
 ]);
 
 export const WEB_HOST_COMMANDS = Object.freeze(Object.values(HOST_COMMAND));

@@ -45,7 +45,7 @@ import { openPopover } from "./primitives/popover.js";
 import { renderMarginNotes } from "./reader.js";
 import { refreshNodeHtml } from "./renderer.js";
 import { structuredNoteController } from "./structured-note.js";
-import { mountPdfRectMark, syncTextOverlayMarks, wrapInContainer } from "./text-marks.js";
+import { syncTextOverlayMarks, wrapInContainer } from "./text-marks.js";
 
 /*
  * DOCKED NOTES — a note written about a card stays on that card.
@@ -94,9 +94,7 @@ export function initDockedNotes() {
       scope.listen(surface, "mouseout", function (e) {
         syncPartnerHighlight(e, false);
       });
-      // A card's own body carries its dots along as it scrolls, but an inner
-      // scroller (a native PDF) moves the marks underneath them. Scroll does
-      // not bubble, so the reposition is caught on the way down.
+      // Scroll does not bubble, so reposition note dots on the way down.
       scope.listen(surface, "scroll", scheduleEdges, true);
     });
     // Reader line breaks can change with the viewport. Repaint the empty note
@@ -142,7 +140,7 @@ function popEl() {
 function createNoteChild(parent, markdown, options) {
   options = options || {};
   markdown = String(markdown || "").trim();
-  if (!parent || !markdown || closed || parent.source?.converting) return null;
+  if (!parent || !markdown || closed) return null;
   const anchor = options.anchor || null;
   const placed = options.placed === true;
   const reaction = !placed && options.reaction === true;
@@ -237,12 +235,6 @@ function paintNoteMarks(parent, node, anchor) {
   const reactionClass = isReactionNote(node) ? " mark-reaction" : "";
   const readerDoc = readerMain.querySelector('.doc-content[data-node-id="' + parent.id + '"]');
   const cardDoc = parent.bodyEl ? parent.bodyEl.querySelector(".doc-content") : null;
-  if (anchor.pdf) {
-    if (mode === "reader")
-      mountPdfRectMark(readerDoc, anchor, node.id, "rh-pdf-mark mark-ready mark-note" + reactionClass);
-    mountPdfRectMark(cardDoc, anchor, node.id, "rh-pdf-mark mark-ready mark-note" + reactionClass);
-    return;
-  }
   if (mode === "reader") wrapInContainer(readerDoc, anchor, node.id, "hl mark-ready mark-note" + reactionClass);
   wrapInContainer(cardDoc, anchor, node.id, "hl mark-ready mark-note" + reactionClass);
 }
@@ -479,8 +471,7 @@ function positionDotColumn(layer) {
   const scale = reader ? 1 : view.scale || 1;
   const hostRect = host.getBoundingClientRect();
   const scrollTop = reader ? 0 : host.scrollTop;
-  // The reader's margin is only a margin while there is room for it; a column
-  // that fills the window (a native PDF) keeps its dots inside its own edge.
+  // The reader's margin is only a margin while there is room for it.
   if (reader) layer.classList.toggle("note-dots-inside", hostRect.right + 26 > (window.innerWidth || 0));
   let previous = -Infinity;
   const dots = layer.children;
@@ -500,7 +491,7 @@ function positionDotColumn(layer) {
 
 function markElement(scope, noteId) {
   if (!scope || !noteId) return null;
-  return scope.querySelector('mark[data-child="' + noteId + '"], [data-child="' + noteId + '"].rh-pdf-mark');
+  return scope.querySelector('mark[data-child="' + noteId + '"]');
 }
 
 function visibleElement(selector) {
@@ -513,8 +504,7 @@ function visibleElement(selector) {
 
 function affordanceFor(node) {
   return (
-    visibleElement('.note-dot[data-note="' + node.id + '"]') ||
-    visibleElement('mark[data-child="' + node.id + '"], [data-child="' + node.id + '"].rh-pdf-mark')
+    visibleElement('.note-dot[data-note="' + node.id + '"]') || visibleElement('mark[data-child="' + node.id + '"]')
   );
 }
 
@@ -613,31 +603,6 @@ function appendHtmlReactionTooltip(mark, node, clientX) {
   mark.appendChild(wrap);
 }
 
-function appendPdfReactionTooltip(mark, node, clientX, lineTarget) {
-  const svg = mark.ownerSVGElement;
-  const svgRect = svg?.getBoundingClientRect();
-  const box = svg?.viewBox?.baseVal;
-  if (!svg || !svgRect?.width || !svgRect.height || !box?.width || !box.height) return;
-  const scaleX = box.width / svgRect.width,
-    scaleY = box.height / svgRect.height;
-  const lineRect = lineTarget?.getBoundingClientRect?.() || mark.getBoundingClientRect();
-  const width = 76 * scaleX,
-    height = 34 * scaleY,
-    centerX = (clientX - svgRect.left) * scaleX,
-    lineTop = (lineRect.top - svgRect.top) * scaleY;
-  const wrap = document.createElementNS("http://www.w3.org/2000/svg", "foreignObject");
-  wrap.setAttribute("class", "reaction-tip-wrap reaction-tip-svg");
-  wrap.setAttribute("x", String(centerX - width / 2));
-  wrap.setAttribute("y", String(lineTop - height));
-  wrap.setAttribute("width", String(width));
-  wrap.setAttribute("height", String(height));
-  const html = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-  html.className = "reaction-tip-svg-inner";
-  html.appendChild(reactionTooltipContent(node));
-  wrap.appendChild(html);
-  mark.appendChild(wrap);
-}
-
 function showReactionTooltip(mark, clientX, lineTarget) {
   const node = mark && nodes[mark.dataset.child];
   if (!mark || !isReactionNote(node)) return;
@@ -646,11 +611,7 @@ function showReactionTooltip(mark, clientX, lineTarget) {
   removeReactionTooltip(mark);
   const rect = mark.getBoundingClientRect();
   const entryX = Number.isFinite(clientX) ? clientX : rect.left + rect.width / 2;
-  if (mark.namespaceURI === "http://www.w3.org/2000/svg") {
-    appendPdfReactionTooltip(mark, node, entryX, lineTarget);
-  } else {
-    appendHtmlReactionTooltip(mark, node, entryX);
-  }
+  appendHtmlReactionTooltip(mark, node, entryX);
 }
 
 function scheduleReactionTooltipHide(mark) {

@@ -1,7 +1,7 @@
 import { isNoteNode, isReactionNote } from "../core/hole/ask.js";
 import { childrenOf, nodes } from "./core.js";
 
-const MARK_FRAGMENT_SELECTOR = "mark[data-child], .rh-pdf-mark[data-child]";
+const MARK_FRAGMENT_SELECTOR = "mark[data-child]";
 
 function markGroupsAt(target) {
   let el = target && target.nodeType === 1 ? target : target && target.parentElement;
@@ -55,7 +55,6 @@ export function transitionMarkGroups(event, entering, stateClass, onTransition) 
 }
 
 export function applyChildHighlights(dc, node) {
-  if (dc && dc.classList.contains("rh-pdf")) return;
   const kids = childrenOf(node.id).filter(function (k) {
     return k.origin && k.origin.anchor && !k.origin.anchor.block;
   });
@@ -78,7 +77,7 @@ export function applyChildHighlights(dc, node) {
 }
 
 export function wrapInContainer(dc, anchor, childId, cls) {
-  if (!dc || !anchor || dc.classList.contains("rh-pdf") || anchor.pdf || anchor.block) return;
+  if (!dc || !anchor || anchor.block) return;
   const rr = rangeFromOffsets(dc, anchor.offset_start, anchor.offset_end);
   if (rr) {
     try {
@@ -103,7 +102,7 @@ export function syncTextOverlayMarks(root) {
       seen[childId] = true;
       const child = nodes[childId],
         anchor = child && child.origin && child.origin.anchor;
-      if (!anchor || anchor.pdf || anchor.block) continue;
+      if (!anchor || anchor.block) continue;
       const range = rangeFromOffsets(dc, anchor.offset_start, anchor.offset_end);
       if (!range) continue;
       overlayRange(range, childId, marks[i].className.replace(/\s*mark-overlay\b/, ""));
@@ -265,34 +264,6 @@ function overlayRange(range, childId, cls) {
     current.style.width = rect.width / scaleX + "px";
     current.style.height = rect.height / scaleY + "px";
   }
-}
-
-export function mountPdfRectMark(container, anchor, childId, cls) {
-  if (!container || !anchor || !anchor.pdf) return null;
-  let first = null,
-    fragments = anchor.pdf.fragments || [];
-  for (let f = 0; f < fragments.length; f++) {
-    const fragment = fragments[f];
-    const page = container.querySelector('.rh-pdf-page[data-page="' + Math.floor(Number(fragment.page)) + '"]');
-    const viewport = page && page._pdfViewport;
-    const layer = page && page.querySelector(".rh-pdf-marks");
-    if (!layer || !viewport) continue;
-    const group = initializeMark(document.createElementNS("http://www.w3.org/2000/svg", "g"), childId, cls);
-    for (let q = 0; q < fragment.quads.length; q++) {
-      const quad = fragment.quads[q],
-        points = [];
-      for (let p = 0; p < quad.length; p++) {
-        const converted = viewport.convertToViewportPoint(Number(quad[p][0]), Number(quad[p][1]));
-        points.push(converted[0] + "," + converted[1]);
-      }
-      const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-      polygon.setAttribute("points", points.join(" "));
-      group.appendChild(polygon);
-    }
-    layer.appendChild(group);
-    if (!first) first = group;
-  }
-  return first;
 }
 
 function wrapRange(range, childId, cls) {

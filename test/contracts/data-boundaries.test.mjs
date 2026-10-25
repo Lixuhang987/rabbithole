@@ -139,15 +139,15 @@ console.log("ok data boundaries: typed persisted and portable artifacts are cano
       id: "attachment-node",
       parent_id: "root",
       origin: { question: "Imported attachments", attachment_assets: [
-        "paste-one.png", "source.pdf", "../escape.png", "paste-two.jpg",
+        "paste-one.png", "../escape.png", "paste-two.jpg",
         "paste-three.webp", "paste-four.gif", "paste-five.svg",
       ] },
     }),
-    validNode({ id: "invalid-attachment-node", parent_id: "root", origin: { attachment_assets: ["source.pdf", "../escape.png"] } }),
+    validNode({ id: "invalid-attachment-node", parent_id: "root", origin: { attachment_assets: ["../escape.png"] } }),
   ] })));
   assert.deepEqual(imported.hole.nodes.find((node) => node.id === "attachment-node").origin.attachment_assets,
     ["paste-one.png", "paste-two.jpg", "paste-three.webp", "paste-four.gif"],
-    "portable import must reject PDF/traversal names and cap attachment assets at four valid images");
+    "portable import keeps valid image names and caps attachment assets at four");
   assert.equal(Object.hasOwn(imported.hole.nodes.find((node) => node.id === "invalid-attachment-node").origin, "attachment_assets"), false,
     "portable import must drop an attachment_assets field when no valid image names remain");
 }
@@ -233,25 +233,6 @@ assert.throws(
 );
 console.log("ok data boundaries: non-object node extensions are legibly rejected");
 
-{
-  const sha256 = "12".repeat(32);
-  const hostile = validHole({ nodes: [validNode({ origin: { anchor: { offset_start: 4, offset_end: 12,
-    pdf: { version: 2, source_sha256: sha256, kind: "region", fragments: [{ page: 7.9,
-      quads: [[[1.123456, 2], [9, 2], [9, 7], [1.123456, 7]]] }] } } } })] });
-  const parsed = parsePersistedHole(hostile);
-  assert.deepEqual(parsed.nodes[0].origin.anchor, {
-    offset_start: 4,
-    offset_end: 12,
-    pdf: {
-      version: 2,
-      source_sha256: sha256,
-      kind: "region",
-      fragments: [{ page: 7, quads: [[[1.1235, 2], [9, 2], [9, 7], [1.1235, 7]]] }],
-    },
-  });
-}
-console.log("ok data boundaries: imported PDF-space quads are validated and deterministically rounded");
-
 assert.throws(
   () => parseRabbitholeFile(JSON.stringify({ format: "rabbithole", format_version: 2, hole: {}, assets: {} })),
   /unsupported Rabbithole file format/i,
@@ -299,7 +280,7 @@ const snapshot = (payload, before = "", after = "") =>
   );
   assert.equal(read, false, "oversized files reject before File.text()");
 
-  assert.equal(MAX_IMPORT_PAYLOAD_BYTES, 150 * 1024 * 1024, "portable payload cap includes a base64-encoded 100 MB PDF source");
+  assert.equal(MAX_IMPORT_PAYLOAD_BYTES, 48 * 1024 * 1024, "portable payload cap is enforced before parsing");
   const tooManyNodes = validHole({ nodes: Array.from({ length: 5001 }, (_, index) => validNode({ id: `n${index}` })) });
   assert.throws(() => parseRabbitholeFile(portable(tooManyNodes)), /exceeds 5,000 nodes/);
   const tooManyAssets = Object.fromEntries(Array.from({ length: 201 }, (_, index) => [`a${index}.png`, ""]));

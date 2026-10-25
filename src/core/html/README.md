@@ -2,7 +2,7 @@
 
 Shell, icons and page assembly are host-independent. Live browser UI loads from
 its static origin; frozen snapshots inline the shell, authored stylesheet,
-sanitizer and frozen client. Mermaid/PDF runtimes are embedded only when needed.
+sanitizer and frozen client. The Mermaid runtime is embedded only when needed.
 
 All product-owned icons live in `icons.js`, with role mapping in
 `icon-selection.js` and generated Ionicons data in `ionicons5.generated.js`.

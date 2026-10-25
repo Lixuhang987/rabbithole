@@ -1,6 +1,6 @@
 # Rabbithole
 
-An infinite canvas for learning. Open a document, ask at any point, and follow each answer into a new document.
+An infinite canvas for learning. Start with a question or webpage, ask at any point, and follow each answer into a new document.
 
 [Open the web app](https://rabbithole.ing) · [Offline architecture tour](docs/tour.html)
 
@@ -13,13 +13,13 @@ npx @shlokkhemani/rabbithole bridge
 ```
 
 Open the private pairing link printed by the bridge. Choose a model and reasoning
-in Model settings, then start with a question, URL, Markdown, PDF, or Rabbithole file.
+in Model settings, then start with a question, URL, or pasted text.
 Keep the bridge running while using live documents.
 
 Codex uses its local provider configuration and authentication. Every generation
 creates a persistent native session; questions on generated articles fork their
-source session independently. Every Ask on imported Markdown or PDF starts a new
-session with the readable article. Unavailable history fails explicitly.
+source session independently. Every Ask on a webpage starts a new session with
+the readable article. Unavailable history fails explicitly.
 
 Documents and attachments live under `~/.rabbithole/` (`RABBITHOLE_DIR` overrides).
 After clearing browser data, pair again to reopen the same library. Existing

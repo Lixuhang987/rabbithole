@@ -28,7 +28,7 @@
       "description": "Statically loaded web application JavaScript",
       "unit": "bytes",
       "tolerance": 0.05,
-      "rationale": "Exact transitive size of app.js and its static chunks; canvas, workspace, model setup, export, math, and PDF runtimes stay outside the landing-page critical path.",
+      "rationale": "Exact transitive size of app.js and its static chunks; canvas, workspace, model setup, export, and math stay outside the landing-page critical path.",
       "baseline": 156855,
       "ceiling": 164697.75,
       "measured_at_commit": "89f87c0+lazy-runtimes"
@@ -44,21 +44,11 @@
       "measured_at_commit": "f542661"
     },
     {
-      "id": "pdf_runtime_distribution_bytes",
-      "description": "Production PDF.js runtime plus worker",
-      "unit": "bytes",
-      "tolerance": 0.05,
-      "rationale": "Exact size of the lazily loaded production PDF.js module and worker.",
-      "baseline": 1334801,
-      "ceiling": 1401541.05,
-      "measured_at_commit": "bb59262"
-    },
-    {
       "id": "snapshot_math_bytes",
       "description": "Frozen HTML size for the math-heavy reference corpus",
       "unit": "bytes",
       "tolerance": 0.05,
-      "rationale": "Exact UTF-8 snapshot size. Snapshots now carry the note extensions namespace and docked-note affordances. Complete Ask origins, clickable image thumbnails and source-coordinate PDF region previews add 4261 bytes versus 5a568c0. Accept this offline runtime cost to preserve the full origin in folded cards and snapshots; retain the previous absolute headroom rather than recalibrating unrelated gauges.",
+      "rationale": "Exact UTF-8 snapshot size. Snapshots carry the note extensions namespace, docked-note affordances, complete Ask origins and clickable image thumbnails; retain the established absolute headroom.",
       "baseline": 1184955,
       "ceiling": 1248463.75,
       "measured_at_commit": "bb59262"
@@ -68,7 +58,7 @@
       "description": "Frozen HTML size for the PNG/SVG reference corpus",
       "unit": "bytes",
       "tolerance": 0.05,
-      "rationale": "Exact UTF-8 snapshot size including assets. Snapshots now carry the note extensions namespace and docked-note affordances. Complete Ask origins, clickable image thumbnails and source-coordinate PDF region previews add 4261 bytes versus 5a568c0. Accept this offline runtime cost to preserve the full origin in folded cards and snapshots; retain the previous absolute headroom rather than recalibrating unrelated gauges.",
+      "rationale": "Exact UTF-8 snapshot size including assets. Snapshots carry the note extensions namespace, docked-note affordances, complete Ask origins and clickable image thumbnails; retain the established absolute headroom.",
       "baseline": 1184989,
       "ceiling": 1248499.45,
       "measured_at_commit": "bb59262"
@@ -135,27 +125,6 @@
       "floor": 100,
       "baseline": 48,
       "ceiling": 100,
-      "measured_at_commit": "bb59262"
-    },
-    {
-      "id": "pdf_hole_serialized_bytes",
-      "description": "Serialized size of a representative 40-page native PDF hole",
-      "unit": "bytes",
-      "tolerance": 0.2,
-      "rationale": "Exact JSON byte size catches provenance growth.",
-      "baseline": 78522,
-      "ceiling": 94226.4,
-      "measured_at_commit": "bb59262"
-    },
-    {
-      "id": "pdf_save_latency_ms",
-      "description": "JSON clone/serialize latency for a representative native PDF save",
-      "unit": "ms",
-      "tolerance": 4,
-      "rationale": "Minimum of repeated 20-save loops with a 20ms floor absorbs timer noise.",
-      "floor": 20,
-      "baseline": 0.28,
-      "ceiling": 20,
       "measured_at_commit": "bb59262"
     },
     {

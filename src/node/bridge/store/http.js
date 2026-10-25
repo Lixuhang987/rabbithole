@@ -1,9 +1,10 @@
-import { getAssetContentType, maxAssetBytes, validateAssetName } from "../../../core/assets.js";
+import { getAssetContentType, MAX_ASSET_BYTES, validateAssetName } from "../../../core/assets.js";
 import { parseRequestBody } from "../../shared/http.js";
 import { BridgeError } from "../errors.js";
 
 async function assetBody(req, name) {
-  const limit = maxAssetBytes(validateAssetName(name));
+  validateAssetName(name);
+  const limit = MAX_ASSET_BYTES;
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {

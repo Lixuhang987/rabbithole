@@ -90,7 +90,7 @@ function validateTargetUrl(url) {
 
 function upstreamRequestHeaders() {
   return new Headers({
-    Accept: "text/html,application/pdf;q=0.9,text/plain;q=0.5,*/*;q=0.1",
+    Accept: "text/html,text/plain;q=0.5,*/*;q=0.1",
   });
 }
 

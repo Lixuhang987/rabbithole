@@ -13,16 +13,8 @@ const chunkNames = await fs.readdir(path.join(WEB_DIST, "chunks")).catch((error)
 });
 const browserRuntimeFiles = [
   path.join(WEB_DIST, "app.js"),
-  path.join(WEB_DIST, "pdf.mjs"),
   ...chunkNames.filter((name) => name.endsWith(".js")).map((name) => path.join(WEB_DIST, "chunks", name)),
 ];
-assert.equal(chunkNames.some((name) => /^pdf-/.test(name)), false,
-  "the tiny PDF importer must stay in the initial app instead of creating a fragile lazy network boundary");
-const pdfImplementations = [];
-for (const file of browserRuntimeFiles) {
-  if ((await fs.readFile(file, "utf8")).includes("PDFDocumentLoadingTask")) pdfImplementations.push(path.relative(WEB_DIST, file));
-}
-assert.deepEqual(pdfImplementations, ["pdf.mjs"], "the web application must ship one lazy PDF.js implementation, never a second bundled copy");
 assert.equal(recorded.budgets.length, budgetDefinitions.length, "every defined gauge must have a recorded budget");
 const measured = await measureBudgets({ samples: 3 });
 const failures = [];

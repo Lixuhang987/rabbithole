@@ -2709,7 +2709,6 @@ async function verifyNoteToAskConversion() {
     const standalone = await createStandaloneNote("Standalone note question");
     const imageNote = await createStandaloneNote("What does this pasted diagram show?", true);
     const rejected = await createStandaloneNote("Rejected note exactly as first written.");
-    const emptyNote = await createStandaloneNote("Empty body menu fixture");
     await zoomToFit(page);
     await page.waitForTimeout(350);
 
@@ -2734,25 +2733,6 @@ async function verifyNoteToAskConversion() {
     assert.equal(await frozenPage.locator("#cardmenu").locator("#cm-convert").isVisible(), false,
       "Convert to Ask should be absent in a frozen snapshot");
     await frozenPage.close();
-
-    const emptyPortable = await page.evaluate(() => window.__rabbitholeTest.exportPortable());
-    emptyPortable.hole.nodes = emptyPortable.hole.nodes.filter((node) => node.id === emptyPortable.hole.root_id || node.id === emptyNote.id);
-    emptyPortable.hole.nodes.find((node) => node.id === emptyNote.id).markdown = " \n ";
-    emptyPortable.assets = {};
-    const emptyPage = await context.newPage();
-    await routeProvider(emptyPage);
-    await emptyPage.goto(baseUrl, { waitUntil: "networkidle" });
-    const emptyPagePreviousHole = await emptyPage.evaluate(() => window.__rabbitholeTest.currentHoleId());
-    await emptyPage.setInputFiles("#file-md", {
-      name: "empty-note-menu.rabbithole", mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(emptyPortable)),
-    });
-    await emptyPage.waitForFunction((previous) => window.__rabbitholeTest.currentHoleId() !== previous, emptyPagePreviousHole);
-    const importedEmptyCard = emptyPage.locator(`.card[data-id="${emptyNote.id}"]`);
-    await importedEmptyCard.locator(".card-more").click();
-    assert.equal(await emptyPage.locator("#cardmenu #cm-convert").isVisible(), false,
-      "Convert to Ask should be absent when an otherwise eligible note body is empty");
-    await emptyPage.close();
 
     let editor = await openNoteEditor(followupCard);
     assert.deepEqual(await followupCard.locator(".note-edit-actions").evaluate((actions) => {

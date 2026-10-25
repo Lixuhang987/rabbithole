@@ -12,7 +12,6 @@ const bundle = await esbuild.build({
   globalName: "RabbitholeUiTest",
   platform: "browser",
   target: "es2018",
-  external: ["pdfjs-dist/build/pdf.mjs"],
   logLevel: "silent",
 });
 

@@ -279,12 +279,6 @@ export function renderReaderBody() {
   const dc = buildDocContent(node, READER_BASE);
   col.appendChild(dc);
   applyChildHighlights(dc, node);
-  const isPdfReader = dc.classList.contains("rh-pdf");
-  const isPdfViewport = isPdfReader && !node.parent_id && !ctx?.querySelector(".rh-origin-crop");
-  readerMain.classList.toggle("pdf-reader", isPdfReader);
-  readerMain.classList.toggle("pdf-reader-viewport", isPdfViewport);
-  col.classList.toggle("pdf-reader-col", isPdfReader);
-  col.classList.toggle("pdf-reader-viewport", isPdfViewport);
   readerMain.appendChild(col);
   readerLifecycle.hooks.renderDockedNotes(node);
   // Each document remembers where you were; a first open starts at the top.
@@ -295,20 +289,15 @@ export function jumpToOrigin(node, source) {
   const parent = nodes[node.parent_id];
   if (!parent) return;
   openNode(parent.id);
-  const target = readerMain.querySelector(
-    '[data-child="' + node.id + '"].rh-pdf-mark, mark[data-child="' + node.id + '"]',
-  );
+  const target = readerMain.querySelector('mark[data-child="' + node.id + '"]');
   if (!target) return;
   scrollMarkIntoView(target, 0.38, source);
-  const marks = readerMain.querySelectorAll(
-    '[data-child="' + node.id + '"].rh-pdf-mark, mark[data-child="' + node.id + '"]',
-  );
+  const marks = readerMain.querySelectorAll('mark[data-child="' + node.id + '"]');
   for (let i = 0; i < marks.length; i++) playLandingCue(marks[i], "mark-flash");
 }
 
 function scrollMarkIntoView(mark, viewportRatio, source) {
-  let scroller = mark.closest && mark.closest(".rh-pdf-scroll");
-  if (!scroller) scroller = readerMain;
+  const scroller = readerMain;
   const top = mark.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
   readerLifecycle.hooks.animateScroll(scroller, Math.max(0, top - scroller.clientHeight * viewportRatio), source);
 }
@@ -321,7 +310,7 @@ function onReaderScroll() {
 // A mark takes you to its branch — unless the branch is a docked note, whose
 // whole point is that there is nowhere to go: its own module opens it in place.
 function onMarkClick(e) {
-  const m = e.target.closest("[data-child].rh-pdf-mark, mark[data-child]");
+  const m = e.target.closest("mark[data-child]");
   if (!m) return;
   if (!window.getSelection().isCollapsed) return; // user was selecting, not clicking
   const k = nodes[m.dataset.child];
@@ -330,7 +319,7 @@ function onMarkClick(e) {
 }
 function onMarkKeydown(e) {
   if (e.key !== "Enter") return;
-  const m = e.target.closest && e.target.closest("[data-child].rh-pdf-mark, mark[data-child]");
+  const m = e.target.closest && e.target.closest("mark[data-child]");
   if (!m) return;
   const k = nodes[m.dataset.child];
   if (!k || isDockedNote(k)) return;
@@ -354,9 +343,7 @@ function onCanvasMarkKeydown(e) {
   goToNode(k, motionSourceFromEvent(e));
 }
 // Every direct branch has one stable card in the Reader rail. Anchored
-// comments lead, in document order; general follow-ups follow in creation
-// order. Keeping one surface for both is especially important for PDFs,
-// whose own scroller cannot share an old absolute text margin.
+// comments lead, in document order; general follow-ups follow in creation order.
 export function renderMarginNotes() {
   const layer = marginNotesLayer();
   if (!layer) return;
@@ -457,9 +444,7 @@ function syncNoteHover(e, on) {
   if (!tile) return;
   const related = e.relatedTarget;
   if (related && tile.contains(related)) return;
-  const marks = readerMain.querySelectorAll(
-    '[data-child="' + tile.dataset.child + '"].rh-pdf-mark, mark[data-child="' + tile.dataset.child + '"]',
-  );
+  const marks = readerMain.querySelectorAll('mark[data-child="' + tile.dataset.child + '"]');
   for (let i = 0; i < marks.length; i++) marks[i].classList.toggle("mark-focus", on);
 }
 function mountNoteVisuals(panes) {
@@ -486,7 +471,7 @@ function pendingStatusHtml(k) {
 // j/k focus ring over the current document's anchored branches.
 let kbdMarkIdx = -1;
 function allMarks() {
-  return readerMain.querySelectorAll("[data-child].rh-pdf-mark, mark[data-child]");
+  return readerMain.querySelectorAll("mark[data-child]");
 }
 export function focusedMark() {
   const marks = allMarks();

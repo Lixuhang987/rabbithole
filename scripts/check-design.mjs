@@ -10,7 +10,7 @@ const tokenPath = path.join(designRoot, "tokens.css");
 const runtimeVariables = new Set([
   "--rh-pan-x", "--rh-pan-y", "--rh-zoom", "--rail-top", "--overlay-viewport-left",
   "--overlay-viewport-top", "--overlay-viewport-width", "--overlay-viewport-height",
-  "--rh-pdf-reader-center", "--node-scale", "--reader-scale", "--nc-op",
+  "--node-scale", "--reader-scale", "--nc-op",
   "--surface-gap",
 ]);
 const errors = [];

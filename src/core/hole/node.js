@@ -1,4 +1,3 @@
-import { validateAssetName } from "../assets.js";
 import { normalizeAskAttachments } from "../attachments.js";
 import { inheritedNodeBaseUrl, normalizeStoredBaseUrlFields } from "../base-url.js";
 import { normalizeAnchor } from "./anchor.js";
@@ -37,7 +36,6 @@ export const FIELDS = Object.freeze({
   status: field("answered", (value) => value === "pending" ? "pending" : "answered", STATEFUL),
   read: field(false, Boolean, STATEFUL),
   created_at: field(null, nullableString, PERSISTED),
-  source: field(null, normalizeObjectOrNull, []),
   view: field(Object.freeze({}), normalizeObject, []),
   progress: field(Object.freeze({}), normalizeObject, []),
   extensions: field(Object.freeze({}), normalizeObject, STATEFUL),
@@ -53,7 +51,6 @@ export function makeNode(partial) {
     node[name] = descriptor.normalize(Object.prototype.hasOwnProperty.call(raw, name) ? raw[name] : fallback);
   }
   const legacy = splitLegacyExtensions(raw.extensions);
-  if (raw.source == null && legacy.source) node.source = legacy.source;
   if (!Object.keys(node.view).length) node.view = legacy.view;
   if (!Object.keys(node.progress).length) node.progress = legacy.progress;
   node.extensions = legacy.extensions;
@@ -107,8 +104,6 @@ export function createPendingBranchNode(payload, parent, { now = new Date().toIS
   const branchType = standalone ? BRANCH_FOLLOWUP : normalizeBranchType(payload.branch_type, selectedText);
   const inheritedBase = inheritedNodeBaseUrl(parent);
   const nodeId = String(payload.node_id || "");
-  let cropAsset = null;
-  try { cropAsset = validateAssetName(payload.crop_asset); } catch {}
   const attachmentAssets = normalizeAskAttachments(payload.attachment_assets);
   return makeNode({
     id: nodeId,
@@ -125,7 +120,6 @@ export function createPendingBranchNode(payload, parent, { now = new Date().toIS
       anchor,
       branch_type: branchType,
       ...(attachmentAssets.length ? { attachment_assets: attachmentAssets } : {}),
-      ...(cropAsset ? { crop_asset: cropAsset } : {}),
     },
     position: normalizePosition(payload.position),
     size: normalizeSize(payload.size),
@@ -162,10 +156,9 @@ export function normalizeSize(size) {
   return { w: width, h: height };
 }
 
-/** @param {unknown} extensions @returns {{ source: Record<string, any> | null, view: Record<string, any>, progress: Record<string, any>, extensions: Record<string, any> }} */
+/** @param {unknown} extensions @returns {{ view: Record<string, any>, progress: Record<string, any>, extensions: Record<string, any> }} */
 function splitLegacyExtensions(extensions) {
   const raw = normalizeObject(extensions);
-  const source = normalizeObjectOrNull(raw.pdf);
   const canvas = normalizeObject(raw.canvas);
   const note = normalizeObject(raw.note);
   const view = {
@@ -175,17 +168,15 @@ function splitLegacyExtensions(extensions) {
   };
   const progress = normalizeObject(raw.learn);
   const residual = { ...raw };
-  delete residual.pdf;
   delete residual.canvas;
   delete residual.note;
   delete residual.learn;
-  return { source, view, progress, extensions: residual };
+  return { view, progress, extensions: residual };
 }
 
 /** @param {HoleNode & Record<string, any>} node @param {NodeProjectionTarget} target */
 function joinLegacyExtensions(node, target) {
   const extensions = { ...normalizeObject(node.extensions) };
-  if (node.source) extensions.pdf = cloneJson(node.source);
   const view = normalizeObject(node.view);
   const { docked, reaction, ...canvas } = view;
   if (Object.keys(canvas).length) extensions.canvas = cloneJson(canvas);
@@ -197,7 +188,7 @@ function joinLegacyExtensions(node, target) {
   if (target !== "snapshot" && Object.keys(normalizeObject(node.progress)).length) extensions.learn = cloneJson(node.progress);
   if (target === "snapshot") {
     for (const name of Object.keys(extensions)) {
-      if (!["pdf", "note", "canvas", "attention"].includes(name)) delete extensions[name];
+      if (!["note", "canvas", "attention"].includes(name)) delete extensions[name];
     }
   }
   return extensions;
@@ -214,8 +205,6 @@ function nullableString(value) { return value == null ? null : String(value); }
 function identity(value) { return value; }
 /** @param {unknown} value @returns {Record<string, any>} */
 function normalizeObject(value) { return value && typeof value === "object" && !Array.isArray(value) ? { ...value } : {}; }
-/** @param {unknown} value @returns {Record<string, any> | null} */
-function normalizeObjectOrNull(value) { return value && typeof value === "object" && !Array.isArray(value) ? { ...value } : null; }
 /** @param {any} value */
 function cloneDefault(value) { return value && typeof value === "object" ? cloneJson(value) : value; }
 /** @param {any} value */

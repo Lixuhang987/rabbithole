@@ -2,7 +2,7 @@
 
 The reader is the primary surface; the canvas is the overview. Both show the same documents and relationships, with no translation step between them.
 
-A card is a view of a document, not a second model. Marks show where questions or human notes began. Docked notes remain ordinary documents even when their presentation lives in a margin. PDF pages likewise have a native visual representation while extracted Markdown remains the model-facing content.
+A card is a view of a document, not a second model. Marks show where questions or human notes began. Docked notes remain ordinary documents even when their presentation lives in a margin.
 
 The interface uses a small set of shared primitives for popovers, menus, dialogs, focus, motion, and cleanup. A mounted surface owns its listeners and observers and releases them through one lifecycle mechanism.
 

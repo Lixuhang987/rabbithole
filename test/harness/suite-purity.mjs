@@ -8,7 +8,11 @@ const metadataDirectories = [...tiers, "isolation-live"];
 const failures = [];
 for (const tier of metadataDirectories) {
   const directory = path.join(testDir, tier);
-  for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+  const entries = await fs.readdir(directory, { withFileTypes: true }).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".test.mjs")) continue;
     const file = path.join(directory, entry.name);
     const source = await fs.readFile(file, "utf8");

@@ -83,7 +83,6 @@ function defaultCoreHooks() {
       return false;
     },
     mountDocImages: null,
-    mountPdfView: null,
   };
 }
 
@@ -439,36 +438,6 @@ export function buildLoading(node) {
   wrap.appendChild(sk);
   return wrap;
 }
-function buildConvertProgress(node, pdfExt, committed) {
-  const done = node._pdfProgress ? node._pdfProgress.done : 0;
-  const total = node._pdfProgress ? node._pdfProgress.total : pdfExt.pages ? pdfExt.pages.length : 0;
-  const wrap = document.createElement("div");
-  wrap.className = "rh-pdf-convert-progress" + (committed ? "" : " loading rh-pdf-converting");
-  const st = document.createElement("div");
-  st.className = "loading-status";
-  let label = "Creating text version";
-  if (committed && done > 0 && done < total) label += " — page " + done + " of " + total;
-  else if (!committed && total) label += " — " + total + (total === 1 ? " page" : " pages");
-  st.innerHTML = (committed ? "" : LOADING_BUNNY_HTML) + '<span class="shimmer-text">' + label + "</span>";
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.className = "card-btn rh-pdf-convert-cancel";
-  cancel.textContent = "Cancel";
-  cancel.addEventListener("click", function (event) {
-    event.stopPropagation();
-    cancel.disabled = true;
-    postBrowserEvent({ type: "convert_cancel", node_id: node.id });
-  });
-  st.appendChild(cancel);
-  wrap.appendChild(st);
-  if (!committed) {
-    const sk = document.createElement("div");
-    sk.innerHTML =
-      '<div class="sk-line w1"></div><div class="sk-line w2"></div><div class="sk-line w3"></div><div class="sk-line w4"></div>';
-    wrap.appendChild(sk);
-  }
-  return wrap;
-}
 function visualSurfaceKey(node, base) {
   return (base === CANVAS_BASE ? "canvas:" : "reader:") + ((node && node.id) || "unknown");
 }
@@ -545,7 +514,7 @@ export function buildDocContent(node, base) {
     if (node.html) fillStreaming(dc, node, visualSurfaceKey(node, base));
     else dc.appendChild(buildLoading(node));
   } else {
-    if (isNoteNode(node) && !node.source) {
+    if (isNoteNode(node)) {
       const noteDocument = mountStructuredNote(dc, {
         markdown: node.markdown || "",
         html: node.html || "",
@@ -571,28 +540,8 @@ export function buildDocContent(node, base) {
       dc._rhDispose = disposeNote;
       return dc;
     }
-    const disposePdf = coreHooks.mountPdfView ? coreHooks.mountPdfView(dc, node) : null;
-    if (disposePdf) {
-      if (!node._contentDisposers) node._contentDisposers = new Set();
-      const dispose = function () {
-        node._contentDisposers.delete(dispose);
-        disposePdf();
-      };
-      node._contentDisposers.add(dispose);
-      dc._rhDispose = dispose;
-    } else {
-      dc.innerHTML = node.html || "";
-      const pdfExt = node.source;
-      if (pdfExt && pdfExt.converting) {
-        // Until the first converted chunk lands the body is still the raw
-        // line-per-line extraction — never show that; show a loading state.
-        const committed =
-          String(node.markdown || "") !== String(pdfExt.original_markdown != null ? pdfExt.original_markdown : "");
-        if (!committed) dc.innerHTML = "";
-        dc.prepend(buildConvertProgress(node, pdfExt, committed));
-      }
-      mountDocMedia(dc, node, base);
-    }
+    dc.innerHTML = node.html || "";
+    mountDocMedia(dc, node, base);
   }
   return dc;
 }

@@ -110,7 +110,6 @@ export function createRabbitholeUi({ hydration, host, capabilities } = {}) {
       persistNode: host.persistNode || noop,
       revealDockedNote: revealDockedNote,
       mountDocImages: mountImages,
-      mountPdfView: capabilities.mountPdfView || null,
       ensureCanvasBuilt: ensureCanvasBuilt,
       diveToNode: diveToNode,
       scheduleEdges: scheduleEdges,

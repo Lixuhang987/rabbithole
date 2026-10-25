@@ -94,7 +94,6 @@ Values are read from `src/design/tokens.css`; repeated theme overrides remain vi
 | `--layer-local-mid` | `2` |
 | `--layer-local-high` | `3` |
 | `--layer-local-top` | `4` |
-| `--layer-local-toolbar` | `6` |
 | `--layer-reader` | `5` |
 | `--layer-pinned` | `30` |
 | `--layer-feedback` | `40` |
@@ -152,7 +151,6 @@ Values are read from `src/design/tokens.css`; repeated theme overrides remain vi
 | `--image-matte-ink` | `#191713` |
 | `--backdrop-dark` | `rgba(0, 0, 0, .82)` |
 | `--shadow-alpha-08` | `rgba(0, 0, 0, .08)` |
-| `--shadow-alpha-12` | `rgba(0, 0, 0, .12)` |
 | `--shadow-alpha-16` | `rgba(0, 0, 0, .16)` |
 | `--shadow-alpha-28` | `rgba(0, 0, 0, .28)` |
 | `--shadow-alpha-30` | `rgba(0, 0, 0, .30)` |

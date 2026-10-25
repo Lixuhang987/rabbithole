@@ -1,4 +1,3 @@
-import { normalizePdfAnchor } from "./hole/anchor.js";
 import { validateLegacyAskOrigin } from "./hole/ask.js";
 import { normalizeViewState } from "./hole/bookmark.js";
 import { projectNode } from "./hole/node.js";
@@ -46,21 +45,8 @@ export function parsePersistedHole(raw, { clone = true } = {}) {
   if (Number(hole.schema_version) > CURRENT_SCHEMA_VERSION) {
     throw new Error(NEWER_SCHEMA_MESSAGE);
   }
-  normalizeImportedPdfAnchors(hole);
   validatePersistedHole(hole);
   return /** @type {PersistedHole} */ (hole);
-}
-
-/** Imported origins are otherwise opaque; PDF-space anchors are consumer-normalized. @param {Record<string, any>} hole */
-function normalizeImportedPdfAnchors(hole) {
-  if (!Array.isArray(hole.nodes)) return;
-  for (const node of hole.nodes) {
-    const pdf = node?.origin?.anchor?.pdf;
-    if (!pdf || typeof pdf !== "object") continue;
-    const normalized = normalizePdfAnchor(pdf);
-    if (normalized) node.origin.anchor.pdf = normalized;
-    else delete node.origin.anchor.pdf;
-  }
 }
 
 /** @param {any} hole @returns {hole is PersistedHole} */

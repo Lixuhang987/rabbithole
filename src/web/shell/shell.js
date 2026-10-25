@@ -24,7 +24,6 @@ export function mountWebShell() {
           </header>
           <div class="composer-paths" role="group" aria-label="Choose how to begin">
             <${BUTTON_TAG} class="composer-path" id="composer-path-ask" type="button" data-path="ask"><span class="composer-path-icon" aria-hidden="true">${iconSvg("question")}</span><span class="composer-path-copy"><strong>Ask a question</strong><small>Begin with something you want to understand.</small></span><span class="composer-path-arrow" aria-hidden="true">→</span></button>
-            <${BUTTON_TAG} class="composer-path" id="composer-path-file" type="button" data-path="file"><span class="composer-path-icon" aria-hidden="true">${iconSvg("file")}</span><span class="composer-path-copy"><strong>Open a document</strong><small>Bring in a PDF or Markdown file from your device.</small></span><span class="composer-path-arrow" aria-hidden="true">→</span></button>
             <${BUTTON_TAG} class="composer-path" id="composer-path-paste" type="button" data-path="paste"><span class="composer-path-icon" aria-hidden="true">${iconSvg("paste")}</span><span class="composer-path-copy"><strong>Paste text or Markdown</strong><small>Start from your clipboard.</small></span><span class="composer-path-arrow" aria-hidden="true">→</span></button>
             <${BUTTON_TAG} class="composer-path" id="composer-path-url" type="button" data-path="url"><span class="composer-path-icon" aria-hidden="true">${iconSvg("link")}</span><span class="composer-path-copy"><strong>Open a link</strong><small>Start from an article, paper, or webpage.</small></span><span class="composer-path-arrow" aria-hidden="true">→</span></button>
           </div>
@@ -35,7 +34,6 @@ export function mountWebShell() {
           <textarea id="composer-input" rows="1" autocomplete="off" spellcheck="true"></textarea>
           <div class="composer-entry-actions"><${BUTTON_TAG} id="composer-primary" class="web-primary" type="button"></button></div>
         </section>
-        <input id="file-md" type="file" accept=".md,.markdown,.pdf,.rabbithole,.html,text/markdown,text/plain,text/html,application/pdf,application/json" hidden>
         <div id="ingest-status" class="ingest-status" aria-live="polite" aria-atomic="true"></div>
       </div>
     </div>

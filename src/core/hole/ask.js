@@ -1,4 +1,3 @@
-import { validateAssetName } from "../assets.js";
 import { MAX_ASK_ATTACHMENTS, normalizeAskAttachments, validateAskAttachments } from "../attachments.js";
 import { normalizeAnchor } from "./anchor.js";
 import { reactionInstructionForNode } from "./reaction.js";
@@ -64,7 +63,7 @@ export function askOfNode(node) {
   if (!origin || typeof origin !== "object" || Array.isArray(origin)) return null;
   const raw = /** @type {Record<string, any>} */ (origin);
   const owned = raw.kind === "note" || "question" in raw || "selected_text" in raw || "anchor" in raw
-    || "branch_type" in raw || "lens" in raw || "instruction" in raw || "attachment_assets" in raw || "crop_asset" in raw
+    || "branch_type" in raw || "lens" in raw || "instruction" in raw || "attachment_assets" in raw
     || "web_root_question" in raw;
   if (!owned) return null;
   const isRootQuestion = typeof raw.web_root_question === "string";
@@ -73,8 +72,6 @@ export function askOfNode(node) {
     ? raw.web_root_question
     : note ? String(node.markdown ?? "") : String(raw.question ?? "");
   const attachmentAssets = normalizeAskAttachments(raw.attachment_assets);
-  let clip = null;
-  try { clip = raw.crop_asset == null ? null : validateAssetName(raw.crop_asset); } catch {}
   const error = normalizeAskError(/** @type {any} */ (node).error);
   const status = node.status === "pending" ? "requested" : error ? "failed" : "settled";
   return {
@@ -87,7 +84,6 @@ export function askOfNode(node) {
     lens: typeof raw.lens === "string" ? raw.lens : null,
     instruction: typeof raw.instruction === "string" ? raw.instruction : null,
     attachments: attachmentAssets,
-    clip,
     author: note && raw.author !== "agent" ? "human" : "agent",
     produces: String(node.id),
     state: status,
@@ -108,7 +104,6 @@ export function validateAsk(value) {
   if (ask.lens !== null && typeof ask.lens !== "string") throw new Error(`Ask ${ask.id} lens must be string or null`);
   if (ask.instruction !== null && typeof ask.instruction !== "string") throw new Error(`Ask ${ask.id} instruction must be string or null`);
   validateAskAttachments(ask.attachments, `Ask ${ask.id} attachments`);
-  if (ask.clip !== null) validateAssetName(ask.clip);
   if (ask.author !== "human" && ask.author !== "agent") throw new Error(`Ask ${ask.id} author is invalid`);
   if (typeof ask.produces !== "string" || !ask.produces) throw new Error(`Ask ${ask.id} produces must be a non-empty string`);
   if (!["requested", "streaming", "settled", "failed"].includes(ask.state)) throw new Error(`Ask ${ask.id} state is invalid`);
@@ -129,7 +124,7 @@ export function validateLegacyAskOrigin(origin, nodeId) {
   if (!origin || typeof origin !== "object" || Array.isArray(origin)) throw new Error(`Persisted node ${nodeId} origin must be object or null`);
   const raw = /** @type {Record<string, any>} */ (origin);
   const owned = raw.kind === "note" || "question" in raw || "selected_text" in raw || "anchor" in raw
-    || "branch_type" in raw || "lens" in raw || "instruction" in raw || "attachment_assets" in raw || "crop_asset" in raw
+    || "branch_type" in raw || "lens" in raw || "instruction" in raw || "attachment_assets" in raw
     || "web_root_question" in raw;
   if (!owned) return true;
   if (raw.kind !== undefined && raw.kind !== "note") throw new Error(`Persisted node ${nodeId} origin.kind is invalid`);
@@ -148,26 +143,7 @@ export function validateLegacyAskOrigin(origin, nodeId) {
     // files open while `askOfNode()` produces the strict, sanitized Ask shape.
     for (const name of raw.attachment_assets) if (typeof name !== "string") throw new Error(`Persisted node ${nodeId} origin.attachments are invalid`);
   }
-  if (raw.crop_asset !== undefined && raw.crop_asset !== null && typeof raw.crop_asset !== "string") throw new Error(`Persisted node ${nodeId} origin.crop_asset is invalid`);
   return true;
-}
-
-/** @param {HoleNode} node @param {"requested" | "streaming" | "settled" | "failed"} state @returns {import("../contracts/engine.js").Ask} */
-export function makeTranscribeAsk(node, state) {
-  return {
-    id: `transcribe:${node.id}`,
-    at: { node_id: node.id, anchor: null },
-    question: "Create a text version of this PDF.",
-    lens: null,
-    instruction: null,
-    attachments: [],
-    clip: null,
-    author: /** @type {const} */ ("agent"),
-    produces: node.id,
-    state,
-    run: null,
-    error: null,
-  };
 }
 
 /** @param {HoleNode} node @returns {Record<string, any>} */

@@ -21,7 +21,7 @@ EOF alone is not completion. Retries create anew or fork the original source.
 
 Current document schemas are validated; future versions fail clearly. Settings and
 session references have no compatibility migration. Snapshot projection retains
-page-shaping PDF/note/canvas state while clearing personal state.
+note and canvas state while clearing personal state.
 
 [Data contracts](compatibility.md) owns stored/portable boundaries; generated
 [network policy](generated/csp.md) separates browser egress from relay SSRF limits.

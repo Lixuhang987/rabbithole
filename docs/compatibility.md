@@ -10,8 +10,7 @@ Backend document records use `schema_version: 2`. The runtime authority
 is `src/core/schema.js`:
 
 - `toPersistedHole` creates the canonical record written by the bridge store.
-- `parsePersistedHole` clones and validates untrusted records and normalizes the
-  documented PDF selection rectangle.
+- `parsePersistedHole` clones and validates untrusted records.
 - `validatePersistedHole` enforces the current document and node shape.
 
 Missing, null, or unsupported schema versions are rejected. A version greater
@@ -55,11 +54,9 @@ Snapshot HTML is self-contained and carries the same portable envelope in one
 inert `application/vnd.rabbithole+json` script element. Snapshot projection:
 
 - includes only referenced assets;
-- clears personal extensions, retaining PDF, note and canvas page shape;
+- clears personal extensions while retaining note and canvas presentation;
 - includes the shareable canvas view;
 - contains no credentials, settings, live transport, or external assets.
-- embeds PDF runtimes for native PDF views and source-coordinate region previews,
-  including previews whose source article has already been transcribed;
 - embeds the pinned Mermaid runtime only when a node contains a Mermaid fence,
   preserving offline diagram rendering without changing the portable payload.
 
@@ -86,7 +83,7 @@ mutating live state. Settings and session references have no migrations.
 
 The authenticated loopback `/bridge/generate` endpoint accepts backend, model,
 reasoning, optional sourceSession and semantic input. Tasks are explain, author,
-ask and transcribe. The bridge owns product instructions. Every request creates a
+and ask. The bridge owns product instructions. Every request creates a
 persistent session or forks its source; completion carries the new session apart
 from article text. Text, search, completed and error are native SSE event types.
 EOF alone fails. Missing history, scope and backend mismatch fail explicitly.
@@ -102,7 +99,6 @@ The contract suites covering these boundaries are:
 
 - `test/contracts/data-boundaries.test.mjs`
 - `test/contracts/artifact-roundtrip.test.mjs`
-- `test/contracts/compatibility-security.test.mjs`
 - `test/contracts/backend-store.test.mjs`
 
 ## Changing a format

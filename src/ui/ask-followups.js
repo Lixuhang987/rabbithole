@@ -8,7 +8,6 @@ import {
   placeChild as sharedPlaceChild,
   subtreeBounds as sharedSubtreeBounds,
 } from "../core/layout.js";
-import { pdfArticleNeedsConversion } from "../core/pdf-shared.js";
 import { presetFor, refreshAskPresetActions, renderAskPresetActions } from "./ask-presets.js";
 import { createComposerAttachments, noteWithImages } from "./authoring/composer-attachments.js";
 import {
@@ -52,7 +51,7 @@ import { teardownNode } from "./node-teardown.js";
 import { openAnchoredSurface } from "./overlay/anchor.js";
 import { onPreferenceChange, reactionPrompt } from "./preferences.js";
 import { renderMarginNotes } from "./reader.js";
-import { charOffset, mountPdfRectMark, wrapInContainer } from "./text-marks.js";
+import { charOffset, wrapInContainer } from "./text-marks.js";
 import { refreshVisualMarks } from "./visuals.js";
 
 let selectionAttachments = null;
@@ -224,6 +223,13 @@ function selectionOwner(dc) {
   // proxy) is not an askable surface.
   return dc && readerMain && readerMain.contains(dc) ? readerMain : null;
 }
+
+function compactSelectedText(value) {
+  return String(value ?? "")
+    .replace(/\r\n?|\n/g, "")
+    .trim();
+}
+
 function onAskOwnerKeydown(e) {
   if (e.key !== "Tab" || e.shiftKey || !ask.classList.contains("visible")) return;
   const active = document.activeElement;
@@ -251,11 +257,11 @@ function focusAskOwner(owner) {
 
 function maybeShowAsk() {
   const sel = window.getSelection();
-  if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+  const rawSelectedText = sel?.toString() || "";
+  if (!sel || sel.isCollapsed || !rawSelectedText.trim()) return;
   const anchor = sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentNode : sel.anchorNode;
   const dc = closestEl(anchor, ".doc-content");
   if (!dc) return;
-  if (dc.classList.contains("rh-pdf")) return;
   const parentId = dc.dataset.nodeId;
   if (!parentId || !nodes[parentId]) return;
   const owner = selectionOwner(dc);
@@ -270,7 +276,7 @@ function maybeShowAsk() {
     );
     return;
   }
-  const range = rangeInsideDocument(sel.getRangeAt(0), dc, sel.toString());
+  const range = rangeInsideDocument(sel.getRangeAt(0), dc, rawSelectedText);
   if (!range) return;
   const startOff = charOffset(dc, range.startContainer, range.startOffset);
   const endOff = charOffset(dc, range.endContainer, range.endOffset);
@@ -279,7 +285,7 @@ function maybeShowAsk() {
   selectionDraft = {
     parentId: parentId,
     container: dc,
-    selectedText: sel.toString().trim(),
+    selectedText: compactSelectedText(rawSelectedText),
     startOff: startOff,
     endOff: endOff,
     range: range.cloneRange(),
@@ -335,7 +341,7 @@ function composedClosest(node, selector) {
 export function showAskFromSelection(options) {
   const parentId = options && options.parentId;
   const parent = parentId && nodes[parentId];
-  if (!parent || parent.source?.converting) return false;
+  if (!parent) return false;
   if (closed) {
     flashHint(
       frozen
@@ -352,10 +358,9 @@ export function showAskFromSelection(options) {
   selectionDraft = {
     parentId: parentId,
     container: anchorNode && anchorNode.closest ? anchorNode.closest(".doc-content") : null,
-    selectedText: String(options.selectedText || "").trim(),
+    selectedText: compactSelectedText(options.selectedText),
     startOff: options.mdStart,
     endOff: options.mdEnd,
-    pdfAnchor: options.pdfAnchor || null,
     blockAnchor: options.blockAnchor || null,
     overLightbox,
     range: options.range || null,
@@ -391,9 +396,6 @@ function openAskSurface(anchor, owner) {
     preventOutsidePointerDefault: function (event) {
       const path = typeof event.composedPath === "function" ? event.composedPath() : [];
       return !!composedClosest(path[0] || event.target, ".viz-mounted, .rh-lightbox");
-    },
-    ignoreOutsidePointer: function (event) {
-      return !!closestEl(event.target, ".rh-pdf-zoom-control");
     },
     onClose: function (reason) {
       const escapeOwner = reason === "escape" ? owner : null;
@@ -512,8 +514,8 @@ export function updateSelectionComposerState() {
     {
       phase: sessionPhase(),
       pending: parentPending,
-      unavailable: !parent || !!parent.source?.converting,
-      askUnavailable: pdfArticleNeedsConversion(parent),
+      unavailable: !parent,
+      askUnavailable: false,
       disabled: selectionAttachments?.busy,
     },
     {
@@ -544,17 +546,6 @@ export function updateSelectionComposerState() {
   });
 }
 
-function retirePdfConversionAction(parent) {
-  parent?.bodyEl?.querySelector(".rh-pdf-convert")?.remove();
-  if (mode === "reader")
-    readerMain.querySelector('.doc-content[data-node-id="' + parent.id + '"] .rh-pdf-convert')?.remove();
-  // Reader stays mounted while Canvas is visible, so retire its docked action
-  // too; otherwise switching modes would resurrect an invalid conversion.
-  document
-    .querySelector('#tb-document .rh-pdf-reader-toolbar[data-pdf-node-id="' + parent.id + '"] .rh-pdf-convert')
-    ?.remove();
-}
-
 function submitAsk(lensKey, source, attachmentNames = []) {
   if (!selectionDraft || closed) return;
   const parent = nodes[selectionDraft.parentId];
@@ -562,7 +553,7 @@ function submitAsk(lensKey, source, attachmentNames = []) {
     hideAsk();
     return;
   }
-  if (parent.status === "pending" || pdfArticleNeedsConversion(parent)) return;
+  if (parent.status === "pending") return;
   const preset = lensKey ? presetFor("selection", lensKey) : null;
   const lens = preset ? lensKey : null;
   const question = askText.value.trim();
@@ -573,7 +564,6 @@ function submitAsk(lensKey, source, attachmentNames = []) {
   const anchor = selectionDraft.blockAnchor
     ? { block: selectionDraft.blockAnchor }
     : { offset_start: selectionDraft.startOff, offset_end: selectionDraft.endOff };
-  if (selectionDraft.pdfAnchor) anchor.pdf = selectionDraft.pdfAnchor;
   const node = Object.assign(
     makeNode({
       id: childId,
@@ -601,10 +591,7 @@ function submitAsk(lensKey, source, attachmentNames = []) {
     { html: "", _order: nextOrder(), _startTs: systemClock.now() },
   );
   registerNode(node);
-  retirePdfConversionAction(parent);
-  const isPdfRegion = !!selectionDraft.pdfAnchor;
   function revealCreatedBranch(response) {
-    if (response && response.crop_asset) node.origin.crop_asset = response.crop_asset;
     if (canvasBuilt && !node.el) {
       createNodeEl(node, true);
       renderVisibility();
@@ -614,24 +601,12 @@ function submitAsk(lensKey, source, attachmentNames = []) {
     // Mark inline in whichever views currently render the parent doc. Wrap via
     // offsets (always text-node endpoints) — a live Range can end on an element
     // boundary, which the text-walker can't terminate on.
-    if (isPdfRegion) {
-      if (mode === "reader")
-        mountPdfRectMark(
-          readerMain.querySelector('.doc-content[data-node-id="' + parent.id + '"]'),
-          anchor,
-          childId,
-          "rh-pdf-mark mark-pending",
-        );
-      if (parent.bodyEl)
-        mountPdfRectMark(parent.bodyEl.querySelector(".doc-content"), anchor, childId, "rh-pdf-mark mark-pending");
-      scheduleEdges();
-      if (mode === "reader" && currentNodeId === parent.id) renderMarginNotes();
-    } else if (mode === "reader") {
+    if (mode === "reader") {
       const rdc = readerMain.querySelector('.doc-content[data-node-id="' + parent.id + '"]');
       wrapInContainer(rdc, anchor, childId, "hl mark-pending");
       if (currentNodeId === parent.id) renderMarginNotes();
     }
-    if (parent.bodyEl && !isPdfRegion) {
+    if (parent.bodyEl) {
       wrapInContainer(parent.bodyEl.querySelector(".doc-content"), anchor, childId, "hl mark-pending");
       scheduleEdges();
     }
@@ -659,20 +634,10 @@ function submitAsk(lensKey, source, attachmentNames = []) {
     position: { x: node.position.x, y: node.position.y },
     size: { w: node.size.w, h: node.size.h },
   });
-  if (isPdfRegion) {
-    // The host prepares and persists the crop before acknowledging this ask.
-    // Keep the node registered for streamed events, but do not paint an empty
-    // card: its first visible frame already contains the durable clip.
-    request.then(function (res) {
-      if (!res || !res.ok) rollbackBranch(node);
-      else revealCreatedBranch(res);
-    });
-  } else {
-    revealCreatedBranch(null);
-    request.then(function (res) {
-      if (!res || !res.ok) rollbackBranch(node);
-    });
-  }
+  revealCreatedBranch(null);
+  request.then(function (res) {
+    if (!res || !res.ok) rollbackBranch(node);
+  });
   return node;
 }
 
@@ -691,7 +656,6 @@ function submitNote(source, placed, attachmentNames = []) {
     return;
   }
   const anchor = { offset_start: draft.startOff, offset_end: draft.endOff };
-  if (draft.pdfAnchor) anchor.pdf = draft.pdfAnchor;
   const create = placed ? createPlacedNote : createDockedNote;
   const node = create(parent, markdown, {
     anchor: anchor,
@@ -717,7 +681,6 @@ function submitReaction(reaction) {
   const glyph = reaction === "up" ? "👍" : reaction === "down" ? "👎" : null;
   if (!glyph) return;
   const anchor = { offset_start: draft.startOff, offset_end: draft.endOff };
-  if (draft.pdfAnchor) anchor.pdf = draft.pdfAnchor;
   const node = createDockedNote(parent, glyph, {
     anchor: anchor,
     selectedText: draft.selectedText,
@@ -751,8 +714,8 @@ export function updateComposerState() {
     {
       phase: sessionPhase(),
       pending: !!current && current.status === "pending",
-      unavailable: !current || !!current.source?.converting,
-      askUnavailable: pdfArticleNeedsConversion(current),
+      unavailable: !current,
+      askUnavailable: false,
       disabled: readerAttachments?.busy,
     },
     {
@@ -775,10 +738,6 @@ function autoGrowComposer() {
 // Shared follow-up submission: from the reader composer or a card's docked
 // one. Every direct child uses the same Reader branch rail.
 export function sendFollowup(parent, question, lens, instruction = null, attachmentNames = []) {
-  if (pdfArticleNeedsConversion(parent)) {
-    flashHint("Create a text version of this PDF before asking.");
-    return null;
-  }
   const requestId = uuid(),
     childId = uuid();
   const pos = placeChild(parent, BRANCH_FOLLOWUP);
@@ -809,7 +768,6 @@ export function sendFollowup(parent, question, lens, instruction = null, attachm
     { html: "", _order: nextOrder(), _startTs: systemClock.now() },
   );
   registerNode(node);
-  retirePdfConversionAction(parent);
   if (canvasBuilt) {
     createNodeEl(node, true);
     renderVisibility();
@@ -904,12 +862,7 @@ function readerComposerParent(needsSettled) {
     return null;
   }
   const parent = nodes[currentNodeId];
-  if (
-    !parent ||
-    parent.source?.converting ||
-    (needsSettled && (parent.status === "pending" || pdfArticleNeedsConversion(parent)))
-  )
-    return null;
+  if (!parent || (needsSettled && parent.status === "pending")) return null;
   return parent;
 }
 function submitReaderFollowup(commit, source) {

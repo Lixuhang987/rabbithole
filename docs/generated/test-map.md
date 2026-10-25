@@ -24,11 +24,6 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/unit/lifecycle.test.mjs` — lifecycle capability contracts.
 - `test/unit/markdown-renderer.test.mjs` — markdown renderer capability contracts.
 - `test/unit/model-notes.test.mjs` — model notes capability contracts.
-- `test/unit/pdf-import-error.test.mjs` — pdf import error capability contracts.
-- `test/unit/pdf-ingest-staging.test.mjs` — pdf ingest staging capability contracts.
-- `test/unit/pdf-provenance.test.mjs` — pdf provenance capability contracts.
-- `test/unit/pdf-selection.test.mjs` — pdf selection capability contracts.
-- `test/unit/pdf-transcription-capability.test.mjs` — selected-model PDF vision discovery through the bridge.
 - `test/unit/preferences-store.test.mjs` — preferences store capability contracts.
 - `test/unit/reactions.test.mjs` — reaction note normalization and selection-only action markup.
 - `test/unit/reader-preferences.test.mjs` — reader preferences capability contracts.
@@ -47,14 +42,13 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/contracts/docs-tour.test.mjs` — The offline, zero-network architecture tour.
 - `test/contracts/fetch-proxy-worker.test.mjs` — fetch proxy worker capability contracts.
 - `test/contracts/node-projection.test.mjs` — node projection capability contracts.
-- `test/contracts/prompts.test.mjs` — complete semantic Ask input, images, visual sources and PDF transcription.
+- `test/contracts/prompts.test.mjs` — complete semantic Ask input, images and visual sources.
 - `test/contracts/reactions.test.mjs` — reaction notes as ordinary notes across context and artifact projections.
 - `test/contracts/ui-bundle-boundaries.test.mjs` — ui bundle boundaries capability contracts.
 - `test/contracts/ui-lifecycle.test.mjs` — ui lifecycle capability contracts.
 
 ## integration
 
-- `test/integration/artifact-portability.test.mjs` — artifact portability capability contracts.
 - `test/integration/backend-persistence.test.mjs` — fresh-browser document, attachment and native-conversation reopening after bridge restart.
 - `test/integration/bridge-failure-modes.test.mjs` — native bridge search failures, cancellation, concurrency and backend availability.
 - `test/integration/bridge-http.test.mjs` — native bridge requests, independent article sessions, persistence and isolation.
@@ -66,15 +60,10 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/integration/generation-lifecycle.test.mjs` — generation lifecycle capability contracts.
 - `test/integration/image-experience.test.mjs` — image experience capability contracts.
 - `test/integration/mermaid-rendering.test.mjs` — mermaid rendering capability contracts.
-- `test/integration/pdf-conversion.test.mjs` — pdf conversion capability contracts.
-- `test/integration/pdf-gc.test.mjs` — pdf gc capability contracts.
-- `test/integration/pdf-portability-caps.test.mjs` — pdf portability caps capability contracts.
-- `test/integration/pdf-precision.test.mjs` — pdf precision capability contracts.
-- `test/integration/web-ingestion.test.mjs` — web ingestion capability contracts.
+- `test/integration/url-ingestion.test.mjs` — URL article ingestion, relay fallback, and readable errors.
 
 ## e2e
 
-- `test/e2e/ask-origin.test.mjs` — Complete folded Ask origins, prompt display, image previews and frozen PDF regions.
 - `test/e2e/auto-tidy.test.mjs` — auto-tidy live canvas behavior, settings, and frozen exclusion.
 - `test/e2e/canvas-edge-scroll.test.mjs` — canvas edge scroll, wheel panning during card drags, and anchored Command-wheel zoom capability contracts.
 - `test/e2e/enter-composition.test.mjs` — enter composition capability contracts.
@@ -87,7 +76,6 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/e2e/web-app-mobile.test.mjs` — Mobile canvas navigation, selection, reader layout, and Chromium/WebKit parity.
 - `test/e2e/web-app-notes.test.mjs` — Anchored, docked, popover, and standalone note journeys.
 - `test/e2e/web-app-setup.test.mjs` — Codex pairing, model/reasoning settings, connection recovery and unified article requests.
-- `test/e2e/web-app-sharing.test.mjs` — Card actions, branching, export, sharing, reload, and undo journeys.
 
 ## performance
 
@@ -95,7 +83,7 @@ Each description is harvested from the test file's `@protects` declaration.
 
 ## packaging
 
-- `test/packaging/install-smoke.test.mjs` — install smoke capability contracts.
+_No tests in this tier._
 
 ## isolation-live
 

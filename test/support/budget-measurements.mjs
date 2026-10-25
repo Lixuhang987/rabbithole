@@ -8,6 +8,7 @@ import { routeProvider, seedConfiguredBridge } from "./provider-mock.mjs";
 import { serveStatic } from "./static-server.mjs";
 import { collectSubtreeIds } from "../../src/core/hole/tree.js";
 import { createHoleState, reduceHoleEvent } from "../../src/core/hole/reduce.js";
+import { snapshotFixture } from "./snapshot-fixture.mjs";
 
 const ROOT = path.resolve(new URL("../..", import.meta.url).pathname);
 const WEB_DIST = path.join(ROOT, "web/dist");
@@ -18,9 +19,8 @@ const STREAM_CHUNKS = Array.from({ length: 40 }, (_, i) => `${i ? " " : "# Budge
 export const budgetDefinitions = [
   ["bundle_client_bytes", "Built live client bundle size", "bytes", 0.05, "Exact file size after a deterministic build."],
   ["bundle_frozen_client_bytes", "Built frozen client bundle size", "bytes", 0.05, "Exact file size after a deterministic build."],
-  ["web_initial_js_bytes", "JavaScript loaded before the hosted app becomes interactive", "bytes", 0.05, "Exact size of every initial script and the app module's static closure; export-only and PDF runtimes are excluded."],
+  ["web_initial_js_bytes", "JavaScript loaded before the hosted app becomes interactive", "bytes", 0.05, "Exact size of every initial script and the app module's static closure; export-only runtimes are excluded."],
   ["web_initial_css_bytes", "CSS loaded before the hosted app becomes interactive", "bytes", 0.05, "Exact size of every initial stylesheet; math fonts and rules remain lazy with the canvas runtime."],
-  ["pdf_runtime_distribution_bytes", "Production PDF.js runtime plus worker", "bytes", 0.05, "Exact size of the lazily loaded production PDF.js module and worker."],
   ["snapshot_math_bytes", "Frozen HTML size for the math-heavy reference corpus", "bytes", 0.05, "Exact UTF-8 snapshot size."],
   ["snapshot_assets_bytes", "Frozen HTML size for the PNG/SVG reference corpus", "bytes", 0.05, "Exact UTF-8 snapshot size including assets."],
   ["snapshot_math_build_ms", "Mean frozen-HTML build time (20 warm builds) for the math-heavy reference corpus", "ms", 2, "Mean of a 20-build loop defeats timer coarsening; 3x ceiling plus a 25ms floor absorbs host noise.", 25],
@@ -29,8 +29,6 @@ export const budgetDefinitions = [
   ["stream_dom_batches", "DOM mutation batches for a fixed 40-update synthetic stream", "batches", 1, "Minimum observed batch count on an otherwise-quiescent page; 2x ceiling with a 6-batch floor catches loss of rAF coalescing (which produces dozens of batches) without flaking.", 6],
   ["stream_update_ms", "Total browser duration for a fixed 40-update synthetic stream", "ms", 2, "Minimum of repeated samples; 3x ceiling absorbs browser scheduling noise."],
   ["save_window_ms", "Elapsed time from final streamed DOM update until the final markdown is persisted", "ms", 1, "Minimum of repeated samples; 2x ceiling with a 100ms floor (poll quantization) still catches a lost flush-on-complete, which costs 400ms+.", 100],
-  ["pdf_hole_serialized_bytes", "Serialized size of a representative 40-page native PDF hole", "bytes", 0.2, "Exact JSON byte size catches provenance growth."],
-  ["pdf_save_latency_ms", "JSON clone/serialize latency for a representative native PDF save", "ms", 4, "Minimum of repeated 20-save loops with a 20ms floor absorbs timer noise.", 20],
   ["owned_stream_reducer_ms", "One hundred owned-state stream updates in a 20,000-node hole", "ms", 4, "Minimum of repeated runs; a 10ms floor catches accidental whole-Map cloning while absorbing timer noise.", 10],
   ["subtree_collect_ms", "Collect all descendants in a 20,000-node ternary tree", "ms", 4, "Minimum of repeated runs; a 25ms floor catches repeated whole-graph scans while absorbing timer noise.", 25],
 ].map(([id, description, unit, tolerance, rationale, floor]) => ({
@@ -51,20 +49,15 @@ export async function measureBudgets({ samples = 3, onSample = () => {} } = {}) 
     bundle_frozen_client_bytes: (await fs.stat(path.join(ROOT, "dist/frozen-client.js"))).size,
     web_initial_js_bytes: await initialScriptBytes(WEB_DIST),
     web_initial_css_bytes: await initialStylesheetBytes(WEB_DIST),
-    pdf_runtime_distribution_bytes: (await fs.stat(path.join(WEB_DIST, "pdf.mjs"))).size + (await fs.stat(path.join(WEB_DIST, "pdf.worker.mjs"))).size,
   };
-  const pdfHole = representativePdfHole();
   const scaleNodes = Array.from({ length: 20000 }, (_, i) => ({ id: `scale-${i}`, parent_id: i ? `scale-${Math.floor((i - 1) / 3)}` : null, markdown: "" }));
   const scaleMap = new Map(scaleNodes.map((node) => [node.id, node]));
-  exact.pdf_hole_serialized_bytes = Buffer.byteLength(JSON.stringify(pdfHole));
   const server = await serveStatic(WEB_DIST, { spaFallback: true });
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   const browser = await chromium.launch();
   const values = Object.fromEntries(budgetDefinitions.map(({ id }) => [id, []]));
   for (let sample = 0; sample < samples; sample++) {
     const start = performance.now();
-    for (let run = 0; run < 20; run++) JSON.parse(JSON.stringify(pdfHole));
-    values.pdf_save_latency_ms.push((performance.now() - start) / 20);
     let state = createHoleState({ root_id: "scale-0", nodes: scaleNodes });
     const reducerStart = performance.now();
     for (let update = 0; update < 100; update++) {
@@ -76,7 +69,7 @@ export async function measureBudgets({ samples = 3, onSample = () => {} } = {}) 
     values.subtree_collect_ms.push(performance.now() - subtreeStart);
   }
   try {
-    const fixtureResults = await measureSnapshots(browser, baseUrl, samples, onSample);
+    const fixtureResults = await measureSnapshots(samples, onSample);
     Object.assign(exact, fixtureResults.exact);
     for (const [id, list] of Object.entries(fixtureResults.timings)) values[id].push(...list);
     for (let i = 0; i < samples; i++) {
@@ -146,56 +139,24 @@ async function initialStylesheetBytes(webDist) {
   return total;
 }
 
-function representativePdfHole() {
-  const markdown = "# PDF budget\n" + Array.from({ length: 2000 }, (_, i) => `line ${i}`).join("\n") + "\n";
-  let offset = "# PDF budget\n".length;
-  const lines = Array.from({ length: 2000 }, (_, i) => {
-    const length = `line ${i}`.length;
-    const line = { p: Math.floor(i / 50) + 1, s: offset, e: offset + length };
-    offset += length + 1;
-    return line;
-  });
-  const sha256 = "ab".repeat(32);
-  return { hole_id: "pdf-budget", title: "PDF budget", root_id: "root", nodes: [{ id: "root", markdown, extensions: { pdf: {
-    version: 2,
-    source: { asset: `pdf-${sha256}.pdf`, sha256, byte_length: 10 * 1024 * 1024 },
-    page_count: 40,
-    pages: Array.from({ length: 40 }, (_, i) => ({ n: i + 1, view: [0, 0, 612, 792], rotate: 0, user_unit: 1 })),
-    lines,
-  } } }] };
-}
-
-async function measureSnapshots(browser, baseUrl, samples, onSample) {
+async function measureSnapshots(samples, onSample) {
   const exact = {};
   const timings = { snapshot_math_build_ms: [], snapshot_assets_build_ms: [] };
   for (const fixtureName of FIXTURES) {
-    const context = await browser.newContext();
-    await seedStorageBridge(context);
-    const page = await context.newPage();
-    try {
-      await page.goto(baseUrl, { waitUntil: "networkidle" });
-      await page.setInputFiles("#file-md", path.join(ROOT, "test/fixtures/corpus", fixtureName));
-      await page.waitForFunction(() => window.__rabbitholeTest?.currentHoleId?.() && document.querySelector(".doc-content"));
-      const stem = fixtureName.startsWith("02-") ? "math" : "assets";
-      let html = "";
-      for (let i = 0; i < samples; i++) {
-        // Single builds finish under Chromium's coarsened timer resolution;
-        // a 20-build loop per sample yields a measurable mean.
-        const result = await page.evaluate(async () => {
-          const runs = 20;
-          const start = performance.now();
-          let snapshot = "";
-          for (let run = 0; run < runs; run++) snapshot = await window.__rabbitholeTest.exportSnapshot();
-          return { elapsed: (performance.now() - start) / runs, snapshot };
-        });
-        html = result.snapshot;
-        timings[`snapshot_${stem}_build_ms`].push(result.elapsed);
-        onSample(`snapshot_${stem}_build_ms`, result.elapsed, i + 1, samples);
+    const source = JSON.parse(await fs.readFile(path.join(ROOT, "test/fixtures/corpus", fixtureName), "utf8"));
+    const stem = fixtureName.startsWith("02-") ? "math" : "assets";
+    let html = "";
+    for (let i = 0; i < samples; i++) {
+      const runs = 20;
+      const start = performance.now();
+      for (let run = 0; run < runs; run++) {
+        html = await snapshotFixture(source.hole, source.assets);
       }
-      exact[`snapshot_${stem}_bytes`] = Buffer.byteLength(html);
-    } finally {
-      await context.close();
+      const elapsed = (performance.now() - start) / runs;
+      timings[`snapshot_${stem}_build_ms`].push(elapsed);
+      onSample(`snapshot_${stem}_build_ms`, elapsed, i + 1, samples);
     }
+    exact[`snapshot_${stem}_bytes`] = Buffer.byteLength(html);
   }
   return { exact, timings };
 }

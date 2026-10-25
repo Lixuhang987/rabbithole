@@ -9,7 +9,7 @@ import { encodeBase64Utf8, renderMarkdownToHtml } from "../../src/core/markdown.
 import { createMarkdownRenderer } from "../../src/core/markdown-renderer.js";
 import { getBlockType, listBlockTypes, markdownContainsBlockType, normalizeBlockIds, registerBlockType } from "../../src/core/blocks.js";
 import { snapshotFixture } from "../support/snapshot-fixture.mjs";
-import { getDompurifyScript, getMermaidScript, getPdfJsScript, getPdfWorkerScript } from "../../src/node/shared/dist-assets.js";
+import { getDompurifyScript, getMermaidScript } from "../../src/node/shared/dist-assets.js";
 import { buildCheckVisual, mountVisuals, registerBlockMount } from "../../src/ui/visuals.js";
 
 function count(haystack, needle) {
@@ -479,8 +479,6 @@ async function assertPageAssembly() {
   assert.equal(count(html, purify), 1, "DOMPurify should be inlined exactly once");
   assert.equal(count(html, mermaid), 1, "the inert Mermaid runtime should be embedded exactly once");
   assert(html.includes('<script type="application/vnd.rabbithole+mermaid" id="rabbithole-mermaid-runtime">'));
-  assert.equal(count(html, getPdfJsScript()), 0, "ordinary snapshots should not carry the lazy PDF runtime source");
-  assert.equal(count(html, getPdfWorkerScript()), 0, "ordinary snapshots should not carry the lazy PDF worker source");
   assert.equal(count(html, "<script>"), 1, "page should keep one inline script for the node --check gate");
   assert(html.indexOf(purify) < html.indexOf('\n(function(){\n  "use strict";'), "DOMPurify should load before the client runtime");
 

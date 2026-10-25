@@ -1,4 +1,4 @@
-import { getAssetContentType, maxAssetBytes, validateAssetName } from "../core/assets.js";
+import { getAssetContentType, MAX_ASSET_BYTES, validateAssetName } from "../core/assets.js";
 import {
   base64ToBytes,
   binaryToBase64,
@@ -107,7 +107,7 @@ async function decodeAssets(rawAssets) {
     const safeName = validateAssetName(name);
     const bytes = base64ToBytes(encoded);
     const blob = new Blob([/** @type {BlobPart} */ (bytes)], { type: getAssetContentType(safeName) });
-    const limit = maxAssetBytes(safeName);
+    const limit = MAX_ASSET_BYTES;
     if (blob.size > limit) throw new Error(`Import failed: asset ${safeName} exceeds ${Math.round(limit / 1024 / 1024)} MB.`);
     out.push({ name: safeName, blob });
   }

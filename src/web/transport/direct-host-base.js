@@ -4,14 +4,14 @@ import { HoleEngine } from "../../core/engine/hole-engine.js";
 import { dispatchBrowserEvent } from "../../core/hole-host.js";
 import { randomId } from "../../core/utils.js";
 import { assertHostCommandHandlers, WEB_HOST_COMMANDS } from "../../core/vocabulary.js";
-import { defaultRunId, rawPdfExtension } from "./direct-host-values.js";
+import { defaultRunId } from "./direct-host-values.js";
 
 const SAVE_DEBOUNCE_MS = 400;
 
 /** Web-host state, adapter surface, and browser command boundary. */
 export class DirectHostBase {
   /** @param {any} [options] */
-  constructor({ store, hole, provider = null, providerRequiredError = null, registerAssetUrl = null, revokeAssetUrl = null, onToast = null, onDone = null, onAuthRequired = null, onProviderFailure = null, onRootAnswered = null, getPdfTranscriptionCapability = null, mintRunId = defaultRunId } = {}) {
+  constructor({ store, hole, provider = null, providerRequiredError = null, registerAssetUrl = null, revokeAssetUrl = null, onToast = null, onDone = null, onAuthRequired = null, onProviderFailure = null, onRootAnswered = null, mintRunId = defaultRunId } = {}) {
     this.store = store;
     this.provider = provider;
     this.providerRequiredError = providerRequiredError;
@@ -21,7 +21,6 @@ export class DirectHostBase {
     this.onAuthRequired = onAuthRequired;
     this.onProviderFailure = onProviderFailure;
     this.onRootAnswered = onRootAnswered;
-    this.getPdfTranscriptionCapability = getPdfTranscriptionCapability;
     this.mintRunId = mintRunId;
     this.registerAssetUrl = registerAssetUrl;
     this.revokeAssetUrl = revokeAssetUrl;
@@ -47,13 +46,6 @@ export class DirectHostBase {
     this.lastEventId = 0;
     this.disposed = false;
     this.subscriptions = new Set();
-    for (const node of this.state.nodes.values()) {
-      // Raw read on purpose: a mid-run save persists the streamed body, which
-      // normalizePdfExtension would reject against the original line offsets —
-      // and that is exactly the state hydration must repair.
-      const raw = rawPdfExtension(node);
-      if (raw?.version === 2 && raw.converting) this.restorePdfConversion(node.id, raw);
-    }
   }
 
   hydration() {
@@ -126,8 +118,6 @@ export class DirectHostBase {
         nodes_update: (event) => this.applyPersistedBrowserEvent(event),
         block_state: (event) => this.applyPersistedBrowserEvent(event),
         node_extensions_patch: (event) => this.handleExtensionsPatch(event),
-        convert_pdf: (event) => this.handleConvertPdf(event),
-        convert_cancel: (event) => this.handleConvertCancel(event),
         delete_node: (event) => this.handleDeleteNode(event),
         view_state: (event) => this.applyPersistedBrowserEvent(event),
         done: async () => { await this.flushSave(); this.onDone?.(); return { ok: true }; },
@@ -147,10 +137,7 @@ export class DirectHostBase {
   handleRetry(_event) { return { ok: false }; }
   applyPersistedBrowserEvent(_event) { return { ok: false }; }
   handleExtensionsPatch(_event) { return Promise.resolve({ ok: false }); }
-  handleConvertPdf(_event) { return { ok: false }; }
-  handleConvertCancel(_event) { return { ok: false }; }
   handleDeleteNode(_event) { return Promise.resolve({ ok: false }); }
-  restorePdfConversion(_nodeId, _pdf) {}
   startAnswer(_nodeId, _options = {}) {}
   isLivePending(_nodeId) { return false; }
   dispatch(_event, _options = {}) { return {}; }

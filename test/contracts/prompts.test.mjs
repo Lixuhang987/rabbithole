@@ -1,8 +1,7 @@
-/** @protects complete semantic Ask input, images, visual sources and PDF transcription. */
+/** @protects complete semantic Ask input, images and visual sources. */
 import assert from 'node:assert/strict';
 import { buildExplainerInput } from '../../src/core/prompts/explainer-v1.js';
 import { buildAnswerInput, selectedVisualSource } from '../../src/core/prompts/answering-v1.js';
-import { buildTranscribeInput, TRANSCRIBE_V1_RULES } from '../../src/core/prompts/transcribe-v1.js';
 const context = { article: { title: 'Parent', markdown: 'Body' }, selected_text: 'x', question: 'Why?', lens: null };
 const plain = buildAnswerInput(context);
 assert.equal(buildAnswerInput(structuredClone(context)).text, plain.text);
@@ -21,12 +20,6 @@ assert.ok(buildAnswerInput({ ...context, article: { markdown: longBody } }).text
 assert.equal(selectedVisualSource('```show id=selected\n<div>one</div>\n```', 'selected'), '```show id=selected\n<div>one</div>\n```');
 const pasted = buildAnswerInput({ ...context, attachments: [{ data_url: image, source: 'pasted_image' }] });
 assert.match(pasted.text, /Pasted images are attached/);
-const transcription = buildTranscribeInput({ pages: [{ n: 7, data_url: image }], tail: 'x'.repeat(700) });
-assert.deepEqual(transcription.images, [image]);
-for (const rule of [/GitHub-flavored Markdown/, /LaTeX/, /GFM tables/, /figure:page-NNN:x,y,w,h/, /running headers/, /no TITLE sentinel/i]) assert.match(TRANSCRIBE_V1_RULES, rule);
-assert.ok(transcription.text.includes('x'.repeat(500)));
-assert.ok(!transcription.text.includes('x'.repeat(501)));
-
 for (const instructions of [plain.instructions, buildExplainerInput({ question: 'Why?' }).instructions]) {
   assert.match(instructions, /Explain the mechanisms, reasoning, or evidence essential to the current question/);
   assert.match(instructions, /unfamiliar concepts and the questions they raise are valuable entry points/);

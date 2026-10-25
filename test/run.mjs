@@ -56,7 +56,10 @@ if (failures.length) {
 
 async function testJobs(name) {
   const directory = path.join(testDir, name);
-  const entries = await fs.readdir(directory, { withFileTypes: true });
+  const entries = await fs.readdir(directory, { withFileTypes: true }).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
   return entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".test.mjs"))
     .map((entry) => testJob(path.join(directory, entry.name)))

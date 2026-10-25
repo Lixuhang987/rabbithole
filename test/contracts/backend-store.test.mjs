@@ -43,9 +43,6 @@ try {
   const large = { hole_id: "large-hole", root_id: "root", nodes: [{ id: "root", markdown: "雪".repeat(1500000) }] };
   await store.saveHole(large);
   assert.equal((await store.loadHole("large-hole")).nodes[0].markdown, large.nodes[0].markdown, "full documents exceed the generic 4 MB JSON limit");
-  const pdf = new Uint8Array(5 * 1024 * 1024).fill(27);
-  await store.putAsset("large-hole", "source.pdf", pdf);
-  assert.deepEqual(new Uint8Array(await (await store.getAsset("large-hole", "source.pdf")).arrayBuffer()), pdf);
   await store.deleteHole("large-hole");
   for (const candidate of [new FsStore({ directory: fixture.directory }), store]) {
     assertRabbitholeStore(candidate);
@@ -116,7 +113,6 @@ try {
     "the browser store can persist multiple assets in one store call",
   );
   await assert.rejects(() => host.adapter().putAsset("figure.png", pastedBlob), /start with paste-/);
-  await assert.rejects(() => host.adapter().putAsset("paste-source.pdf", pastedBlob), /image extension/);
   await assert.rejects(() => host.adapter().putAsset("paste-web.png", pastedBlob), /already exists/);
 
   for (let index = 1; index <= 5; index += 1) {
@@ -124,12 +120,12 @@ try {
   }
   const deliveryContext = {};
   await host.attachBranchImage({ parent_id: "root", origin: { attachment_assets: [
-    "source.pdf", "../escape.png", "paste-web.png", "paste-delivery-1.png", "paste-delivery-2.png",
+    "../escape.png", "paste-web.png", "paste-delivery-1.png", "paste-delivery-2.png",
     "paste-delivery-3.png", "paste-delivery-4.png", "paste-delivery-5.png",
   ] } }, deliveryContext);
   assert.deepEqual(deliveryContext.attachments.map((attachment) => attachment.name),
     ["paste-web.png", "paste-delivery-1.png", "paste-delivery-2.png", "paste-delivery-3.png"],
-    "BYOK delivery must reject PDF/traversal names and cap persisted attachment assets at four valid images");
+    "BYOK delivery keeps valid image asset names and caps persisted attachments at four");
   const askResult = await host.handleBrowserEvent({
     type: "branch_request",
     request_id: "standalone-away-request",
@@ -155,7 +151,6 @@ try {
   assert.deepEqual(await host.adapter().deleteAsset("paste-web.png"), { ok: true, name: "paste-web.png" });
   assert.equal(await store.getAsset("web-note-create", "paste-web.png"), null);
   assert.deepEqual(revokedAssets, ["paste-web.png"], "the BYOK delete seam must revoke the registered live URL");
-  await assert.rejects(() => host.adapter().deleteAsset("paste-source.pdf"), /image extension/);
   await assert.rejects(() => host.adapter().deleteAsset("figure.png"), /pasted image assets/);
   await host.dispose();
 }

@@ -1,25 +1,5 @@
 import { systemClock } from "../../core/clock.js";
 
-export function isPdfFile(file) {
-  const name = String(file?.name || "").toLowerCase();
-  const type = String(file?.type || "").toLowerCase();
-  return /\.pdf$/.test(name) || type === "application/pdf";
-}
-
-export function isRabbitholeFile(file) { return /\.rabbithole$/i.test(file?.name || ""); }
-
-export function isSnapshotFile(file) {
-  const name = String(file?.name || "").toLowerCase();
-  const type = String(file?.type || "").toLowerCase();
-  return /\.html?$/.test(name) || type === "text/html";
-}
-
-export function isMarkdownFile(file) {
-  const name = String(file?.name || "").toLowerCase();
-  const type = String(file?.type || "").toLowerCase();
-  return /\.(md|markdown)$/.test(name) || type === "text/markdown" || type === "text/plain" || type === "application/json";
-}
-
 export function isSingleHttpUrl(value) {
   const text = String(value || "").trim();
   if (!text || /\s/.test(text)) return false;

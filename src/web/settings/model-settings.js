@@ -59,7 +59,6 @@ export function createModelSettings({ trigger: defaultTrigger, onSettingsChange 
       ${comboboxMarkup({ id: 'bridge-model', labelledBy: 'bridge-model-label', value: settings.model, label: selected?.name || settings.model || 'Choose a model', iconHtml: iconSvg('chevron') })}</div></div>
       ${selected ? `<div class="settings-section reasoning-section"><span id="reasoning-label" class="settings-label">Reasoning</span>
       <div class="reasoning-choice" role="group" aria-labelledby="reasoning-label">${selected.reasoning.options.map((value) => `<${BUTTON_TAG} type="button" data-reasoning="${escapeHtml(value)}" aria-pressed="${value === settings.reasoning}">${escapeHtml(reasoningLabel(value))}</button>`).join('')}</div></div>` : '<p role="status">The selected model is unavailable. Choose a current model.</p>'}
-      <div class="settings-section"><p class="field-hint">Authentication and web search follow your local Codex configuration. PDF transcription uses this model${selected?.vision ? '.' : '; choose a vision model to transcribe PDFs.'}</p></div>
       <div class="settings-section settings-complete-section"><${BUTTON_TAG} id="complete-model-setup" type="button" class="web-primary" ${selected ? '' : 'disabled'}>${readyCallback ? 'Finish setup' : 'Done'}</button></div>`;
   }
   function render() {

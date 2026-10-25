@@ -1,8 +1,7 @@
 const IMAGE_ASSET_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg"];
-const ALLOWED_ASSET_EXTENSIONS = [...IMAGE_ASSET_EXTENSIONS, "pdf"];
+const ALLOWED_ASSET_EXTENSIONS = IMAGE_ASSET_EXTENSIONS;
 export const MAX_ASSETS_PER_CALL = 50;
 export const MAX_ASSET_BYTES = 20 * 1024 * 1024;
-export const MAX_PDF_SOURCE_BYTES = 100 * 1024 * 1024;
 
 const ALLOWED_EXTENSIONS = new Set(ALLOWED_ASSET_EXTENSIONS);
 const IMAGE_EXTENSIONS = new Set(IMAGE_ASSET_EXTENSIONS);
@@ -73,8 +72,6 @@ export function getAssetContentType(name) {
       return "image/webp";
     case "svg":
       return "image/svg+xml";
-    case "pdf":
-      return "application/pdf";
     default:
       throw new Error(`Unsupported asset extension: ${ext}`);
   }
@@ -95,9 +92,6 @@ export function resolveAssetMarkdownImageUrl(raw, { assetNames = null, resolveAs
   if (!match) return undefined;
 
   const name = match[1] ?? "";
-  // PDF sources share the binary blob store, but they are documents rather
-  // than Markdown images. Keeping that distinction here prevents a source PDF
-  // from accidentally becoming a broken <img> if its asset name is mentioned.
   if (!isValidImageAssetName(name)) return null;
   if (assetNames && !assetNames.has(name)) return null;
   return resolveAssetUrl(name);
@@ -117,24 +111,10 @@ function extractAssetRefsFromMarkdown(markdown) {
 /** @param {any} node */
 export function extractNodeAssetRefs(node) {
   const refs = new Set(extractAssetRefsFromMarkdown(node?.markdown));
-  try { refs.add(validateAssetName(node?.origin?.crop_asset)); } catch {}
   if (Array.isArray(node?.origin?.attachment_assets)) {
     for (const name of node.origin.attachment_assets) {
       try { refs.add(validateImageAssetName(name)); } catch {}
     }
   }
-  const pages = (node?.source ?? node?.extensions?.pdf)?.pages;
-  if (Array.isArray(pages)) {
-    for (const page of pages) {
-      try { refs.add(validateAssetName(page?.asset)); } catch {}
-    }
-  }
-  try { refs.add(validateAssetName((node?.source ?? node?.extensions?.pdf)?.source?.asset)); } catch {}
   return refs;
-}
-
-/** The source PDF is allowed to be larger than a visual Markdown asset. */
-/** @param {unknown} name */
-export function maxAssetBytes(name) {
-  return getAssetExtension(name) === "pdf" ? MAX_PDF_SOURCE_BYTES : MAX_ASSET_BYTES;
 }

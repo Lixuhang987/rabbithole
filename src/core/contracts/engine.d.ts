@@ -26,8 +26,6 @@ export interface HoleNode {
   status?: "pending" | "answered";
   read?: boolean;
   created_at?: string | null;
-  /** Canonical first-party content provenance (schema-v2: extensions.pdf). */
-  source?: Record<string, any> | null;
   /** Canonical presentation state (schema-v2: extensions.canvas/note). */
   view?: Record<string, any>;
   /** Canonical learning/progress state (schema-v2: extensions.learn). */
@@ -44,7 +42,6 @@ export interface Ask {
   lens: string | null;
   instruction: string | null;
   attachments: string[];
-  clip: string | null;
   author: "human" | "agent";
   produces: string;
   state: "requested" | "streaming" | "settled" | "failed";
@@ -100,8 +97,6 @@ export interface BranchRequestEvent extends NodePresentationFields {
   branch_type?: unknown;
   /** Optional durable pasted-image assets attached to this ask, in paste order. */
   attachment_assets?: unknown;
-  /** Optional durable crop asset prepared by a host for a PDF region ask. */
-  crop_asset?: unknown;
 }
 export interface NodeCreateEvent {
   type: "node_create";

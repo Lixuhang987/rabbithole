@@ -99,12 +99,6 @@ async function runLiveSnapshotDownload() {
   const pastedBytes = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
   const unreferencedBytes = Buffer.from("unreferenced snapshot asset");
-  const referencedPath = path.join(process.env.RABBITHOLE_DIR, "diagram.png");
-  const pastedPath = path.join(process.env.RABBITHOLE_DIR, "paste-deadbeef.png");
-  const unreferencedPath = path.join(process.env.RABBITHOLE_DIR, "unused.png");
-  await fs.writeFile(referencedPath, referencedBytes);
-  await fs.writeFile(pastedPath, pastedBytes);
-  await fs.writeFile(unreferencedPath, unreferencedBytes);
   const now = new Date().toISOString();
   const hole = { hole_id: "image-live-snapshot", title: "Image Live Snapshot", root_id: "root", created_at: now,
     nodes: [
@@ -122,17 +116,22 @@ async function runLiveSnapshotDownload() {
       },
     ],
   };
-  const fixturePath = path.join(process.env.RABBITHOLE_DIR, "images.rabbithole");
-  await fs.writeFile(fixturePath, JSON.stringify({ format: "rabbithole", format_version: 1, hole: toPersistedHole(hole), assets: {
-    "diagram.png": referencedBytes.toString("base64"), "paste-deadbeef.png": pastedBytes.toString("base64"), "unused.png": unreferencedBytes.toString("base64"),
-  } }));
   const app = await bootWebApp();
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ acceptDownloads: true });
-    await seedStorageBridge(page.context());
+    const storage = await seedStorageBridge(page.context());
     await page.goto(app.baseUrl);
-    await page.setInputFiles("#file-md", fixturePath);
+    await page.waitForFunction(() => !!window.__rabbitholeTest);
+    await page.keyboard.press("Escape");
+    await page.evaluate((markdown) => window.__rabbitholeTest.createDocument(markdown), hole.nodes[0].markdown);
+    const holeId = await page.evaluate(() => window.__rabbitholeTest.currentHoleId());
+    const persisted = toPersistedHole({ ...hole, hole_id: holeId });
+    await storage.store.saveHole(persisted);
+    await storage.store.putAsset(persisted.hole_id, "diagram.png", referencedBytes);
+    await storage.store.putAsset(persisted.hole_id, "paste-deadbeef.png", pastedBytes);
+    await storage.store.putAsset(persisted.hole_id, "unused.png", unreferencedBytes);
+    await page.reload();
     await page.waitForSelector("#t-share");
     await page.waitForSelector(".rh-img-frame .rh-img-handle");
     await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });

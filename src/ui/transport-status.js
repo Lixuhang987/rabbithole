@@ -387,10 +387,6 @@ function handleServer(msg) {
         refreshOpenStandaloneComposers();
         scheduleEdges();
       }
-    } else if (result.type === "pdf_convert_progress") {
-      refreshNodeHtml(node);
-      if (node.bodyEl) fillBody(node);
-      if (mode === "reader" && currentNodeId === node.id) renderReaderBody();
     } else if (result.type === "node_error") {
       if (result.restoreNote) {
         rollbackNoteConversion(node);

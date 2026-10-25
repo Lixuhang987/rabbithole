@@ -60,7 +60,7 @@ async function stripsCookieAndAuthHeaders() {
 async function enforcesStreamingSizeCap() {
   const res = await handleFetchProxyRequest(new Request("https://proxy.test/?url=https://openreview.net/forum?id=test"), {
     upstreamFetch: async () => new Response(oversizeStream(), {
-      headers: { "content-type": "application/pdf" },
+      headers: { "content-type": "application/octet-stream" },
     }),
   });
   assert.equal(res.status, 200);

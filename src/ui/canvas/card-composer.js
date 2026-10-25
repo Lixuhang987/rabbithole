@@ -1,5 +1,4 @@
 import { composerActionsMarkup } from "../../core/html/markup.js";
-import { pdfArticleNeedsConversion } from "../../core/pdf-shared.js";
 import { presetFor, renderAskPresetActions } from "../ask-presets.js";
 import { createComposerAttachments, noteWithImages } from "../authoring/composer-attachments.js";
 import { applyComposerState, wireComposerActions } from "../composer-state.js";
@@ -181,8 +180,8 @@ export function updateCardComposer(node) {
     {
       phase: sessionPhase(),
       pending: node.status === "pending",
-      unavailable: !!node.source?.converting,
-      askUnavailable: pdfArticleNeedsConversion(node),
+      unavailable: false,
+      askUnavailable: false,
       disabled: node._composerAttachments?.busy,
     },
     r.CARD_COMPOSER_COPY,
@@ -200,11 +199,7 @@ export function cardComposerBlocked(node, needsSettled) {
     flashHint("Session ended — reopen this Rabbithole from your terminal to continue.");
     return true;
   }
-  return (
-    !node ||
-    !!node.source?.converting ||
-    (needsSettled && (node.status === "pending" || pdfArticleNeedsConversion(node)))
-  );
+  return !node || (needsSettled && node.status === "pending");
 }
 
 export function settleCardSubmit(node, kid, source) {

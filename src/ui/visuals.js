@@ -171,6 +171,12 @@ function rangeInsideRoot(range, root) {
   return !!range && !!root?.contains && root.contains(range.startContainer) && root.contains(range.endContainer);
 }
 
+function compactSelectedText(value) {
+  return String(value ?? "")
+    .replace(/\r\n?|\n/g, "")
+    .trim();
+}
+
 function shadowAwareSelection(root) {
   const shadow = root?.getRootNode?.();
   const documentSelection = window.getSelection?.();
@@ -195,7 +201,7 @@ function shadowAwareSelection(root) {
   for (const candidate of candidates) {
     const range = liveRange(candidate);
     if (!rangeInsideRoot(range, root)) continue;
-    const text = range.toString().trim();
+    const text = compactSelectedText(range.toString());
     if (text) return { text, range };
   }
   return null;
@@ -219,7 +225,7 @@ function virtualRangeAnchor(range, contextElement) {
 }
 
 function captureBlockAsk(root, context, mountSpec, selection) {
-  const selectedText = String(selection?.text || "").trim();
+  const selectedText = compactSelectedText(selection?.text);
   if (!selectedText || !context.block_id || !context.canAsk()) return false;
   const packed = mountSpec.packContext({ selected_text: selectedText }, context);
   if (!packed?.block) return false;

@@ -2,7 +2,6 @@ import { systemClock } from "../../core/clock.js";
 import { BRANCH_FOLLOWUP } from "../../core/hole/ask.js";
 import { truncate } from "../../core/hole/lens.js";
 import { DEFAULT_STANDALONE_NOTE } from "../../core/layout.js";
-import { pdfArticleNeedsConversion } from "../../core/pdf-shared.js";
 import { ensureNodeMenuButton, fillBody, layoutNode, scheduleEdges, updateCardComposer } from "../canvas/index.js";
 import { closed, deleteAsset, frozen, nodes, postBrowserEvent, putAsset, rootId, uuid } from "../core.js";
 import { refreshNodeHtml } from "../renderer.js";
@@ -13,7 +12,7 @@ export function createStandaloneNoteSubmitter(context) {
     if (!context.active() || node._noteUploading || node._noteNormalizing) return;
     const parent = nodes[rootId];
     if (closed || frozen) return;
-    if (kind === "ask" && (!parent || parent.status === "pending" || pdfArticleNeedsConversion(parent))) return;
+    if (kind === "ask" && (!parent || parent.status === "pending")) return;
     const text = editor.value.trim();
     if (!text && !attachments.length) return;
     node._noteUploading = true;

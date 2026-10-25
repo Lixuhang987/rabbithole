@@ -105,7 +105,6 @@ async function checkNodeOwnership() {
   for (const [label, pattern] of [
     ["probeAgent", /\b(?:async\s+)?function\s+probeAgent\b/g],
     ["NDJSON reader", /\bfunction\s+createNdjsonReader\b/g],
-    ["agent turn deadline", /\bfunction\s+armAgentTurnDeadline\b/g],
   ]) {
     const count = joined.match(pattern)?.length || 0;
     if (count !== 1) failures.push(`src/node must define ${label} exactly once (found ${count})`);

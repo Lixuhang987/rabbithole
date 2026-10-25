@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 import { minify as minifyJavaScript } from "terser";
 import { faviconSvg } from "./src/core/html/icons.js";
-import { mapConcurrent } from "./src/core/concurrency.js";
 import { DEFAULT_FETCH_PROXY_URL } from "./policy/origins.js";
 import { webContentSecurityPolicy } from "./policy/csp.js";
 import { checkStylesheets, cssFilesUnder, formatCssIntegrityFailure } from "./scripts/check-css-integrity.mjs";
@@ -74,7 +73,6 @@ async function buildUiBundle(entry, outfile, globalName) {
     tsconfigRaw: {},
     loader: { ".css": "text" },
     legalComments: "none",
-    external: ["pdfjs-dist/build/pdf.mjs"],
     logLevel: "silent",
   });
   // esbuild owns bundling and ES2018 lowering; Terser then performs the deeper
@@ -163,13 +161,6 @@ async function buildWebApp(assetDir) {
     chunkNames: "chunks/[name]-[hash]",
     minify: !dev,
     sourcemap: dev ? "inline" : false,
-    // PDF.js imports `canvas` only inside its Node path. Native optional
-    // dependencies are installed on some operating systems and omitted on
-    // others, so resolving the package normally changes otherwise-identical
-    // browser chunk names. Pin it to the browser stub for reproducible builds.
-    alias: {
-      canvas: path.join(rootDir, "src/web/browser-canvas-stub.js"),
-    },
     loader: { ".css": "text" },
     define: {
       __RABBITHOLE_DEFAULT_PROXY_URL__: JSON.stringify(proxyConfig.defaultUrl),
@@ -186,7 +177,7 @@ async function buildWebApp(assetDir) {
     fs.readFile(path.join(assetDir, "canvas.css"), "utf8"),
   ]);
   const [, [katexCss, dompurify, mermaid, frozenClient, canvasCss]] = await Promise.all([
-    Promise.all([appBuild, copyPdfAssets(webDist), buildCss("index.web.css", path.join(webDist, "styles.css"))]),
+    Promise.all([appBuild, buildCss("index.web.css", path.join(webDist, "styles.css"))]),
     sources,
   ]);
   const frozenStyles = `${canvasCss}\n${katexCss}`;
@@ -205,7 +196,7 @@ async function buildWebApp(assetDir) {
 
 async function hashWebEntryAssets(webDist) {
   const hash = createHash("sha256");
-  const names = ["app.js", "styles.css", "dompurify.js", "katex.css", "frozen-client.js", "frozen-styles.css", "pdf.mjs", "pdf.worker.mjs", "favicon.svg"];
+  const names = ["app.js", "styles.css", "dompurify.js", "katex.css", "frozen-client.js", "frozen-styles.css", "favicon.svg"];
   const contents = await Promise.all(names.map((name) => fs.readFile(path.join(webDist, name))));
   for (let index = 0; index < names.length; index++) {
     const name = names[index];
@@ -215,23 +206,6 @@ async function hashWebEntryAssets(webDist) {
     hash.update("\0");
   }
   return hash.digest("hex").slice(0, 12);
-}
-
-async function copyPdfAssets(webDist) {
-  const packageRoot = path.dirname(require.resolve("pdfjs-dist/package.json"));
-  await Promise.all([
-    fs.copyFile(path.join(packageRoot, "build/pdf.min.mjs"), path.join(webDist, "pdf.mjs")),
-    fs.copyFile(path.join(packageRoot, "build/pdf.worker.min.mjs"), path.join(webDist, "pdf.worker.mjs")),
-    fs.cp(path.join(packageRoot, "standard_fonts"), path.join(webDist, "standard_fonts"), { recursive: true }),
-    copyPackedCMaps(path.join(packageRoot, "cmaps"), path.join(webDist, "cmaps")),
-  ]);
-}
-
-async function copyPackedCMaps(sourceDir, targetDir) {
-  await fs.mkdir(targetDir, { recursive: true });
-  const entries = await fs.readdir(sourceDir, { withFileTypes: true });
-  const files = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".bcmap"));
-  await mapConcurrent(files, 32, (entry) => fs.copyFile(path.join(sourceDir, entry.name), path.join(targetDir, entry.name)));
 }
 
 function buildWebIndexHtml({ proxyOrigin = "" } = {}, assetVersion = "") {
@@ -248,16 +222,16 @@ function buildWebIndexHtml({ proxyOrigin = "" } = {}, assetVersion = "") {
 <style id="initial-theme-style">${INITIAL_THEME_STYLE}</style>
 <script id="initial-theme-script">${INITIAL_THEME_SCRIPT}</script>
 <title>Rabbithole — an infinite canvas for learning</title>
-<meta name="description" content="Rabbithole is an infinite canvas for learning. Open a document, ask from selections, and branch your understanding.">
+<meta name="description" content="Rabbithole is an infinite canvas for learning. Ask from selections, and branch your understanding.">
 <link rel="canonical" href="https://rabbithole.ing/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://rabbithole.ing/">
 <meta property="og:title" content="Rabbithole — an infinite canvas for learning">
-<meta property="og:description" content="Open a document, ask from selections, and branch your understanding on an infinite canvas.">
+<meta property="og:description" content="Ask from selections, and branch your understanding on an infinite canvas.">
 <meta property="og:image" content="https://rabbithole.ing/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Rabbithole — an infinite canvas for learning">
-<meta name="twitter:description" content="Open a document, ask from selections, and branch your understanding on an infinite canvas.">
+<meta name="twitter:description" content="Ask from selections, and branch your understanding on an infinite canvas.">
 <meta name="twitter:image" content="https://rabbithole.ing/og.jpg">
 <link rel="icon" href="./favicon.svg${assetQuery}" type="image/svg+xml">
 <link rel="stylesheet" href="./styles.css${assetQuery}">

@@ -17,7 +17,6 @@ const IMPACT_RULES = [
       "test/e2e/auto-tidy.test.mjs",
       "test/e2e/web-app-mobile.test.mjs",
       "test/e2e/web-app-sharing.test.mjs",
-      "test/integration/pdf-precision.test.mjs",
       "test/integration/web-ingestion.test.mjs",
     ],
   },

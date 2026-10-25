@@ -1,8 +1,6 @@
 /** @protects compatibility security capability contracts. */
 import { seedStorageBridge } from "../support/backend-store.mjs";
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
 import { getGenerationSetupStatus } from "../../src/web/settings/setup-readiness.js";
@@ -32,15 +30,12 @@ const HOSTILE = [
   "",
   "Valid inline $x^2+1$ and display:",
   "$$\\frac{a}{b}$$",
-  "",
   `![offline asset](asset:${ASSET})`,
+  "",
 ].join("\n");
 
 verifySetupReadiness();
 ensureWebDist();
-const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-compatibility-security-"));
-const hostilePath = path.join(tmp, "hostile.rabbithole");
-await fs.writeFile(hostilePath, JSON.stringify(portableFixture()), "utf8");
 const server = await serveStatic(WEB_DIST, { spaFallback: true });
 const baseUrl = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch();
@@ -52,7 +47,6 @@ try {
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
-  await fs.rm(tmp, { recursive: true, force: true });
 }
 
 function verifySetupReadiness() {
@@ -74,20 +68,21 @@ async function verifyLiveAndBuildSnapshot() {
     return route.abort();
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
-  await page.setInputFiles("#file-md", hostilePath);
+  await page.evaluate((markdown) => window.__rabbitholeTest.createDocument(markdown), HOSTILE);
+  const holeId = await page.evaluate(() => window.__rabbitholeTest.currentHoleId());
+  await storage.store.putAsset(holeId, ASSET, Buffer.from(ASSET_BASE64, "base64"));
+  await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector(".doc-content #safe-show", { state: "attached" });
   await page.waitForFunction(() => document.querySelector(".doc-content img[alt='offline asset']")?.complete);
   await assertSafeRender(page, "live");
   assert(routedRequests.some((url) => url.startsWith(baseUrl)), "live request capture must observe the app");
   assert.deepEqual(external, [], "live hostile content must not initiate external requests");
-  const importedAssetType = await page.evaluate((name) => window.__rabbitholeTest.inspectAssetType(name), ASSET);
-  assert.equal(importedAssetType, "image/gif", "portable import derives asset MIME metadata from its validated filename");
-
   await page.evaluate((secret) => {
     localStorage.setItem("rh-web-settings", JSON.stringify({ backend: "codex", token: secret, model: "test" }));
   }, SECRET);
   const snapshot = await page.evaluate(() => window.__rabbitholeTest.exportSnapshot());
   const snapshotPayload = JSON.parse(snapshot.match(/<script type="application\/vnd\.rabbithole\+json" id="rabbithole-portable">([\s\S]*?)<\/script>/)[1]);
+  assert.equal(snapshotPayload.assets[ASSET], ASSET_BASE64, "snapshot must retain the validated referenced asset");
   assert(snapshotPayload.hole.nodes.every((node) => Object.keys(node.extensions).length === 0), "snapshot clears learner extension state while staying canonical");
   assert(!snapshot.includes(SECRET), "credentials must not occur in frozen HTML");
   assert(!snapshot.includes("rh-web-settings"), "preferences must not occur in frozen HTML");
@@ -154,16 +149,4 @@ async function assertSafeRender(page, label) {
   assert(result.fractions >= 1, `${label}: fraction structure must survive sanitization`);
   const assetPattern = label === "frozen" ? /^data:image\/gif;base64,/ : /^blob:/;
   assert.match(result.asset, assetPattern, `${label}: asset must resolve through its offline-capable render path`);
-}
-
-function portableFixture() {
-  return {
-    format: "rabbithole", format_version: 1,
-    hole: {
-      schema_version: 2, hole_id: "security-hostile", title: "Security hostile fixture", root_id: "root",
-      created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z", view_state: null,
-      nodes: [{ id: "root", parent_id: null, title: "Hostile", markdown: HOSTILE, base_url: null, base_url_source: null, origin: null, position: { x: 0, y: 0 }, size: null, font_scale: 1, collapsed: false, status: "answered", read: true, created_at: "2026-01-01T00:00:00.000Z", extensions: { learn: { c8lb3: { attempts: 2, last: { option: 1, correct: true }, revealed: true } } } }],
-    },
-    assets: { [ASSET]: ASSET_BASE64 },
-  };
 }

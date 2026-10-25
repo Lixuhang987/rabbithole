@@ -11,7 +11,7 @@ import {
   projectNode,
   stripNodeAttention,
 } from "./node.js";
-import { askOfNode, isNoteNode, makeTranscribeAsk } from "./ask.js";
+import { askOfNode, isNoteNode } from "./ask.js";
 import { normalizeAnchor } from "./anchor.js";
 import { normalizeBookmark, normalizeViewState } from "./bookmark.js";
 import { collectSubtreeIds } from "./tree.js";
@@ -83,14 +83,12 @@ function reduceNodeExtensionsPatch(state, event, options) {
   const namespace = String(event.namespace || "");
   const node = state.nodes.get(nodeId);
   if (!node || !/^[a-z][a-z0-9_-]*$/.test(namespace)) return withState(state);
-  if (Object.prototype.hasOwnProperty.call(node, "source")
-    || Object.prototype.hasOwnProperty.call(node, "view")
+  if (Object.prototype.hasOwnProperty.call(node, "view")
     || Object.prototype.hasOwnProperty.call(node, "progress")) {
     const next = { ...node };
     const value = cloneJson(event.value);
     const objectValue = /** @type {Record<string, any>} */ (value && typeof value === "object" && !Array.isArray(value) ? value : {});
-    if (namespace === "pdf") next.source = Object.keys(objectValue).length ? objectValue : null;
-    else if (namespace === "canvas") {
+    if (namespace === "canvas") {
       const { docked, reaction, ..._canvas } = next.view || {};
       next.view = {
         ...objectValue,
@@ -109,10 +107,7 @@ function reduceNodeExtensionsPatch(state, event, options) {
     else next.extensions = { ...next.extensions, [namespace]: value };
     const nodes = cloneNodes(state, options);
     nodes.set(nodeId, next);
-    const nextState = namespace === "pdf"
-      ? stateWithTranscribeAsk({ ...state, nodes }, next, objectValue, options)
-      : { ...state, nodes };
-    return withState(nextState, { node_id: nodeId });
+    return withState({ ...state, nodes }, { node_id: nodeId });
   }
   // The reducer corpus is also the public schema-v2 replay contract, so raw
   // schema-v2 inputs keep their historical namespace spelling.
@@ -120,10 +115,7 @@ function reduceNodeExtensionsPatch(state, event, options) {
   const nodes = cloneNodes(state, options);
   const next = { ...node, extensions };
   nodes.set(nodeId, next);
-  const nextState = namespace === "pdf"
-    ? stateWithTranscribeAsk({ ...state, nodes }, next, /** @type {Record<string, any>} */ (extensions.pdf || {}), options)
-    : { ...state, nodes };
-  return withState(nextState, { node_id: nodeId });
+  return withState({ ...state, nodes }, { node_id: nodeId });
 }
 
 /** @param {HoleState} state @param {BlockStateEvent} event @param {ReduceOptions} options */
@@ -177,20 +169,6 @@ function stateWithNodeAsk(state, node, options) {
   const ask = askOfNode(node);
   if (ask) asks.set(ask.id, ask);
   else asks.delete(node.id);
-  return { ...state, asks };
-}
-
-/** @param {HoleState} state @param {HoleNode} node @param {Record<string, any>} pdf @param {ReduceOptions} options */
-function stateWithTranscribeAsk(state, node, pdf, options) {
-  const asks = cloneAsks(state, options);
-  const id = `transcribe:${node.id}`;
-  if (pdf.convert_request === true) {
-    const existing = asks.get(id);
-    asks.set(id, existing ? { ...existing, state: "requested" } : makeTranscribeAsk(node, "requested"));
-  } else {
-    const existing = asks.get(id);
-    if (existing) asks.set(id, { ...existing, state: "settled" });
-  }
   return { ...state, asks };
 }
 
@@ -370,7 +348,6 @@ function reduceNodeDeleted(state, event, options) {
   const asks = cloneAsks(state, options);
   for (const id of ids) {
     asks.delete(id);
-    asks.delete(`transcribe:${id}`);
   }
   return withState({ ...state, nodes, progressRuns, asks }, { deletedNodeIds: ids, deletedNodes });
 }

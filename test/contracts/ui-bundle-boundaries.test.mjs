@@ -12,7 +12,6 @@ const result = await esbuild.build({
   format: "iife",
   platform: "browser",
   target: "es2018",
-  external: ["pdfjs-dist/build/pdf.mjs"],
   loader: { ".css": "text" },
   logLevel: "silent",
 });
@@ -38,7 +37,6 @@ const liveResult = await esbuild.build({
   format: "iife",
   platform: "browser",
   target: "es2018",
-  external: ["pdfjs-dist/build/pdf.mjs"],
   loader: { ".css": "text" },
   logLevel: "silent",
 });

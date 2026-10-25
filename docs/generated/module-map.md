@@ -47,15 +47,11 @@ This inventory is derived from the source tree.
 - `src/core/layout.js`
 - `src/core/markdown-renderer.js`
 - `src/core/markdown.js`
-- `src/core/pdf-shared.js`
-- `src/core/pdf/crop.js`
-- `src/core/pdf/figures.js`
 - `src/core/portable-import.js`
 - `src/core/portable-projection.js`
 - `src/core/prompts/answering-v1.js`
 - `src/core/prompts/authoring-v1.js`
 - `src/core/prompts/explainer-v1.js`
-- `src/core/prompts/transcribe-v1.js`
 - `src/core/schema.js`
 - `src/core/snapshot-html.js`
 - `src/core/snapshot-projection.js`
@@ -154,8 +150,6 @@ This inventory is derived from the source tree.
 - `src/ui/overlay/layer-stack.js`
 - `src/ui/overlay/surface-origin.js`
 - `src/ui/palette.js`
-- `src/ui/pdf-runtime.js`
-- `src/ui/pdf-view.js`
 - `src/ui/pinned-windows.js`
 - `src/ui/preferences.js`
 - `src/ui/primitives/anchored-menu.js`
@@ -182,15 +176,12 @@ This inventory is derived from the source tree.
 
 - `src/web/app.js`
 - `src/web/app/utilities.js`
-- `src/web/browser-canvas-stub.js`
 - `src/web/canvas-runtime-loader.js`
 - `src/web/canvas-runtime.js`
 - `src/web/hole-id.js`
-- `src/web/ingest/pdf.js`
 - `src/web/ingest/url.js`
 - `src/web/main.js`
 - `src/web/mermaid-runtime.js`
-- `src/web/pdf-crop.js`
 - `src/web/portable.js`
 - `src/web/provider/bridge-catalog.js`
 - `src/web/provider/bridge-provider.js`
@@ -198,7 +189,6 @@ This inventory is derived from the source tree.
 - `src/web/provider/generation-events.js`
 - `src/web/provider/model-descriptor.js`
 - `src/web/provider/network.js`
-- `src/web/provider/pdf-transcription.js`
 - `src/web/provider/title-sentinel.js`
 - `src/web/settings/bridge-connection.js`
 - `src/web/settings/bridge-pairing.js`
@@ -212,7 +202,6 @@ This inventory is derived from the source tree.
 - `src/web/test-seam.js`
 - `src/web/transport/direct-host-base.js`
 - `src/web/transport/direct-host-generation.js`
-- `src/web/transport/direct-host-pdf.js`
 - `src/web/transport/direct-host-runtime.js`
 - `src/web/transport/direct-host-values.js`
 - `src/web/transport/direct-host.js`

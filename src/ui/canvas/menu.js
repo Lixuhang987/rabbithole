@@ -1,6 +1,5 @@
 import { isDockedNote, isNoteNode, isReactionNote } from "../../core/hole/ask.js";
 import { iconButtonMarkup } from "../../core/html/markup.js";
-import { pdfArticleNeedsConversion } from "../../core/pdf-shared.js";
 import { changeNodeFontScale, childrenOf, closed, frozen, nodes, resetNodeFontScale, rootId } from "../core.js";
 import { closestEl, qs } from "../dom.js";
 import { cancelViewAnimation } from "./camera.js";
@@ -61,7 +60,6 @@ export function canConvertNote(node) {
     node.id !== rootId &&
     isNoteNode(node) &&
     !isReactionNote(node) &&
-    !pdfArticleNeedsConversion(nodes[node.parent_id ?? rootId]) &&
     childrenOf(node.id).length === 0
   );
 }

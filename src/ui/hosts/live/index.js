@@ -5,7 +5,6 @@ import { createCanvasAttention } from "../../canvas/attention.js";
 import { createAutoTidy, notifyAutoTidyModeChanged } from "../../canvas/auto-tidy.js";
 import { canvasSettingsSection } from "../../canvas-settings.js";
 import { createRabbitholeUi } from "../../composition.js";
-import { mountPdfView } from "../../pdf-view.js";
 import { downloadSnapshot, resetSnapshotHooks, setSnapshotHooks } from "../../snapshot.js";
 import {
   connectTransport,
@@ -68,9 +67,6 @@ export function startRabbithole(hydration, options) {
       dispose: disposeTransportStatus,
     },
     capabilities: {
-      mountPdfView: function (container, node) {
-        return mountPdfView(container, node, { getTranscriptionCapability: options.getPdfTranscriptionCapability });
-      },
       loadMermaid: options.loadMermaid || null,
       exportSnapshot: downloadSnapshot,
       exportPortable: options.exportPortable || null,

@@ -11,9 +11,6 @@ const CANVAS_CSS_PATH = new URL("../../../dist/canvas.css", import.meta.url);
 const require = createRequire(import.meta.url);
 const DOMPURIFY_SCRIPT_PATH = require.resolve("dompurify/dist/purify.min.js");
 const MERMAID_SCRIPT_PATH = require.resolve("@mermaid-js/tiny/dist/mermaid.tiny.js");
-const PDF_PACKAGE_ROOT = path.dirname(require.resolve("pdfjs-dist/package.json"));
-const PDF_WORKER_PATH = path.join(PDF_PACKAGE_ROOT, "build/pdf.worker.min.mjs");
-const PDFJS_PATH = path.join(PDF_PACKAGE_ROOT, "build/pdf.min.mjs");
 
 // Shipped installs read the bundles once at import and freeze them. Under
 // RABBITHOLE_DEV the frozen object is skipped and every access re-reads changed
@@ -40,11 +37,7 @@ export async function getUiAssets() {
 
 export const getDompurifyScript = memoizedTransform(createSourceReader(DOMPURIFY_SCRIPT_PATH), escapeScriptClose);
 export const getMermaidScript = memoizedTransform(createSourceReader(MERMAID_SCRIPT_PATH), escapeScriptClose);
-export const getPdfWorkerScript = createSourceReader(PDF_WORKER_PATH);
-export const getPdfJsScript = createSourceReader(PDFJS_PATH);
 export const getFrozenClientLiteral = memoizedTransform(readFrozenClientSource, serializeForInlineScript);
-export const getInlinePdfWorkerScript = memoizedTransform(getPdfWorkerScript, escapeScriptClose);
-export const getInlinePdfJsScript = memoizedTransform(getPdfJsScript, escapeScriptClose);
 
 function readFrozenClientSource() {
   return UI_ASSETS ? UI_ASSETS.frozenClientSource : readFrozenClient();

@@ -2,7 +2,6 @@ import { normalizeBackendConversation } from '../../core/conversation.js';
 import { buildAnswerInput } from '../../core/prompts/answering-v1.js';
 import { buildAuthorInput } from '../../core/prompts/authoring-v1.js';
 import { buildExplainerInput } from '../../core/prompts/explainer-v1.js';
-import { buildTranscribeInput } from '../../core/prompts/transcribe-v1.js';
 import { BridgeError } from './errors.js';
 
 function invalid(message) { throw new BridgeError(message, 'input_invalid', 400); }
@@ -62,14 +61,6 @@ export function generationRequest(body) {
         }
       }
       prepared = buildAnswerInput(value, { fork: !!sourceSession }); break;
-    case 'transcribe':
-      fields(value, ['kind', 'pages', 'tail']); string(value.tail, 'tail');
-      if (!Array.isArray(value.pages) || !value.pages.length) invalid('PDF pages are required.');
-      for (const page of value.pages) {
-        if (!object(page) || !Number.isInteger(page.n) || page.n < 1) invalid('Invalid PDF page.');
-        fields(page, ['n', 'data_url']); string(page.data_url, 'page image', true);
-      }
-      prepared = buildTranscribeInput(value); break;
     default: invalid('Unknown generation task.');
   }
   if (sourceSession && value.kind !== 'ask') invalid('Only article Asks can fork a source session.');

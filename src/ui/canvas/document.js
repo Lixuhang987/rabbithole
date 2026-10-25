@@ -1,5 +1,4 @@
 import { composerActionsMarkup } from "../../core/html/markup.js";
-import { pdfArticleNeedsConversion } from "../../core/pdf-shared.js";
 import { applyComposerState } from "../composer-state.js";
 import { buildDocContent, CANVAS_BASE, nodes, READER_BASE, rootId, sessionPhase } from "../core.js";
 import { isCommandEnter } from "../input-intent.js";
@@ -14,14 +13,12 @@ export function fillBody(node) {
   if (node._noteEditor) return;
   const previous = body.querySelector(".doc-content");
   if (previous && previous._rhDispose) previous._rhDispose();
-  body.classList.remove("pdf-body");
   body.innerHTML = "";
   const origin = buildOriginContext(node, "card");
   body.classList.toggle("has-origin", !!origin);
   if (origin) body.appendChild(origin);
   const dc = buildDocContent(node, CANVAS_BASE);
   body.appendChild(dc);
-  body.classList.toggle("pdf-body", dc.classList.contains("rh-pdf"));
   applyChildHighlights(dc, node);
   // The marks exist now, so the margin column that points at them can be built.
   r.lifecycle.hooks.renderDockedNotes(node);
@@ -114,8 +111,8 @@ export function updateStandaloneNoteComposer(node) {
     {
       phase: sessionPhase(),
       pending: !!parent && parent.status === "pending",
-      unavailable: !parent || !!parent.source?.converting,
-      askUnavailable: pdfArticleNeedsConversion(parent),
+      unavailable: !parent,
+      askUnavailable: false,
       disabled: !!node._noteUploading || !!node._noteNormalizing,
     },
     r.STANDALONE_COMPOSER_COPY,

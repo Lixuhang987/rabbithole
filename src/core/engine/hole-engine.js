@@ -78,12 +78,6 @@ export class HoleEngine {
     return { ok: true };
   }
 
-  /** @param {string} nodeId @param {Record<string, any>} pdf */
-  restorePdfConversion(nodeId, pdf) {
-    this.dispatch({ type: "node_progress", node_id: nodeId, markdown: String(pdf.original_markdown ?? this.state.nodes.get(nodeId)?.markdown ?? "") });
-    this.patchExtension(nodeId, "pdf", { ...pdf, converting: false, converted: false });
-  }
-
   /** @param {string} targetId @param {{ protectRoot?: boolean, beforeDelete?: (ids: Set<string>, effects: any) => unknown, afterDelete?: (ids: Set<string>, effects: any) => unknown }} [options] */
   async deleteNode(targetId, options = {}) {
     if (!targetId || (options.protectRoot !== false && targetId === this.state.root_id)) throw new RabbitholeEngineError("The starting document can't be removed", 400);

@@ -30,8 +30,8 @@ relayed fetches for that browser.
 
 The proxy exists only for academic-reading sources that often block browser CORS:
 
-- `arxiv.org`, `www.arxiv.org`: canonical arXiv pages and PDFs.
-- `ar5iv.labs.arxiv.org`, `ar5iv.org`: HTML renderings of arXiv papers, preferred over PDFs when available.
+- `arxiv.org`, `www.arxiv.org`: canonical arXiv pages.
+- `ar5iv.labs.arxiv.org`, `ar5iv.org`: HTML renderings of arXiv papers.
 - `openreview.net`: paper pages commonly used for ML research. Note: OpenReview currently
   fronts requests with a browser-verification challenge, so relayed fetches usually fail
   with an interstitial or 403 — allowlisted in case that changes, but not advertised in

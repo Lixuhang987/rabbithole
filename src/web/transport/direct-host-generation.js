@@ -5,18 +5,15 @@ import { isNoteNode } from "../../core/hole/ask.js";
 import { Run } from "../../core/hole/run.js";
 import { holeStateToHole } from "../../core/hole/reduce.js";
 import { buildNodeAnsweredEvent } from "../../core/hole-host.js";
-import { normalizePdfExtension } from "../../core/pdf-shared.js";
 import { ProviderError, normalizeProviderError } from "../provider/errors.js";
 import { fallbackTitleForNode } from "../provider/title-sentinel.js";
-import { cropPdfSourceToDataUrl } from "../pdf-crop.js";
-import { DirectHostPdf } from "./direct-host-pdf.js";
+import { DirectHostBase } from "./direct-host-base.js";
 import {
   blobToDataUrl,
   branchAnsweredFields,
   generationDocEvents,
   isAuthError,
   rawOrigin,
-  requireReadableArticle,
   resetMarkdownForRun,
   rootAnsweredFields,
   rootQuestionForNode,
@@ -25,7 +22,38 @@ import {
 } from "./direct-host-values.js";
 
 /** Provider generation, retries, error routing, and context assembly. */
-export class DirectHostGeneration extends DirectHostPdf {
+export class DirectHostGeneration extends DirectHostBase {
+  async handleBranchRequest(payload) {
+    const parentId = payload.parent_id === null ? null : String(payload.parent_id || "");
+    const nodeId = String(payload.node_id || "");
+    const replacedNote = this.state.nodes.get(nodeId);
+    if (isNoteNode(replacedNote)) this.noteConversions.set(nodeId, replacedNote);
+    let result;
+    try {
+      result = this.dispatch({ ...payload, type: "branch_request" }, { now: new Date().toISOString() });
+    } catch (error) {
+      this.noteConversions.delete(nodeId);
+      throw error;
+    }
+    const node = result.createdNode;
+    await this.flushSave();
+    this.startAnswer(node.id, { reset: false });
+    return { ok: true, node_id: node.id, request_id: payload.request_id };
+  }
+
+  async handleNodeCreate(payload) {
+    const result = await this.engine.nodeCreate(payload);
+    this.state = this.engine.state;
+    return result;
+  }
+
+  async handleExtensionsPatch(payload) {
+    const result = this.applyPersistedBrowserEvent(payload);
+    this.emit({ type: "node_extensions_patch", node_id: payload.node_id, namespace: payload.namespace, value: payload.value });
+    await this.flushSave();
+    return result;
+  }
+
   handleRetry(payload) {
     const node = this.state.nodes.get(String(payload.node_id || ""));
     if (!node || node.status !== "pending") return { ok: true };
@@ -229,19 +257,6 @@ export class DirectHostGeneration extends DirectHostPdf {
       if (attachments.length) context.attachments = attachments;
       return;
     }
-    const parent = this.state.nodes.get(node.parent_id ?? this.state.root_id);
-    const anchor = rawOrigin(node).anchor?.pdf;
-    const inheritedAnchor = node.parent_id == null ? null : (anchor || rawOrigin(parent).anchor?.pdf);
-    let sourceNode = parent;
-    while (sourceNode && !normalizePdfExtension(sourceNode)) sourceNode = this.state.nodes.get(sourceNode.parent_id);
-    const pdf = normalizePdfExtension(sourceNode);
-    const pageNumber = inheritedAnchor?.fragments?.[0]?.page;
-    if (pdf && pageNumber) try {
-      const blob = await this.store.getAsset(this.holeId, pdf.source.asset);
-      const dataUrl = await cropPdfSourceToDataUrl(blob, { sourceKey: pdf.source.sha256, pageNumber, anchor: inheritedAnchor });
-      context.attachments = [{ kind: "image", data_url: dataUrl, page: pageNumber, source: "selection_crop" }];
-      return;
-    } catch {}
   }
 
   createRun(node, fallbackTitle = fallbackTitleForNode(node)) {
@@ -356,7 +371,6 @@ export class DirectHostGeneration extends DirectHostPdf {
 
   buildBranchContext(node) {
     const parent = this.state.nodes.get(node.parent_id ?? this.state.root_id);
-    requireReadableArticle(parent);
     return {
       node_id: node.id,
       parent_id: parent?.id || null,

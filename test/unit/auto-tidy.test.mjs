@@ -82,13 +82,11 @@ const splitAttention = makeNode({
   id: "split",
   extensions: {
     attention: { seen_at: 11 },
-    pdf: { converting: false },
     canvas: { pin: { x: 1 } },
     learn: { block: { state: "done" } },
   },
 });
 assert.deepEqual(splitAttention.extensions, { attention: { seen_at: 11 } }, "attention stays in residual extensions");
-assert.deepEqual(splitAttention.source, { converting: false });
 assert.deepEqual(splitAttention.view, { pin: { x: 1 } });
 assert.deepEqual(splitAttention.progress, { block: { state: "done" } });
 
@@ -153,7 +151,6 @@ const exemptionCases = [
   { label: "unread node is in subtree", clock: dueClock, change: { child: { extensions: {} } } },
   { label: "pinned node is in subtree", clock: dueClock, change: { facts: { nodePinned: (node) => node.id === "child" } } },
   { label: "pending node is in subtree", clock: dueClock, change: { child: { status: "pending" } } },
-  { label: "converting node is in subtree", clock: dueClock, change: { child: { source: { converting: true } } } },
   { label: "draft is in subtree", clock: dueClock, change: { facts: { nodeHasDraft: (node) => node.id === "child" } } },
   { label: "hovered node is in subtree", clock: dueClock, change: { facts: { hoveredCardId: "child" } } },
 ];

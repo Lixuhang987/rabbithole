@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { maxAssetBytes, validateAssetName } from "../../../core/assets.js";
+import { MAX_ASSET_BYTES, validateAssetName } from "../../../core/assets.js";
 import { CURRENT_SCHEMA_VERSION, parsePersistedHole, toPersistedHole } from "../../../core/schema.js";
 import { assertSafeHoleId, assertSafeIngestId, createIngestId, holeSummary } from "../../../core/store.js";
 import { errorCode } from "../../shared/errno.js";
@@ -90,7 +90,7 @@ export class FsStore {
     const destination = path.join(this.holeDirectory(holeId), "assets");
     const source = this.stagingDirectory(ingestId);
     const assets = await names(source);
-    if (!assets.length) throw new Error(`Unknown ingest_id ${JSON.stringify(ingestId)}; restart the PDF import.`);
+    if (!assets.length) throw new Error(`Unknown ingest_id ${JSON.stringify(ingestId)}.`);
     await fs.mkdir(destination, { recursive: true });
     for (const name of assets) await fs.rename(path.join(source, validateAssetName(name)), path.join(destination, name));
     await fs.rmdir(source);
@@ -105,7 +105,7 @@ async function assetBytes(bytes, name) {
     : bytes instanceof ArrayBuffer ? Buffer.from(bytes)
       : bytes instanceof Uint8Array ? Buffer.from(bytes) : null;
   if (!data) throw new Error("asset bytes must be a Blob, ArrayBuffer, or Uint8Array");
-  const limit = maxAssetBytes(name);
+  const limit = MAX_ASSET_BYTES;
   if (data.length > limit) throw new Error(`asset bytes exceeds ${Math.round(limit / 1024 / 1024)} MB`);
   return data;
 }

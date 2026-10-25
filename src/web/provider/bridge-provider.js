@@ -42,11 +42,6 @@ export class BridgeProvider {
       ...(context.attachments?.length ? { attachments: context.attachments } : {}) };
     yield* withNode(adaptBranchGeneration(this.generate(input, signal, sourceSession), { fallbackTitle: context.fallbackTitle }), context.node_id);
   }
-  async *transcribePages({ pages, tail }, signal) {
-    for await (const event of this.generate({ kind: 'transcribe', pages, tail: tail || '' }, signal)) {
-      if (event.type !== 'conversation') yield event;
-    }
-  }
 }
 async function* withNode(events, nodeId) {
   for await (const event of events) {

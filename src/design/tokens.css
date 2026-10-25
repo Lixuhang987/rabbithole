@@ -58,7 +58,7 @@
   --surface-popover-blur: blur(16px) saturate(1.3); --surface-popover-shadow: var(--shadow-popover);
 
   /* Layers */
-  --layer-local-base: 1; --layer-local-mid: 2; --layer-local-high: 3; --layer-local-top: 4; --layer-local-toolbar: 6;
+  --layer-local-base: 1; --layer-local-mid: 2; --layer-local-high: 3; --layer-local-top: 4;
   --layer-reader: 5; --layer-pinned: 30; --layer-feedback: 40; --layer-blank: 42; --layer-rail: 48; --layer-toolbar: 50;
   --layer-selection: 80; --layer-dialog: 90; --layer-settings: 100;
   --layer-popover: 110; --layer-palette: 120; --layer-toast: 150; --layer-lightbox: 220;
@@ -90,7 +90,7 @@
   --color-black: #000; --color-white: #fff; --color-transparent: rgba(0, 0, 0, 0);
   --image-matte: #f4f4f1; --image-matte-ink: #191713;
   --backdrop-dark: rgba(0, 0, 0, .82); --shadow-alpha-08: rgba(0, 0, 0, .08);
-  --shadow-alpha-12: rgba(0, 0, 0, .12); --shadow-alpha-16: rgba(0, 0, 0, .16);
+  --shadow-alpha-16: rgba(0, 0, 0, .16);
   --shadow-alpha-28: rgba(0, 0, 0, .28); --shadow-alpha-30: rgba(0, 0, 0, .30);
   --shadow-alpha-40: rgba(0, 0, 0, .40); --shadow-alpha-45: rgba(0, 0, 0, .45);
   --shadow-alpha-18: rgba(0, 0, 0, .18); --success-strong: #2f9e44; --danger: #e03131;

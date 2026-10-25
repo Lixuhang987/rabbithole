@@ -14,8 +14,6 @@ const WEB_DIST = path.join(ROOT, "web/dist");
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "rabbithole-mermaid-"));
 process.env.RABBITHOLE_NO_BROWSER = "1";
 process.env.RABBITHOLE_DIR = path.join(tmp, "store");
-const fixturePath = path.join(tmp, "mermaid.rabbithole");
-await fs.writeFile(fixturePath, JSON.stringify(portableFixture()), "utf8");
 
 ensureWebDist();
 const server = await serveStatic(WEB_DIST, { spaFallback: true });
@@ -122,7 +120,8 @@ async function verifyWebApp() {
   assert(requests.some((url) => url.startsWith(baseUrl)), "web request capture must observe the app");
   assert.equal(requests.filter((url) => /\/mermaid\.js(?:\?|$)/.test(url)).length, 0, "blank web app must not load Mermaid");
 
-  await page.setInputFiles("#file-md", fixturePath);
+  const markdown = portableFixture().hole.nodes.map((node) => node.markdown).join("\n\n");
+  await page.evaluate((source) => window.__rabbitholeTest.createDocument(source), markdown);
   try {
     await page.waitForFunction(() => {
       const mounts = [...document.querySelectorAll(".viz-mermaid")];

@@ -44,9 +44,9 @@ author persistence. Replace OpenAI fixtures with native bridge events.
 
 Reuse `test/integration/bridge-failure-modes.test.mjs` for Codex errors and
 cancellation, `codex-ego-browser.test.mjs` for retained internal browser tools,
-PDF/import/artifact tests for retained assets, and `test/e2e/web-app-setup.test.mjs`
+portable artifact tests for retained assets, and `test/e2e/web-app-setup.test.mjs`
 plus existing branching/sharing journeys for setup and user interaction.
-Update `test/packaging/install-smoke.test.mjs` to install and start the bridge.
+Update the package verification flow to install and start the bridge.
 
 New independent tests planned: 0; cumulative maximum: 4. Skip standalone
 negative tests asserting removed MCP/endpoints/migrations are absent; remove

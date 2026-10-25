@@ -1,8 +1,4 @@
 {
-  "ask-origin.test.mjs": {
-    "ms": 4000,
-    "browsers": []
-  },
   "auto-tidy.test.mjs": {
     "ms": 16000,
     "browsers": []
@@ -54,10 +50,6 @@
   },
   "web-app-setup.test.mjs": {
     "ms": 42000,
-    "browsers": []
-  },
-  "web-app-sharing.test.mjs": {
-    "ms": 34000,
     "browsers": []
   }
 }

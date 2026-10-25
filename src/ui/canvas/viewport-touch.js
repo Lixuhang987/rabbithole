@@ -75,9 +75,6 @@ export function initTouchViewportGestures() {
   }
   function onTouchDown(event) {
     if (event.pointerType !== "touch") return;
-    // A gesture that begins in a native PDF belongs to that PDF's local
-    // zoom/scroll state. The canvas must never join it when finger two lands.
-    if (event.target.closest && event.target.closest(".rh-pdf-scroll")) return;
     if (touches.size >= 2) {
       event.preventDefault();
       event.stopPropagation();

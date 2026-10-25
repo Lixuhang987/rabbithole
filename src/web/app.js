@@ -17,8 +17,6 @@ import { getMermaidSource, loadMermaidRuntime } from "./mermaid-runtime.js";
 import {
   getDompurifySource,
   getFrozenClientSource,
-  getFrozenPdfJsSource,
-  getFrozenPdfWorkerSource,
   getFrozenStylesheet,
 } from "./snapshot-runtime.js";
 import { currentCanvasRuntime, loadCanvasRuntime, warmCanvasRuntime } from "./canvas-runtime-loader.js";
@@ -28,11 +26,7 @@ import {
   formatRelativeDate,
   isAuthLikeError,
   isEditableTarget,
-  isMarkdownFile,
-  isPdfFile,
-  isRabbitholeFile,
   isSingleHttpUrl,
-  isSnapshotFile,
   safeLocalStorageGet,
   safeLocalStorageSet,
 } from "./app/utilities.js";
@@ -65,8 +59,6 @@ let railSummaries = null;
 let toastNotice = null;
 let initialBridgePairing = false;
 consumeInitialBridgePairing();
-let currentPdfTranscriptionCapability = { available: false, status: "checking", model: "", reason: "Checking PDF transcription support…" };
-let pdfTranscriptionCheckToken = 0;
 const injectedAutoTidyClock = window.__rabbitholeTest?.autoTidyClock || null;
 
 applyInitialWebTheme();
@@ -403,10 +395,8 @@ function openHistoryLocation() {
 }
 
 function initComposer() {
-  const modal = document.getElementById("composer-modal");
   const input = /** @type {HTMLTextAreaElement} */ (document.getElementById("composer-input"));
   const primary = document.getElementById("composer-primary");
-  const fileInput = /** @type {HTMLInputElement} */ (document.getElementById("file-md"));
 
   input.addEventListener("input", () => {
     autoGrowTextarea(input, composerInputMaxHeight());
@@ -423,57 +413,10 @@ function initComposer() {
   document.getElementById("composer-path-ask").addEventListener("click", () => selectComposerPath("ask"));
   document.getElementById("composer-path-paste").addEventListener("click", () => selectComposerPath("paste"));
   document.getElementById("composer-path-url").addEventListener("click", () => selectComposerPath("url"));
-  document.getElementById("composer-path-file").addEventListener("click", () => fileInput.click());
-  fileInput.addEventListener("change", async () => {
-    const file = fileInput.files?.[0];
-    if (file) await createFromFile(file);
-    fileInput.value = "";
-  });
-  for (const type of ["dragenter", "dragover"]) {
-    modal.addEventListener(type, (event) => {
-      event.preventDefault();
-      modal.classList.add("dragging");
-    });
-  }
-  for (const type of ["dragleave", "drop"]) {
-    modal.addEventListener(type, (event) => {
-      event.preventDefault();
-      modal.classList.remove("dragging");
-    });
-  }
-  modal.addEventListener("drop", async (event) => {
-    const file = /** @type {DragEvent} */ (event).dataTransfer?.files?.[0];
-    if (file) await createFromFile(file);
-  });
 }
 
 function initGlobalDrops() {
   const viewport = document.getElementById("viewport");
-  for (const type of ["dragenter", "dragover"]) {
-    viewport.addEventListener(type, (event) => {
-      if (currentHoleId || !/** @type {DragEvent} */ (event).dataTransfer?.types?.includes("Files")) return;
-      event.preventDefault();
-      if (getGenerationSetupStatus().ready) document.body.classList.add("blank-dragging");
-    });
-  }
-  for (const type of ["dragleave", "drop"]) {
-    viewport.addEventListener(type, (event) => {
-      if (currentHoleId) return;
-      event.preventDefault();
-      document.body.classList.remove("blank-dragging");
-    });
-  }
-  viewport.addEventListener("drop", async (event) => {
-    if (currentHoleId) return;
-    const file = /** @type {DragEvent} */ (event).dataTransfer?.files?.[0];
-    if (!file) return;
-    if (!getGenerationSetupStatus().ready) {
-      openModelSetup({ trigger: document.getElementById("blank-start-setup") });
-      return;
-    }
-    openComposer({ source: "drop" });
-    await createFromFile(file);
-  });
 }
 
 /** @param {{source?: string, value?: string, trigger?: HTMLElement | null}} [options] */
@@ -688,92 +631,12 @@ async function createFromUrl(rawUrl) {
       proxyBaseUrl: settings.fetch_proxy_url || "",
       onProgress: (progress) => {
         if (progress.phase === "fetch") setIngestStatus(`Fetching URL via ${progress.via}...`, "busy");
-        else if (progress.phase === "page") setIngestStatus(`Importing PDF page ${progress.index}/${progress.total}...`, "busy");
       },
     });
     setIngestStatus("");
     await startHole(await documentStore.loadHole(hole.hole_id) || hole, { sourceStore: documentStore });
   } catch (err) {
     setIngestStatus(err?.message || String(err), "error");
-  }
-}
-
-async function createFromFile(file) {
-  const documentStore = store;
-  if (!store) { await openModelSetup(); return; }
-  if (isRabbitholeFile(file)) return createFromRabbitholeFile(file);
-  if (isSnapshotFile(file)) return createFromSnapshotFile(file);
-  if (isPdfFile(file)) return createFromPdfFile(file);
-  if (!isMarkdownFile(file)) {
-    setIngestStatus("Choose a markdown, PDF, .rabbithole, or snapshot HTML file.", "error");
-    return;
-  }
-  if (file.size > 16 * 1024 * 1024) {
-    setIngestStatus("Import failed: file exceeds 16 MB.", "error");
-    return;
-  }
-  try {
-    setIngestStatus("Reading markdown file...", "busy");
-    const markdown = await file.text();
-    const hole = await maybeAuthorDocument(documentStore, {
-      title: file.name.replace(/\.[^.]+$/, ""),
-      markdown,
-      sourceName: file.name,
-      kind: "file",
-    });
-    setIngestStatus("");
-    await startHole(await documentStore.loadHole(hole.hole_id) || hole, { sourceStore: documentStore });
-  } catch (err) {
-    setIngestStatus(`Markdown import failed. ${err?.message || String(err)}`, "error");
-  }
-}
-
-async function createFromSnapshotFile(file) {
-  const documentStore = store;
-  try {
-    setIngestStatus("Importing Rabbithole snapshot...", "busy");
-    const imported = await (await loadWorkspaceRuntime()).importSnapshotFile(documentStore, file, { mintHoleId: createWhimsicalHoleId });
-    setIngestStatus("");
-    const hole = await documentStore.loadHole(imported.hole_id);
-    if (!hole) throw new Error("Imported snapshot could not be loaded.");
-    await startHole(hole, { sourceStore: documentStore });
-  } catch (err) {
-    setIngestStatus(err?.message || String(err), "error");
-  }
-}
-
-async function createFromRabbitholeFile(file) {
-  const documentStore = store;
-  try {
-    setIngestStatus("Importing Rabbithole file...", "busy");
-    const imported = await (await loadWorkspaceRuntime()).importRabbitholeFile(documentStore, file, { mintHoleId: createWhimsicalHoleId });
-    setIngestStatus("");
-    const hole = await documentStore.loadHole(imported.hole_id);
-    if (!hole) throw new Error("Imported file could not be loaded.");
-    await startHole(hole, { sourceStore: documentStore });
-  } catch (err) {
-    setIngestStatus(err?.message || String(err), "error");
-  }
-}
-
-async function createFromPdfFile(file) {
-  const documentStore = store;
-  try {
-    setIngestStatus("Preparing PDF...", "busy");
-    const runtime = await loadWorkspaceRuntime();
-    const { hole } = await runtime.ingestPdfToStoredHole({
-      source: file,
-      store: documentStore,
-      title: "",
-      onProgress: ({ page, index, total }) => {
-        if (page) setIngestStatus(`Preparing page ${index} of ${total}`, "busy");
-      },
-    });
-    setIngestStatus("");
-    await startHole(await documentStore.loadHole(hole.hole_id) || hole, { sourceStore: documentStore });
-  } catch (err) {
-    const runtime = await loadWorkspaceRuntime().catch(() => null);
-    setIngestStatus(runtime ? runtime.describePdfImportFailure(err) : (err?.message || String(err)), "error");
   }
 }
 
@@ -838,17 +701,10 @@ async function mountHole(hole, { replace = false } = {}) {
     },
     getFrozenClientSource,
     getDompurifySource,
-    getPdfWorkerSource: getFrozenPdfWorkerSource,
-    getPdfJsSource: getFrozenPdfJsSource,
     getMermaidSource,
     getStylesheetText: getFrozenStylesheet,
   });
 
-  if (hole.nodes?.some((node) => node?.extensions?.pdf?.version === 2 && !node.extensions.pdf.converted)) {
-    await refreshPdfTranscriptionCapability();
-  } else {
-    currentPdfTranscriptionCapability = workspaceRuntime.pdfTranscriptionCapability(loadSettings());
-  }
   const settings = loadSettings();
   const provider = providerForSettings(settings);
   const host = new workspaceRuntime.DirectRabbitholeHost({
@@ -868,7 +724,6 @@ async function mountHole(hole, { replace = false } = {}) {
     onAuthRequired: (...args) => { if (currentHost === host) return handleBranchAuthRequired(...args); },
     onProviderFailure: (...args) => { if (currentHost === host) return handleBranchProviderFailure(...args); },
     onRootAnswered: () => { if (currentHost === host) return renderRail(); },
-    getPdfTranscriptionCapability: () => currentPdfTranscriptionCapability,
   });
   currentHost = host;
 
@@ -881,7 +736,6 @@ async function mountHole(hole, { replace = false } = {}) {
       transport: host.adapter(),
       exportPortable: exportCurrentRabbithole,
       loadMermaid: loadMermaidRuntime,
-      getPdfTranscriptionCapability: () => currentPdfTranscriptionCapability,
     });
     const isNewRailItem = !railSummaries?.some((summary) => summary.hole_id === hole.hole_id);
     await renderRail({ refresh: isNewRailItem, firstHoleId: isNewRailItem ? hole.hole_id : null });
@@ -1129,27 +983,6 @@ function providerRequiredErrorForSettings(_settings) {
   return { message: "Connect Codex and choose a model to keep asking.", code: "bridge_unpaired" };
 }
 
-function currentHoleNeedsPdfTranscription() {
-  if (!currentHost) return false;
-  for (const node of currentHost.state.nodes.values()) {
-    if (node?.extensions?.pdf?.version === 2 && !node.extensions.pdf.converted) return true;
-  }
-  return false;
-}
-
-async function refreshPdfTranscriptionCapability(settings = loadSettings()) {
-  const runtime = await loadWorkspaceRuntime();
-  const token = ++pdfTranscriptionCheckToken;
-  currentPdfTranscriptionCapability = runtime.pdfTranscriptionCapability(settings);
-  const { syncPdfTranscriptionControls } = await loadCanvasRuntime();
-  syncPdfTranscriptionControls(document, currentPdfTranscriptionCapability);
-  let detected = await runtime.detectPdfTranscriptionCapability(settings);
-  if (token !== pdfTranscriptionCheckToken) return currentPdfTranscriptionCapability;
-  currentPdfTranscriptionCapability = detected;
-  syncPdfTranscriptionControls(document, detected);
-  return detected;
-}
-
 async function handleBranchAuthRequired({ node, retry }) {
   const controller = await loadSettingsController();
   controller.open({ trigger: document.getElementById("t-settings"), onReady: () => retryBranch(node, retry) });
@@ -1194,10 +1027,6 @@ function loadSettingsRuntime() {
         onSettingsChange: () => {
           refreshLibrary();
           syncGenerationSetupUi();
-          if (currentHoleNeedsPdfTranscription()) void refreshPdfTranscriptionCapability();
-          else void loadWorkspaceRuntime().then((runtime) => {
-            currentPdfTranscriptionCapability = runtime.pdfTranscriptionCapability(loadSettings());
-          }).catch(() => {});
         },
       });
       settingsController = runtime.controller;

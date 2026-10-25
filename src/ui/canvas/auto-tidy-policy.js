@@ -67,7 +67,6 @@ export function decideAutoTidyFolds(ribIds, clocks, nodeCollection, childNodesOf
         nodeNeedsReading(node) ||
         nodePinned(node) ||
         node.status === "pending" ||
-        node.source?.converting ||
         nodeHasDraft(node) ||
         node.id === hoveredCardId
       );

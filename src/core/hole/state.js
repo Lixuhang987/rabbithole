@@ -1,5 +1,5 @@
 import { cloneJson } from "../schema.js";
-import { askOfNode, makeTranscribeAsk } from "./ask.js";
+import { askOfNode } from "./ask.js";
 import { normalizeBookmark } from "./bookmark.js";
 import { makeNode, projectNode } from "./node.js";
 
@@ -25,8 +25,6 @@ export function createHoleState({ hole_id, title, root_id, created_at = null, vi
   for (const node of stateNodes.values()) {
     const ask = askOfNode(node);
     if (ask) asks.set(ask.id, ask);
-    const pdf = node.source ?? node.extensions?.pdf;
-    if (pdf?.convert_request === true) asks.set(`transcribe:${node.id}`, makeTranscribeAsk(node, "requested"));
   }
   return {
     hole_id: hole_id || "",
@@ -50,8 +48,7 @@ export function holeStateToHole(state) {
     created_at: state.created_at,
     view_state: state.view_state,
     nodes: [...state.nodes.values()].map((node) => (
-      Object.prototype.hasOwnProperty.call(node, "source")
-        || Object.prototype.hasOwnProperty.call(node, "view")
+      Object.prototype.hasOwnProperty.call(node, "view")
         || Object.prototype.hasOwnProperty.call(node, "progress")
         ? projectNode(node, "persist")
         : node
@@ -70,8 +67,7 @@ export function holeStateToHydrationNodes(state, { suppressRootOrigin = false, c
   for (const node of state.nodes.values()) {
     const projected = projectNode(node, "hydrate");
     if (suppressRootOrigin && node.id === state.root_id) projected.origin = null;
-    if (!cloneExtensions && !Object.prototype.hasOwnProperty.call(node, "source")
-      && !Object.prototype.hasOwnProperty.call(node, "view") && !Object.prototype.hasOwnProperty.call(node, "progress")) {
+    if (!cloneExtensions && !Object.prototype.hasOwnProperty.call(node, "view") && !Object.prototype.hasOwnProperty.call(node, "progress")) {
       projected.extensions = node.extensions ?? {};
     }
     result[index++] = projected;

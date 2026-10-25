@@ -1,10 +1,6 @@
 import { extractNodeAssetRefs } from "../core/assets.js";
 import { binaryToBase64 } from "../core/portable-projection.js";
-import {
-  buildSnapshotHtml as assembleSnapshotHtml,
-  snapshotProjectionUsesMermaid,
-  snapshotProjectionUsesPdf,
-} from "../core/snapshot-html.js";
+import { buildSnapshotHtml as assembleSnapshotHtml, snapshotProjectionUsesMermaid } from "../core/snapshot-html.js";
 import { createSnapshotProjection } from "../core/snapshot-projection.js";
 import { slugifyTitle } from "../core/utils.js";
 import { currentNodeId, mode, nodes, readerMain, view } from "./core.js";
@@ -19,14 +15,6 @@ function defaultSnapshotHooks() {
     getMermaidSource: function () {
       const carrier = document.getElementById("rabbithole-mermaid-runtime");
       return carrier ? carrier.textContent || "" : "";
-    },
-    getPdfWorkerSource: function () {
-      const carrier = document.getElementById("rabbithole-pdf-worker-runtime");
-      return globalThis.__RABBITHOLE_PDF_WORKER_SOURCE__ || (carrier ? carrier.textContent || "" : "");
-    },
-    getPdfJsSource: function () {
-      const carrier = document.getElementById("rabbithole-pdfjs-runtime");
-      return globalThis.__RABBITHOLE_PDFJS_SOURCE__ || (carrier ? carrier.textContent || "" : "");
     },
     getStylesheetText: null,
   };
@@ -134,7 +122,6 @@ export async function buildSnapshotProjection() {
   const hole = await snapshotHooks.getSnapshotHole();
   const projection = createSnapshotProjection(hole, /** @type {any} */ (viewState), await buildAssetData(hole.nodes));
   const usesMermaid = snapshotProjectionUsesMermaid(projection);
-  const usesPdf = snapshotProjectionUsesPdf(projection);
   preparedSources = Object.create(null);
   await Promise.all([
     prepareSource("stylesheet", snapshotHooks.getStylesheetText, ""),
@@ -149,19 +136,12 @@ export async function buildSnapshotProjection() {
     if (!(await prepareSource("mermaid", snapshotHooks.getMermaidSource, "")))
       throw new Error("Mermaid runtime is unavailable for this snapshot");
   }
-  if (usesPdf) {
-    await Promise.all([
-      prepareSource("pdfWorker", snapshotHooks.getPdfWorkerSource, ""),
-      prepareSource("pdfJs", snapshotHooks.getPdfJsSource, ""),
-    ]);
-  }
   return projection;
 }
 
 export function buildSnapshotHtml(snapshotProjection) {
   const title = (snapshotProjection && snapshotProjection.hole && snapshotProjection.hole.title) || "Rabbithole";
   const usesMermaid = snapshotProjectionUsesMermaid(snapshotProjection);
-  const usesPdf = snapshotProjectionUsesPdf(snapshotProjection);
   const styleText = preparedSource("stylesheet", snapshotHooks.getStylesheetText, "");
   if (!styleText) throw new Error("Frozen stylesheet is unavailable");
   const dompurifySource = preparedSource("dompurify", snapshotHooks.getDompurifySource, extractDompurifySource);
@@ -174,8 +154,6 @@ export function buildSnapshotHtml(snapshotProjection) {
     stylesheetText: styleText,
     dompurifySource,
     mermaidSource: usesMermaid ? preparedSource("mermaid", snapshotHooks.getMermaidSource, "") : "",
-    pdfWorkerSource: usesPdf ? preparedSource("pdfWorker", snapshotHooks.getPdfWorkerSource, "") : "",
-    pdfJsSource: usesPdf ? preparedSource("pdfJs", snapshotHooks.getPdfJsSource, "") : "",
     frozenClientSource: frozenClient,
     snapshotProjection,
   });

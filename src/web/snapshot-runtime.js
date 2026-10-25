@@ -35,11 +35,3 @@ export function getDompurifySource() {
 export function getFrozenStylesheet() {
   return getSource("frozen-styles.css", "the frozen stylesheet");
 }
-
-export function getFrozenPdfWorkerSource() {
-  return getSource("pdf.worker.mjs", "the PDF worker");
-}
-
-export function getFrozenPdfJsSource() {
-  return getSource("pdf.mjs", "PDF.js");
-}

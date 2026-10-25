@@ -4,24 +4,8 @@ import { Run } from "../../core/hole/run.js";
 import { randomId } from "../../core/utils.js";
 import { truncate } from "../../core/hole/lens.js";
 import { ProviderError } from "../provider/errors.js";
-import { pdfArticleNeedsConversion } from "../../core/pdf-shared.js";
 
 export const WEB_ROOT_QUESTION = "web_root_question";
-
-/** @param {import("../../core/contracts/engine.js").HoleNode | undefined} node */
-export function rawPdfExtension(node) {
-  return /** @type {Record<string, any> | null} */ (node?.source || node?.extensions?.pdf || null);
-}
-
-/** @param {import("../../core/contracts/engine.js").HoleNode | undefined} node */
-export function requireReadableArticle(node) {
-  const pdf = rawPdfExtension(node);
-  if (pdfArticleNeedsConversion(node)) {
-    throw new ProviderError(pdf.converting
-      ? "This PDF is being converted. Wait for conversion to finish before asking."
-      : "Create a text version of this PDF before asking.", { code: "article_unavailable", retryable: false });
-  }
-}
 
 /** @param {import("../../core/contracts/engine.js").HoleNode | undefined} node */
 export function rawOrigin(node) {

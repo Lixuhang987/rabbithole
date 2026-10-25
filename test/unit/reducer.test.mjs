@@ -377,14 +377,14 @@ assert.equal(JSON.stringify(holeStateToHole(acceptedTagged.state)).includes("pro
 const heavyExtensionState = createHoleState({ root_id: "heavy", nodes: [{
   id: "heavy",
   markdown: "```check id=q1\n{}\n```",
-  extensions: { pdf: { lines: Array.from({ length: 2000 }, (_, index) => ({ p: 1, s: index, e: index + 1 })) }, learn: { old: { selected: 0 } } },
+  extensions: { history: { entries: Array.from({ length: 2000 }, (_, index) => ({ index })) }, learn: { old: { selected: 0 } } },
 }] });
 const priorHeavyNode = heavyExtensionState.nodes.get("heavy");
 const learnedHeavy = reduceHoleEvent(heavyExtensionState, {
   type: "block_state", node_id: "heavy", block_id: "q1", state: { selected: 1 },
 }).state.nodes.get("heavy");
-assert.strictEqual(learnedHeavy.extensions.pdf, priorHeavyNode.extensions.pdf,
-  "updating one extension namespace should structurally share an untouched heavy PDF namespace");
+assert.strictEqual(learnedHeavy.extensions.history, priorHeavyNode.extensions.history,
+  "updating one extension namespace should structurally share an untouched namespace");
 assert.notStrictEqual(learnedHeavy.extensions.learn, priorHeavyNode.extensions.learn);
 assert.equal(priorHeavyNode.extensions.learn.q1, undefined, "structural sharing must not mutate the previous learn namespace");
 

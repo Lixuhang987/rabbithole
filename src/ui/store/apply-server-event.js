@@ -6,7 +6,6 @@ const DOCUMENT_EVENTS = new Set([
   "node_progress",
   "node_search_status",
   "node_extensions_patch",
-  "pdf_convert_progress",
   "node_error",
 ]);
 
@@ -71,8 +70,7 @@ export function applyServerEvent(store, message, options = {}) {
   } else if (type === "node_extensions_patch") {
     const value =
       message.value && typeof message.value === "object" && !Array.isArray(message.value) ? message.value : {};
-    if (message.namespace === "pdf") node.source = Object.keys(value).length ? value : null;
-    else if (message.namespace === "canvas") {
+    if (message.namespace === "canvas") {
       const docked = node.view?.docked === true;
       const reaction = node.view?.reaction === true;
       node.view = { ...value, ...(docked ? { docked: true } : {}), ...(reaction ? { reaction: true } : {}) };
@@ -86,10 +84,6 @@ export function applyServerEvent(store, message, options = {}) {
     else node.extensions = { ...(node.extensions || {}), [message.namespace]: message.value };
     result.namespace = message.namespace;
     invalidated.add(message.namespace === "canvas" ? "presentation" : "document");
-  } else if (type === "pdf_convert_progress") {
-    node.markdown = message.markdown || "";
-    node._pdfProgress = { done: message.page_done, total: message.page_total };
-    invalidated.add("document");
   } else if (type === "node_error" && node.status === "pending") {
     node._searchStatus = null;
     node._searchCalls = new Map();

@@ -26,8 +26,7 @@ function endFlight(flight) {
   document.body.classList.remove("mode-flight");
   flight.el.classList.remove("reader-flying");
   flight.el.style.transformOrigin = "";
-  // Landed: anything that measures the reader's on-screen geometry (the PDF
-  // toolbar centers itself this way) can now trust getBoundingClientRect.
+  // Landed: geometry observers can now trust getBoundingClientRect.
   document.dispatchEvent(new CustomEvent("rh-reader-flight-end"));
 }
 

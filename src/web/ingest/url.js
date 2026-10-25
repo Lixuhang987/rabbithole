@@ -1,9 +1,7 @@
-import { MAX_PDF_BYTES } from "../../core/pdf-shared.js";
 import { createHoleFromMarkdown } from "../transport/direct-host.js";
-import { ingestPdfToStoredHole } from "./pdf.js";
 
 const URL_FETCH_CAP_BYTES = 25 * 1024 * 1024;
-const PASTE_FALLBACK = "Try another link or open a PDF file instead.";
+const PASTE_FALLBACK = "Try another link or paste the text instead.";
 
 /** @param {any} [options] */
 export async function openUrlToStoredHole({ rawUrl, store, title = "", proxyBaseUrl = "", onProgress = null } = {}) {
@@ -19,17 +17,6 @@ export async function openUrlToStoredHole({ rawUrl, store, title = "", proxyBase
   }
 
   const contentType = fetched.contentType;
-  const isPdf = isPdfResponse(fetched.url, contentType, fetched.bytes);
-  if (isPdf) {
-    return ingestPdfToStoredHole({
-      source: fetched.bytes,
-      store,
-      title: title || titleFromUrl(inputUrl),
-      baseUrl: fetched.url.href,
-      onProgress,
-    });
-  }
-
   const extracted = htmlToMarkdown(new TextDecoder("utf-8").decode(fetched.bytes), fetched.url);
   if (!extracted.markdown) {
     throw new Error(`Couldn't extract readable article content from that URL. ${PASTE_FALLBACK}`);
@@ -67,17 +54,14 @@ async function fetchUrl(url, { capBytes, via, finalUrl = null } = {}) {
   const response = await fetch(url.href, {
     method: "GET",
     credentials: "omit",
-    headers: { Accept: "text/html,application/pdf;q=0.9,text/plain;q=0.5,*/*;q=0.1" },
+    headers: { Accept: "text/html,text/plain;q=0.5,*/*;q=0.1" },
   });
   if (!response.ok) {
     const err = Object.assign(new Error(`HTTP ${response.status} ${response.statusText}`.trim()), { status: response.status });
     throw err;
   }
   const contentType = response.headers.get("content-type") || "";
-  const limit = /application\/pdf/i.test(contentType) || /\.pdf(?:$|[?#])/i.test(url.pathname)
-    ? MAX_PDF_BYTES
-    : capBytes;
-  const bytes = await readResponseBytes(response, limit);
+  const bytes = await readResponseBytes(response, capBytes);
   return {
     bytes,
     contentType,
@@ -123,9 +107,7 @@ function preferredHtmlUrl(url) {
   if (host === "arxiv.org" || host === "www.arxiv.org") {
     let id = "";
     const abs = /^\/abs\/([^/?#]+)/.exec(path);
-    const pdf = /^\/pdf\/([^/?#]+?)(?:\.pdf)?$/.exec(path);
     if (abs) id = abs[1];
-    else if (pdf) id = pdf[1];
     if (id) return new URL(`/html/${id}`, "https://ar5iv.labs.arxiv.org");
   }
   return null;
@@ -219,17 +201,6 @@ function inlineMarkdown(node, baseUrl) {
   }
   visit(node);
   return cleanLine(out.join(""));
-}
-
-function isPdfResponse(url, contentType, bytes) {
-  if (/application\/pdf/i.test(contentType || "")) return true;
-  if (/\.pdf(?:$|[?#])/i.test(url.pathname)) return true;
-  return bytes?.byteLength >= 4 &&
-    bytes[0] === 0x25 &&
-    bytes[1] === 0x50 &&
-    bytes[2] === 0x44 &&
-    bytes[3] === 0x46 &&
-    bytes.byteLength <= MAX_PDF_BYTES;
 }
 
 function proxyUrl(proxyBaseUrl, targetUrl) {

@@ -15,7 +15,6 @@ export interface UiHostPort {
 }
 
 export interface UiCapabilities {
-  mountPdfView?(container: HTMLElement, node: HoleNode): (() => void) | null;
   loadMermaid?(): Promise<unknown> | unknown;
   exportSnapshot?(): Promise<void> | void;
   exportPortable?(): Promise<void> | void;

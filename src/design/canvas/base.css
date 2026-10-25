@@ -207,15 +207,6 @@ body.mode-canvas #tb-restore-pill { display: none; }
 .crumb-sep { color: var(--fg-faint); flex-shrink: 0; }
 #reader-main { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 40px 48px 28px; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .reader-col { position: relative; max-width: var(--reader-column); margin: 0 auto; }
-/* A PDF is already a complete reading surface. In Reader, give it the whole
-   flex slot between the shared top chrome and composer instead of stacking a
-   second toolbar and a second scrollbar around it. Threaded PDFs retain the
-   normal outer reader flow so their conversation remains reachable. */
-#reader-main.pdf-reader { padding-top: 0; }
-#reader-main.pdf-reader-viewport { overflow: hidden; padding: 0; scrollbar-gutter: auto; }
-#reader-main.pdf-reader-viewport .reader-col.pdf-reader-viewport { display: flex; width: 100%; max-width: none; height: 100%; min-height: 0; flex-direction: column; }
-#reader-main.pdf-reader-viewport .doc-content.rh-pdf { flex: 1 1 auto; height: 100%; min-height: 0; }
-#reader-main.pdf-reader-viewport .rh-pdf-scroll { flex: 1 1 auto; min-height: 0; max-height: none; }
 .reader-context { font-family: var(--font-ui); font-size: var(--text-ui-plus); color: var(--fg-dim); border-left: 2px solid var(--border-focus); padding: 2px 0 2px 12px; margin-bottom: 26px; line-height: 1.55; }
 .reader-context .rc-label { color: var(--fg-faint); text-transform: uppercase; font-size: var(--text-xs); letter-spacing: 0.08em; margin-right: 6px; }
 /* The FROM strip is a live link back to the exact spot this branch grew from. */
@@ -226,8 +217,8 @@ body.mode-canvas #tb-restore-pill { display: none; }
 /* ---------- branch rail ----------
    Reader content and its branches are sibling surfaces. The document gets all
    remaining width; the rail stays at the physical right edge and scrolls on
-   its own, so PDF scrolling, prose scrolling, and branch browsing never fight
-   over the same gesture. */
+   its own, so prose scrolling and branch browsing never fight over the same
+   gesture. */
 #reader-rail { display: flex; width: var(--reader-branch-rail); min-width: 0; min-height: 0; flex: 0 0 var(--reader-branch-rail); flex-direction: column;
   border-left: 1px solid var(--border); background: color-mix(in srgb, var(--bar-bg) 58%, var(--bg)); }
 .reader-rail-head { display: flex; min-height: 44px; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px;
@@ -281,7 +272,6 @@ body.mode-canvas #tb-restore-pill { display: none; }
   .reader-col { width: 100%; max-width: none; }
   #reader-rail, #margin-notes { display: none; }
   .reader-context { margin-bottom: 20px; overflow-wrap: anywhere; }
-  .rh-origin-crop { max-width: 100%; }
   #composer { padding: 8px max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     overflow: hidden; scrollbar-gutter: auto; }
   .composer-inner { width: 100%; }
@@ -292,7 +282,7 @@ body.mode-canvas #tb-restore-pill { display: none; }
   #reader-rail, #margin-notes { display: none; }
 }
 @media (min-width: 880px) and (max-width: 1100px) {
-  #reader-main:not(.pdf-reader-viewport) { padding-inline: 28px; }
+  #reader-main { padding-inline: 28px; }
   #composer { padding-inline: 28px; }
 }
 
@@ -356,7 +346,6 @@ body.mode-flight #viewport { display: block; }
 .pinned-pin svg { display: block; width: 13px; height: 13px; }
 span.pinned-pin { cursor: default; }
 .pinned-pin:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
-.pinned-window-card .card-body.pdf-body .rh-pdf-scroll { flex: 1 1 auto; min-height: 0; max-height: none; }
 .pinned-window-action { color: var(--fg-dim); }
 .pinned-window.dragging .card-head { cursor: grabbing; }
 .pinned-origin { position: absolute; display: flex; }
@@ -365,7 +354,7 @@ span.pinned-pin { cursor: default; }
   border-radius: var(--radius-card); box-shadow: var(--shadow); }
 .pinned-origin-card.card-note { --card-head-bg: var(--note-card-head); background: var(--note-card-bg); border-color: var(--note-card-border); }
 .pinned-origin-card.root, .pinned-origin-card.current { border-color: var(--border-focus); }
-.pinned-origin-card:not(.card-note) > .card-body:not(.pdf-body) { padding-inline-end: var(--space-6); }
+.pinned-origin-card:not(.card-note) > .card-body { padding-inline-end: var(--space-6); }
 .pinned-origin-card.collapsed { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: hidden; }
 .pinned-origin-card.collapsed .card-body, .pinned-origin-card.collapsed .card-resize,
 .pinned-origin-card.collapsed .card-composer { display: none; }
@@ -411,7 +400,7 @@ span.pinned-pin { cursor: default; }
   touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
 /* Document prose uses the full card measure up to the dot's 11px ink lane
    (4px inset + 7px dot), with one pixel of clearance. */
-.card:not(.card-note) > .card-body:not(.pdf-body) { padding-right: var(--space-6); }
+.card:not(.card-note) > .card-body { padding-right: var(--space-6); }
 .note-editor { appearance: none; display: block; box-sizing: border-box; width: 100%; min-height: 1.72em; margin: 0; padding: 0; resize: none; overflow: hidden; border: 0; outline: 0; background: transparent; box-shadow: none; }
 .card-resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--border-focus) 50%); border-bottom-right-radius: 9px; opacity: 0.5; }
 .card-resize:hover { opacity: 1; }
@@ -489,7 +478,7 @@ span.pinned-pin { cursor: default; }
 #tb-tools { gap: 4px; }
 #tb-app { display: inline-flex; align-items: center; gap: var(--space-3); }
 #tb-app:empty, #tb-app:empty + #app-view-sep { display: none; }
-#tb-document { position: fixed; top: 14px; left: var(--rh-pdf-reader-center, 50%); display: flex; width: max-content; max-width: calc(100vw - 28px); min-width: 0; justify-content: center; transform: translateX(-50%); pointer-events: none; }
+#tb-document { position: fixed; top: 14px; left: 50%; display: flex; width: max-content; max-width: calc(100vw - 28px); min-width: 0; justify-content: center; transform: translateX(-50%); pointer-events: none; }
 #tb-document:empty, body.mode-canvas #tb-document { display: none; }
 #tb-session { display: flex; align-items: flex-start; gap: 10px; }
 .tb-pill { display: flex; align-items: center; gap: var(--space-3); pointer-events: auto; background: var(--bar-bg); border: 1px solid var(--border); border-radius: 10px; padding: var(--taskbar-pill-pad-block) 10px; box-shadow: var(--shadow); }
@@ -1103,89 +1092,3 @@ body.frozen.session-over .ll-frozen { display: inline; }
 #hint.flash { display: block; }
 body:not(.mode-canvas) #hint.flash { bottom: 84px; }
 body:not(.mode-canvas) #branch-undo { bottom: 84px; }
-
-/* ---------- native PDF pages ---------- */
-.doc-content.rh-pdf { display: flex; min-height: 0; flex-direction: column; background: var(--bg); }
-.rh-pdf-scroll { position: relative; min-width: 0; max-width: 100%; max-height: min(76vh, 980px); overflow: auto; overscroll-behavior: contain; touch-action: pan-x pan-y; scrollbar-gutter: stable; }
-.card-body.pdf-body { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
-.card-body.pdf-body > .doc-content.rh-pdf { flex: 1 1 auto; height: 100%; }
-.card .card-body.pdf-body .rh-pdf-scroll { flex: 1 1 auto; min-height: 0; max-height: none; }
-.rh-pdf-stack { display: flex; box-sizing: border-box; width: max-content; min-width: 100%; flex-direction: column; align-items: center; gap: 18px; padding: 10px 12px 18px; }
-.rh-pdf-page { position: relative; flex: 0 0 auto; overflow: hidden; background: white; outline: 1px solid var(--border); outline-offset: -1px; box-shadow: 0 2px 10px var(--shadow-alpha-12); contain: layout paint style; }
-.rh-pdf-canvas-layer, .rh-pdf-canvas-generation, .rh-pdf-textlayer, .rh-pdf-marks { position: absolute; inset: 0; }
-.rh-pdf-canvas-layer { z-index: var(--layer-local-base); overflow: hidden; pointer-events: none; }
-.rh-pdf-canvas-generation { transform-origin: 0 0; }
-.rh-pdf-canvas-generation canvas { position: absolute; display: block; }
-.rh-pdf-textlayer { z-index: var(--layer-local-mid); overflow: hidden; cursor: text; line-height: 1; text-align: initial; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; }
-.rh-pdf-textlayer :is(span, br) { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0 0; user-select: text; }
-.rh-pdf-textlayer span.markedContent { top: 0; height: 0; }
-.rh-pdf-textlayer[data-main-rotation="90"] { transform: rotate(90deg) translateY(-100%); }
-.rh-pdf-textlayer[data-main-rotation="180"] { transform: rotate(180deg) translate(-100%, -100%); }
-.rh-pdf-textlayer[data-main-rotation="270"] { transform: rotate(270deg) translateX(-100%); }
-.rh-pdf-marks { z-index: var(--layer-local-high); overflow: visible; pointer-events: none; }
-/* Rect marks sit over the white page render in both themes, so they take the
-   accent wash directly: a lighter cousin of the live-selection tint by default,
-   selection-strength on hover / when the answer card is hovered (mark-focus). */
-.doc-content .rh-pdf-mark { pointer-events: auto; cursor: pointer; }
-.doc-content .rh-pdf-mark polygon { pointer-events: all; fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke: color-mix(in srgb, var(--accent) 32%, transparent); stroke-width: .75; vector-effect: non-scaling-stroke; transition: fill var(--duration-legacy-150), stroke var(--duration-legacy-150); }
-.doc-content .rh-pdf-mark.mark-pending polygon { fill: color-mix(in srgb, var(--accent) 9%, transparent); stroke-dasharray: 3 2; }
-.doc-content .rh-pdf-mark:hover polygon, .doc-content .rh-pdf-mark.mark-hover polygon, .doc-content .rh-pdf-mark.mark-dom-focus polygon, .doc-content .rh-pdf-mark.mark-focus polygon { fill: color-mix(in srgb, var(--accent) 30%, transparent); stroke: color-mix(in srgb, var(--accent) 55%, transparent); }
-.doc-content .rh-pdf-mark.mark-note polygon { fill: var(--note-hl); stroke: color-mix(in srgb, var(--note-ink) 48%, transparent); }
-.doc-content .rh-pdf-mark.mark-note:hover polygon, .doc-content .rh-pdf-mark.mark-note.mark-hover polygon, .doc-content .rh-pdf-mark.mark-note.mark-dom-focus polygon, .doc-content .rh-pdf-mark.mark-note.mark-focus polygon { fill: var(--note-hl-strong); stroke: var(--note-ink); }
-.doc-content .rh-pdf-mark.mark-note.mark-reaction polygon { fill: var(--note-hl); stroke: none; }
-.doc-content .rh-pdf-mark.mark-note.mark-reaction:hover polygon, .doc-content .rh-pdf-mark.mark-note.mark-reaction.mark-hover polygon, .doc-content .rh-pdf-mark.mark-note.mark-reaction.mark-dom-focus polygon, .doc-content .rh-pdf-mark.mark-note.mark-reaction.mark-focus polygon { fill: var(--note-hl-strong); stroke: none; }
-.rh-pdf-textlayer span::selection { background: color-mix(in srgb, var(--accent) 32%, transparent); }
-.rh-pdf-box-mode .rh-pdf-page, .rh-pdf-box-mode .rh-pdf-textlayer { cursor: crosshair; user-select: none; }
-.rh-pdf-box-draft { position: absolute; z-index: var(--layer-local-top); border: 1.5px solid var(--accent); border-radius: 2px; pointer-events: none;
-  box-shadow: 0 0 0 100vmax color-mix(in srgb, black 26%, transparent), inset 0 0 0 1px color-mix(in srgb, white 35%, transparent); }
-.rh-pdf-box-draft::before, .rh-pdf-box-draft::after { content: ""; position: absolute; width: 8px; height: 8px; border: 2px solid var(--accent); }
-.rh-pdf-box-draft::before { top: -2px; left: -2px; border-right: none; border-bottom: none; border-top-left-radius: 3px; }
-.rh-pdf-box-draft::after { bottom: -2px; right: -2px; border-left: none; border-top: none; border-bottom-right-radius: 3px; }
-.rh-pdf-box-draft.settled { box-shadow: 0 0 0 100vmax color-mix(in srgb, black 14%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); transition: box-shadow var(--duration-legacy-180) ease; }
-.rh-pdf-toolbar { position: sticky; top: 0; z-index: var(--layer-local-toolbar); display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 6px; box-sizing: border-box; width: 100%; min-height: 35px; padding: 4px 8px; flex: 0 0 auto; background: var(--card-head); border-bottom: 1px solid var(--border); border-radius: 0; }
-.rh-pdf-toolbar-actions { display: flex; align-items: center; gap: var(--control-gap); flex-shrink: 0; }
-.rh-pdf-region-actions { min-width: 0; justify-content: flex-start; }
-.rh-pdf-document-actions { min-width: 0; justify-content: flex-end; }
-.rh-pdf-toolbar-center { display: flex; min-width: 0; align-items: center; justify-content: center; }
-.rh-pdf-toolbar-actions .card-btn span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rh-pdf-toolbar-actions .card-btn { width: auto; max-width: 100%; height: 26px; gap: 5px; padding: 0 9px; font-size: calc(var(--text-ui) - 1px); font-weight: var(--weight-regular); border: 1px solid transparent; background: transparent; border-radius: var(--radius-control);
-  transition: color var(--duration-fast) ease, background-color var(--duration-fast) ease, border-color var(--duration-fast) ease; }
-.rh-pdf-toolbar-actions .card-btn:hover:not(:disabled) { color: var(--fg); background: color-mix(in srgb, var(--fg) 5%, transparent); border-color: color-mix(in srgb, var(--fg) 10%, transparent); }
-.rh-pdf-toolbar-actions .card-btn:active:not(:disabled) { background: color-mix(in srgb, var(--fg) 8%, transparent); }
-.rh-pdf-toolbar-actions .card-btn:disabled { opacity: .55; cursor: default; }
-.rh-pdf-toolbar-actions .card-btn svg { width: 13px; height: 13px; flex: 0 0 auto; }
-.rh-pdf-toolbar-actions .card-btn.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); border-color: color-mix(in srgb, var(--accent) 32%, transparent); }
-.rh-pdf-zoom-controls { display: inline-flex; align-items: center; gap: 1px; }
-.rh-pdf-zoom-controls .card-btn { width: 26px; height: 26px; padding: 0; color: var(--fg-faint); }
-.rh-pdf-zoom-controls .card-btn svg { width: 13px; height: 13px; }
-.rh-pdf-zoom-controls .rh-pdf-zoom-value { width: auto; min-width: 44px; padding-inline: 4px; font-size: calc(var(--text-ui) - 1px); font-variant-numeric: tabular-nums; }
-.rh-pdf-toolbar-message { max-width: 160px; overflow: hidden; color: var(--warn); font-family: var(--font-ui); font-size: calc(var(--text-ui) - 1px); text-overflow: ellipsis; white-space: nowrap; }
-.rh-pdf-toolbar-message[hidden], .rh-pdf-zoom-controls[hidden] { display: none; }
-/* Reader contributes its PDF controls to the one existing top-chrome row.
-   Canvas PDFs deliberately keep the edge-to-edge toolbar in their card. */
-#tb-document > .rh-pdf-reader-toolbar { position: static; z-index: auto; grid-template-columns: auto auto auto; width: max-content; min-width: 0; min-height: 40px; padding: 7px 10px; pointer-events: auto; background: var(--bar-bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
-@media (min-width: 761px) and (max-width: 959px) {
-  #tb-document > .rh-pdf-reader-toolbar .rh-pdf-toolbar-actions .card-btn { width: 26px; padding-inline: 0; justify-content: center; }
-  #tb-document > .rh-pdf-reader-toolbar .rh-pdf-toolbar-actions .card-btn span { display: none; }
-}
-@media (hover: none), (pointer: coarse), (max-width: 760px) {
-  #reader-main.pdf-reader { padding-top: 0; }
-  #reader-main.pdf-reader-viewport { padding-inline: 0; }
-  #tb-document > .rh-pdf-reader-toolbar { width: max-content; min-height: 44px; padding: 0; border: 0; border-radius: 0; box-shadow: none; }
-  #tb-document > .rh-pdf-reader-toolbar .rh-pdf-toolbar-actions .card-btn { width: 44px; height: 44px; padding-inline: 0; justify-content: center; }
-  #tb-document > .rh-pdf-reader-toolbar .rh-pdf-toolbar-actions .card-btn span { display: none; }
-  #tb-document > .rh-pdf-reader-toolbar .rh-pdf-zoom-controls .card-btn { width: 44px; height: 44px; }
-  #tb-document > .rh-pdf-reader-toolbar .rh-pdf-zoom-controls .rh-pdf-zoom-value { min-width: 52px; }
-}
-.rh-pdf-legacy { margin: 0 0 14px; padding: 10px 12px; color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 24%, var(--border)); border-radius: var(--radius-control); font-family: var(--font-ui); font-size: var(--text-ui); }
-.rh-pdf-box-toggle.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); border-color: color-mix(in srgb, var(--accent) 32%, transparent); }
-.rh-pdf-convert:not(:disabled) { color: var(--fg); background: color-mix(in srgb, var(--fg) 4%, transparent); border-color: color-mix(in srgb, var(--fg) 9%, transparent); }
-.rh-pdf-convert.primary:not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
-.rh-pdf-convert:disabled { opacity: .48; cursor: not-allowed; }
-.rh-pdf-convert-progress { margin-bottom: 1em; }
-.rh-pdf-convert-progress .loading-status { margin-bottom: 0; }
-.rh-pdf-convert-progress.loading .loading-status { margin-bottom: 0.9em; }
-.rh-pdf-convert-cancel { width: auto; height: 22px; padding: 0 9px; margin-left: 12px; font-size: calc(var(--text-ui) - 1px); border: 1px solid var(--border); border-radius: var(--radius-control);
-  transition: color var(--duration-fast) ease, background-color var(--duration-fast) ease, border-color var(--duration-fast) ease; }
-.rh-pdf-convert-cancel:hover:not(:disabled) { color: var(--fg); background: color-mix(in srgb, var(--fg) 4%, transparent); border-color: color-mix(in srgb, var(--fg) 12%, var(--border)); }
-.rh-pdf-convert-cancel:disabled { opacity: .55; cursor: default; }

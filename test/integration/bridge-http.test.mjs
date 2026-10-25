@@ -178,10 +178,6 @@ try {
   assert.equal((await turns()).at(-1).input.find((part) => part.type === 'image').url, image);
   await generate({ kind: 'ask', attachments: [{ kind: 'image', data_url: image }] });
   assert.equal((await turns()).at(-1).input.find((part) => part.type === 'image').url, image);
-  await generate({ kind: 'transcribe', pages: [{ n: 1, data_url: image }], tail: 'previous tail' });
-  assert.equal((await turns()).at(-1).model, 'gpt-fake');
-  assert.ok((await turns()).at(-1).input[0].text.includes('previous tail'));
-
   const executions = (await calls()).filter((call) => ['thread/start', 'thread/fork'].includes(call.method));
   for (const call of executions) { assert.equal(call.params.ephemeral, false); assert.equal(call.params.approvalPolicy, 'never'); assert.equal(call.params.sandbox, 'danger-full-access'); }
   for (const call of await turns()) { assert.equal(call.approvalPolicy, 'never'); assert.deepEqual(call.sandboxPolicy, { type: 'dangerFullAccess' }); }

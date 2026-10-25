@@ -52,7 +52,7 @@ async function waitForSelectionSurfaceAnimations(page) {
 async function settleCanvasAndLayout(page) {
   await waitForCanvasView(page);
   // Drain layout work that was already queued by the preceding UI action
-  // (PDF zoom is one example), then catch any camera glide it starts.
+  // catch any camera glide it starts.
   await nextFrame(page);
   await waitForCanvasView(page);
 }

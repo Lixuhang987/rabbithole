@@ -19,7 +19,6 @@ const legacyNode = {
     anchor: { offset_start: 2, offset_end: 8 },
     branch_type: "selection",
     attachment_assets: ["paste-one.png"],
-    crop_asset: "crop-one.jpg",
   },
   position: { x: 12, y: -4 },
   size: { w: 420, h: 460 },
@@ -29,7 +28,6 @@ const legacyNode = {
   read: true,
   created_at: "2026-08-29T00:00:00.000Z",
   extensions: {
-    pdf: { version: 2, converted: true },
     canvas: { pin: { x: 2, y: 3 } },
     note: { docked: true },
     learn: { block: { revealed: true } },
@@ -39,7 +37,6 @@ const legacyNode = {
 
 const node = makeNode(legacyNode);
 assert.deepEqual(Object.keys(node), Object.keys(FIELDS), "makeNode is driven by the one FIELDS declaration");
-assert.deepEqual(node.source, legacyNode.extensions.pdf);
 assert.deepEqual(node.view, { pin: { x: 2, y: 3 }, docked: true });
 assert.deepEqual(node.progress, legacyNode.extensions.learn);
 assert.deepEqual(node.extensions, { third_party: { kept: true } });
@@ -65,7 +62,6 @@ for (const target of roundTripTargets) {
   assert.deepEqual(projectNode(node, target).extensions, legacyNode.extensions, `${target} round-trips all schema-v2 namespaces`);
 }
 assert.deepEqual(projectNode(node, "snapshot").extensions, {
-  pdf: legacyNode.extensions.pdf,
   canvas: legacyNode.extensions.canvas,
   note: legacyNode.extensions.note,
 }, "snapshot projection keeps page-shaping namespaces and defaults all others private");
@@ -88,7 +84,6 @@ assert.ok(ask);
 assert.strictEqual(validateAsk(ask), ask);
 assert.deepEqual(ask.at, { node_id: "root", anchor: { offset_start: 2, offset_end: 8 } });
 assert.deepEqual(ask.attachments, ["paste-one.png"]);
-assert.equal(ask.clip, "crop-one.jpg");
 assert.equal(ask.state, "settled");
 
 let state = createHoleState({ root_id: "root", nodes: [
@@ -114,7 +109,6 @@ extensionState = reduceHoleEvent(extensionState, {
 assert.deepEqual(extensionState.nodes.get("child").view, { docked: true },
   "a canvas namespace replacement removes omitted fields while preserving note presentation");
 assert.deepEqual(holeStateToHole(extensionState).nodes[0].extensions, {
-  pdf: legacyNode.extensions.pdf,
   note: legacyNode.extensions.note,
   learn: legacyNode.extensions.learn,
   third_party: legacyNode.extensions.third_party,
