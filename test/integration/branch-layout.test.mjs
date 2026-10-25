@@ -1,6 +1,7 @@
 /** @protects centered variable-size document branches and ordered connector channels. */
 import assert from "node:assert/strict";
 import { layoutBranches } from "../../src/core/branch-layout.js";
+import { TREE_STACK_GAP } from "../../src/core/layout.js";
 import { routeOrderedEdges } from "../../src/core/branch-routing.js";
 
 const entries = [
@@ -15,17 +16,34 @@ const entries = [
 const original = structuredClone(entries);
 const result = layoutBranches(entries);
 const at = (id) => result.positions.get(id);
-const center = (id) => at(id).y + entries.find((entry) => entry.id === id).height / 2;
+const entry = (id) => entries.find((item) => item.id === id);
+const center = (id) => at(id).y + entry(id).height / 2;
+const rect = (id, positions = result.positions) => {
+  const position = positions.get(id);
+  const item = entry(id);
+  return { minX: position.x, minY: position.y, maxX: position.x + item.width, maxY: position.y + item.height };
+};
+
 assert.deepEqual(entries, original, "layout must not rewrite the document graph");
-assert.equal(center("root"), 425, "the root centers over the entire 850px reserved branch area");
-assert.equal(center("a"), 180, "a large internal document reserves space beyond its small leaf cards");
-assert.equal(center("b"), 620, "a tall descendant reserves space for its short parent");
-assert.equal(center("b"), center("b1"), "a single child stays centered on its parent");
-assert.equal(center("a1") + center("a2"), 2 * center("a"), "two equal leaves straddle their parent");
-assert.equal(at("a").x, at("b").x, "every direct child uses the next depth column");
-assert.equal(at("a1").x, at("b1").x, "grandchildren use one shared, separately sized column");
-assert(at("a").x >= 300 + 70, "column width accounts for the widest root, including an independent note");
-assert(at("note").y >= 850 + 70, "independent roots occupy disjoint vertical blocks");
+assert.equal(at("a").x, at("b").x, "direct children share the first branch column");
+assert.equal(at("a1").x, at("a2").x, "grandchildren share the second branch column");
+assert.equal(at("a1").x, at("b1").x, "all nodes at a depth share one column");
+assert(at("a").y + entry("a").height + TREE_STACK_GAP <= at("b").y, "direct siblings are packed with one stack gap");
+assert(at("a1").y + entry("a1").height + TREE_STACK_GAP <= at("a2").y, "same-parent children are contiguous");
+assert(at("a2").y + entry("a2").height + TREE_STACK_GAP <= at("b1").y, "different-parent child groups remain contiguous in parent order");
+const directChildBlockCenter = at("a").y + (entry("a").height + TREE_STACK_GAP + entry("b").height) / 2;
+assert.equal(center("root"), directChildBlockCenter, "the root centers over its direct-child column");
+assert.equal(result.trees.length, 2);
+assert(result.trees[1].bounds.minY >= result.trees[0].bounds.maxY + TREE_STACK_GAP, "independent roots occupy disjoint vertical blocks");
+assert(at("a").x >= entry("note").width + TREE_STACK_GAP, "depth columns account for the widest root");
+
+const ids = entries.map((item) => item.id);
+for (let i = 0; i < ids.length; i++) {
+  for (let j = i + 1; j < ids.length; j++) {
+    const a = rect(ids[i]), b = rect(ids[j]);
+    assert(!(a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY), `${ids[i]} and ${ids[j]} must not overlap`);
+  }
+}
 
 const rootPorts = [
   { id: "a", start: { x: 200, y: at("root").y + 20 }, end: { x: at("a").x, y: center("a") } },
@@ -40,9 +58,24 @@ rootPorts.forEach((edge) => {
   assert(!/NaN|Infinity/.test(route));
 });
 
-entries.filter((entry) => entry.parent_id).forEach((entry) => { entry.height = 36; });
+const deep = structuredClone(entries);
+const deepResult = layoutBranches(deep);
+for (const item of deep) if (item.id === "b1") item.height = 1000;
+const stretched = layoutBranches(deep);
+assert.equal(
+  stretched.positions.get("a").y - stretched.positions.get("b").y,
+  deepResult.positions.get("a").y - deepResult.positions.get("b").y,
+  "a deep descendant must not spread its shallower sibling column",
+);
+assert.equal(
+  stretched.positions.get("a1").y - stretched.positions.get("a2").y,
+  deepResult.positions.get("a1").y - deepResult.positions.get("a2").y,
+  "deep descendants must not change a shallower child group",
+);
+
+entries.filter((item) => item.parent_id).forEach((item) => { item.height = 36; });
 const folded = layoutBranches(entries);
 assert(folded.trees[0].bounds.maxY < result.trees[0].bounds.maxY, "folding shrinks the same tree without hiding descendants");
 assert.equal(folded.positions.size, entries.length);
 assert.equal(folded.positions.get("a").x, folded.positions.get("b").x);
-console.log("ok branch layout: mixed card sizes, centered descendants, independent roots, channels, and folding");
+console.log("ok branch layout: BFS columns, grouped siblings, centered columns, independent roots, channels, and folding");
