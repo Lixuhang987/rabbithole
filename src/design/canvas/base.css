@@ -366,7 +366,7 @@ span.pinned-pin { cursor: default; }
 .pinned-origin-card.card-note { --card-head-bg: var(--note-card-head); background: var(--note-card-bg); border-color: var(--note-card-border); }
 .pinned-origin-card.root, .pinned-origin-card.current { border-color: var(--border-focus); }
 .pinned-origin-card:not(.card-note) > .card-body:not(.pdf-body) { padding-inline-end: var(--space-6); }
-.pinned-origin-card.collapsed { height: auto !important; overflow: hidden; }
+.pinned-origin-card.collapsed { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: hidden; }
 .pinned-origin-card.collapsed .card-body, .pinned-origin-card.collapsed .card-resize,
 .pinned-origin-card.collapsed .card-composer { display: none; }
 .pinned-origin-card.collapsed .card-head { border-bottom: 0; border-radius: var(--radius-card); }
@@ -416,8 +416,12 @@ span.pinned-pin { cursor: default; }
 .card-resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--border-focus) 50%); border-bottom-right-radius: 9px; opacity: 0.5; }
 .card-resize:hover { opacity: 1; }
 .card.collapsed .card-body, .card.collapsed .card-resize, .card.collapsed .card-composer { display: none; }
-.card.collapsed { height: auto !important; overflow: hidden; }
+.card.collapsed { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: hidden; }
 .card.collapsed .card-head { border-radius: var(--radius-card); border-bottom: none; }
+/* A fold keeps its complete Ask origin; only the answer and composer close. */
+:is(.card, .pinned-origin-card).collapsed .card-body.has-origin { display: block; flex: none; overflow: visible; }
+:is(.card, .pinned-origin-card).collapsed .card-body.has-origin > :not(.origin-context) { display: none; }
+:is(.card, .pinned-origin-card).collapsed .origin-context { margin-bottom: 0; }
 /* Landing flash when ⌘K jumps the canvas to a card. */
 .card.flash::after { opacity: 1; }
 
@@ -456,6 +460,13 @@ span.pinned-pin { cursor: default; }
 .nc-inner.disabled { --nc-op: 0.55; }
 @media (hover: none), (pointer: coarse) { .nc-handle { opacity: 1; pointer-events: auto; transition: none; } .card-composer.open .nc-handle { opacity: 0; pointer-events: none; } }
 .origin-quote { font-family: var(--font-doc); font-size: var(--text-ui); color: var(--fg-dim); border-left: 2px solid var(--border-focus); padding-left: 9px; margin-bottom: 12px; font-style: italic; }
+.origin-selection, .origin-question { white-space: pre-wrap; overflow-wrap: anywhere; }
+.origin-selection { margin: 0; padding: 0; border: 0; }
+.origin-selection + .origin-question, .rh-origin-crop + .origin-question { margin-top: var(--space-4); }
+.origin-context .rh-origin-crop { margin: var(--space-4) 0 0; }
+.origin-context .rh-origin-crop img { width: 100%; height: 96px; object-fit: contain; }
+.origin-attachment { appearance: none; padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: var(--radius-control); }
+.origin-attachment:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
 .origin-attachment-strip { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
 .origin-attachment-strip img { display: block; width: 52px; height: 42px; object-fit: cover; border: var(--border-default); border-radius: var(--radius-control); background: var(--code-bg); }
 .origin-quote .origin-attachment-strip, .reader-context .origin-attachment-strip { font-style: normal; }

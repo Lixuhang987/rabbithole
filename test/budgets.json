@@ -58,9 +58,9 @@
       "description": "Frozen HTML size for the math-heavy reference corpus",
       "unit": "bytes",
       "tolerance": 0.05,
-      "rationale": "Exact UTF-8 snapshot size. Snapshots now carry the note extensions namespace and docked-note affordances.",
+      "rationale": "Exact UTF-8 snapshot size. Snapshots now carry the note extensions namespace and docked-note affordances. Complete Ask origins, clickable image thumbnails and source-coordinate PDF region previews add 4261 bytes versus 5a568c0. Accept this offline runtime cost to preserve the full origin in folded cards and snapshots; retain the previous absolute headroom rather than recalibrating unrelated gauges.",
       "baseline": 1184955,
-      "ceiling": 1244202.75,
+      "ceiling": 1248463.75,
       "measured_at_commit": "bb59262"
     },
     {
@@ -68,9 +68,9 @@
       "description": "Frozen HTML size for the PNG/SVG reference corpus",
       "unit": "bytes",
       "tolerance": 0.05,
-      "rationale": "Exact UTF-8 snapshot size including assets. Snapshots now carry the note extensions namespace and docked-note affordances.",
+      "rationale": "Exact UTF-8 snapshot size including assets. Snapshots now carry the note extensions namespace and docked-note affordances. Complete Ask origins, clickable image thumbnails and source-coordinate PDF region previews add 4261 bytes versus 5a568c0. Accept this offline runtime cost to preserve the full origin in folded cards and snapshots; retain the previous absolute headroom rather than recalibrating unrelated gauges.",
       "baseline": 1184989,
-      "ceiling": 1244238.45,
+      "ceiling": 1248499.45,
       "measured_at_commit": "bb59262"
     },
     {

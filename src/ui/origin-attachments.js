@@ -1,5 +1,6 @@
 import { validateImageAssetName } from "../core/assets.js";
 import { MAX_ASK_ATTACHMENTS } from "../core/attachments.js";
+import { openImageLightbox } from "./image-ux.js";
 import { resolveAssetUrl } from "./renderer.js";
 
 export function originAttachmentNames(node) {
@@ -25,7 +26,20 @@ export function appendOriginAttachmentThumbnails(container, node) {
     image.alt = "Pasted image";
     image.loading = "eager";
     image.draggable = false;
-    strip.appendChild(image);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "origin-attachment";
+    button.setAttribute("aria-label", "Open pasted image");
+    button.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      openImageLightbox(image.currentSrc || image.src, image.alt, button);
+    });
+    button.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+    });
+    button.appendChild(image);
+    strip.appendChild(button);
   }
   container.appendChild(strip);
   return strip;

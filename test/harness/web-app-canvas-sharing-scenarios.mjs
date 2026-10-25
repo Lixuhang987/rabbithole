@@ -1713,6 +1713,11 @@ async function verifyStandaloneNotesAndEditing() {
     const pinnedExpand = connectedProjection.locator('[aria-label="Expand document"]');
     await pinnedExpand.click();
     await page.locator("#reader").waitFor({ state: "visible" });
+    const noteOrigin = await page.evaluate(async (id) =>
+      (await window.__rabbitholeTest.readStoredHole()).nodes.find((node) => node.id === id)?.origin.selected_text,
+    anchoredId);
+    assert.equal(await page.locator(".reader-context .origin-selection").innerText(), noteOrigin,
+      "an anchored note keeps its source quote in reader mode");
     await page.locator("#reader-restore").click();
     await page.waitForSelector("body.mode-canvas");
     await connectedProjection.waitFor();

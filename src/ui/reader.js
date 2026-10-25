@@ -24,8 +24,8 @@ import {
 } from "./core.js";
 import { createModuleLifecycle } from "./kit/scope.js";
 import { flyReaderFromRect } from "./mode-transition.js";
-import { appendOriginAttachmentThumbnails, originAttachmentNames } from "./origin-attachments.js";
-import { buildOriginCrop } from "./origin-provenance.js";
+import { appendOriginAttachmentThumbnails } from "./origin-attachments.js";
+import { buildOriginContext } from "./origin-provenance.js";
 import { captureContentPosition, restoreContentPosition } from "./scroll-position.js";
 import { applyChildHighlights, transitionMarkGroups } from "./text-marks.js";
 import { mountVisuals } from "./visuals.js";
@@ -255,29 +255,8 @@ export function renderReaderBody() {
   // The lineage trail leads the document column and scrolls with it — the
   // floating taskbar above carries no per-document state.
   if (breadcrumbEl) col.appendChild(breadcrumbEl);
-  if (node.origin && (node.origin.selected_text || node.origin.question || originAttachmentNames(node).length)) {
-    const ctx = document.createElement("div");
-    ctx.className = "reader-context";
-    if (node.origin.selected_text) {
-      const tail = node.origin.lens
-        ? " — " + lensBadgeHtml(node.origin)
-        : node.origin.question
-          ? " — " + escapeHtml(node.origin.question)
-          : "";
-      ctx.innerHTML =
-        '<span class="rc-label">From</span>“' +
-        escapeHtml(truncate(node.origin.selected_text, 200)) +
-        "”" +
-        tail +
-        '<span class="rc-go">→</span>';
-    } else {
-      ctx.innerHTML =
-        '<span class="rc-label">Follow-up</span>' +
-        (node.origin.lens
-          ? lensBadgeHtml(node.origin) + (node.origin.question ? " " + escapeHtml(node.origin.question) : "")
-          : escapeHtml(node.origin.question || "Pasted image"));
-    }
-    appendOriginAttachmentThumbnails(ctx, node);
+  const ctx = buildOriginContext(node, "reader");
+  if (ctx) {
     // The strip is a live link: click it to land on the exact spot in the
     // parent this branch grew from (flashed so the eye finds it).
     if (node.parent_id && nodes[node.parent_id]) {
@@ -290,20 +269,18 @@ export function renderReaderBody() {
         jumpToOrigin(node, motionSourceFromEvent(e));
       });
       ctx.addEventListener("keydown", function (e) {
-        if (e.key !== "Enter") return;
+        if (e.key !== "Enter" || e.target !== ctx) return;
         e.preventDefault();
         jumpToOrigin(node, "keyboard");
       });
     }
     col.appendChild(ctx);
   }
-  const crop = buildOriginCrop(node, "reader");
-  if (crop) col.appendChild(crop);
   const dc = buildDocContent(node, READER_BASE);
   col.appendChild(dc);
   applyChildHighlights(dc, node);
   const isPdfReader = dc.classList.contains("rh-pdf");
-  const isPdfViewport = isPdfReader && !node.parent_id && !crop;
+  const isPdfViewport = isPdfReader && !node.parent_id && !ctx?.querySelector(".rh-origin-crop");
   readerMain.classList.toggle("pdf-reader", isPdfReader);
   readerMain.classList.toggle("pdf-reader-viewport", isPdfViewport);
   col.classList.toggle("pdf-reader-col", isPdfReader);

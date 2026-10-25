@@ -10,7 +10,12 @@ export function snapshotProjectionUsesMermaid(projection) {
 
 /** @param {any} projection */
 export function snapshotProjectionUsesPdf(projection) {
-  return !!projection?.hole?.nodes?.some((/** @type {any} */ node) => node?.extensions?.pdf?.version === 2 && !node.extensions.pdf.converted);
+  const nodes = projection?.hole?.nodes || [];
+  const regions = new Set(nodes.map((/** @type {any} */ node) => node.origin?.anchor?.pdf)
+    .filter((/** @type {any} */ anchor) => anchor?.kind === "region")
+    .map((/** @type {any} */ anchor) => anchor.source_sha256));
+  return nodes.some((/** @type {any} */ node) => node?.extensions?.pdf?.version === 2 &&
+    (!node.extensions.pdf.converted || regions.has(node.extensions.pdf.source?.sha256)));
 }
 
 /** @param {unknown} source */

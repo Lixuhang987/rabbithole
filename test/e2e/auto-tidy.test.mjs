@@ -8,6 +8,8 @@ import { bootWebApp } from "../support/web-app-harness.mjs";
 import { assertSelectionPopoverUsable, selectVisibleText } from "../support/visible-selection.mjs";
 
 const app = await bootWebApp();
+const alphaQuote = "Alpha anchor " + "完整引用内容需要保留。".repeat(24) + "引用结束。";
+const alphaQuestion = "Why alpha?\n" + "完整提问需要保留。".repeat(25) + "<literal-question-end>";
 const longScrollAnswer = Array.from({ length: 90 }, (_, index) => "Paragraph " + (index + 1) + " keeps this card scrollable.").join("\n\n");
 
 try {
@@ -33,7 +35,7 @@ try {
   });
   await page.goto(app.baseUrl, { waitUntil: "networkidle" });
 
-  await createDocument(page, "# Auto-tidy fixture\n\nAlpha anchor grows one branch.\n\nBeta anchor grows its sibling.\n\nGamma anchor stays unread.\n\nDelta anchor has scrollable content.");
+  await createDocument(page, "# Auto-tidy fixture\n\n" + alphaQuote + "\n\nBeta anchor grows its sibling.\n\nGamma anchor stays unread.\n\nDelta anchor has scrollable content.");
   await page.locator("#t-settings").click();
   assert.deepEqual(
     await page.locator("[data-settings-section]").allInnerTexts(),
@@ -75,10 +77,11 @@ try {
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForSelector(".card.root .doc-content");
 
-  await askFromSelection(page, "Alpha anchor", "Why alpha?");
+  await askFromSelection(page, alphaQuote, alphaQuestion);
   const alpha = page.locator('.card:not(.root)', { hasText: "Alpha branch answer." });
   await alpha.waitFor();
   const alphaId = await alpha.getAttribute("data-id");
+  await assertCompleteOrigin(alpha, alphaQuote, alphaQuestion);
   await alpha.locator(".nc-handle").focus();
   await page.keyboard.press("Enter");
   await alpha.locator(".nc-inner textarea").fill("Add an Alpha descendant.");
@@ -138,6 +141,16 @@ try {
   const storedFold = await waitForStoredNode(page, alphaId, (node) => node.collapsed === true);
   assert.equal(storedFold.extensions.canvas.collapse_stack.version, 1, "auto-tidy persists the standard branch stack");
 
+  await assertCompleteOrigin(alpha, alphaQuote, alphaQuestion);
+  const stackGeometry = await page.evaluate(([parentId, childId]) => {
+    const parent = document.querySelector('.card[data-id="' + parentId + '"]');
+    const child = document.querySelector('.card[data-id="' + childId + '"]');
+    const body = parent.querySelector(".card-body");
+    return { gap: parseFloat(child.style.top) - parseFloat(parent.style.top) - parent.offsetHeight,
+      scrollable: body.scrollHeight > body.clientHeight + 1 };
+  }, [alphaId, await alphaDescendant.getAttribute("data-id")]);
+  assert.deepEqual(stackGeometry, { gap: 12, scrollable: false }, "long folded origins grow and keep the stack gap");
+
   await toggleBranch(alpha);
   await page.waitForSelector('.card[data-id="' + alphaId + '"]:not(.collapsed)');
   assert.equal(
@@ -154,6 +167,7 @@ try {
   await advanceAutoTidyClock(page, 11_000);
   await page.waitForSelector('.card[data-id="' + alphaId + '"].collapsed');
   assert.equal(await gamma.evaluate((card) => card.classList.contains("collapsed")), false, "reload keeps an unread sibling protected");
+  await assertCompleteOrigin(alpha, alphaQuote, alphaQuestion);
   const reloadedAlpha = await waitForStoredNode(page, alphaId, (node) => node.collapsed === true);
   assert.equal(!!reloadedAlpha.extensions.attention?.seen_at, true, "seen state survives reload before the new session clock elapses");
 
@@ -190,6 +204,8 @@ try {
   await advanceAutoTidyClock(page, 11_000);
   assert.equal(await alpha.evaluate((card) => card.classList.contains("collapsed")), false, "turning the mode off stops future folds");
 
+  await alpha.locator(".card-collapse").evaluate((button) => button.click());
+  await assertCompleteOrigin(alpha, alphaQuote, alphaQuestion);
   const frozenHtml = await page.evaluate(() => window.__rabbitholeTest.exportSnapshot());
   assert.equal(frozenHtml.includes("rh-auto-tidy"), false, "the frozen client does not contain the engine or preference");
   assert.equal(
@@ -199,6 +215,10 @@ try {
   );
   const frozenPage = await context.newPage();
   await frozenPage.setContent(frozenHtml, { waitUntil: "load" });
+  const frozenAlpha = frozenPage.locator('.card[data-id="' + alphaId + '"]');
+  await assertCompleteOrigin(frozenAlpha, alphaQuote, alphaQuestion);
+  await frozenAlpha.locator('[aria-label="Expand document"]').evaluate((button) => button.click());
+  await assertCompleteOrigin(frozenPage.locator(".reader-context"), alphaQuote, alphaQuestion);
   await frozenPage.locator("#t-settings").click();
   assert.deepEqual(
     await frozenPage.locator("[data-settings-section]").allInnerTexts(),
@@ -370,4 +390,15 @@ function installAutoTidyClock() {
     },
   };
   window.__rabbitholeTest = { autoTidyClock: clock };
+}
+
+async function assertCompleteOrigin(surface, quote, question) {
+  assert.equal(await surface.locator(".origin-selection").innerText(), quote);
+  assert.equal(await surface.locator(".origin-question").innerText(), question);
+  assert.equal(await surface.locator(".origin-selection").isVisible(), true);
+  assert.equal(await surface.locator(".origin-question").isVisible(), true);
+  assert.equal(await surface.locator(".origin-question").evaluate((element) => {
+    const style = getComputedStyle(element);
+    return style.whiteSpace === "pre-wrap" && style.overflowWrap === "anywhere";
+  }), true, "full origin text wraps while retaining its line breaks");
 }

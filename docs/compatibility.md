@@ -58,6 +58,8 @@ inert `application/vnd.rabbithole+json` script element. Snapshot projection:
 - clears personal extensions, retaining PDF, note and canvas page shape;
 - includes the shareable canvas view;
 - contains no credentials, settings, live transport, or external assets.
+- embeds PDF runtimes for native PDF views and source-coordinate region previews,
+  including previews whose source article has already been transcribed;
 - embeds the pinned Mermaid runtime only when a node contains a Mermaid fence,
   preserving offline diagram rendering without changing the portable payload.
 

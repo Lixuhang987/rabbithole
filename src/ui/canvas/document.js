@@ -1,11 +1,9 @@
 import { composerActionsMarkup } from "../../core/html/markup.js";
 import { pdfArticleNeedsConversion } from "../../core/pdf-shared.js";
-import { displayQuestionForOrigin } from "../ask-presets.js";
 import { applyComposerState } from "../composer-state.js";
 import { buildDocContent, CANVAS_BASE, nodes, READER_BASE, rootId, sessionPhase } from "../core.js";
 import { isCommandEnter } from "../input-intent.js";
-import { appendOriginAttachmentThumbnails, originAttachmentNames } from "../origin-attachments.js";
-import { buildOriginCrop } from "../origin-provenance.js";
+import { buildOriginContext } from "../origin-provenance.js";
 import { applyChildHighlights } from "../text-marks.js";
 import { autoGrowEl, cardButton } from "./card-composer.js";
 import { r } from "./runtime.js";
@@ -18,16 +16,9 @@ export function fillBody(node) {
   if (previous && previous._rhDispose) previous._rhDispose();
   body.classList.remove("pdf-body");
   body.innerHTML = "";
-  const originQuestion = displayQuestionForOrigin(node.origin);
-  if (node.origin && node.origin.kind !== "note" && (originQuestion || originAttachmentNames(node).length)) {
-    const q = document.createElement("div");
-    q.className = "origin-quote";
-    q.textContent = originQuestion ? "“" + originQuestion + "”" : "Pasted image";
-    appendOriginAttachmentThumbnails(q, node);
-    body.appendChild(q);
-  }
-  const crop = buildOriginCrop(node, "card");
-  if (crop) body.appendChild(crop);
+  const origin = buildOriginContext(node, "card");
+  body.classList.toggle("has-origin", !!origin);
+  if (origin) body.appendChild(origin);
   const dc = buildDocContent(node, CANVAS_BASE);
   body.appendChild(dc);
   body.classList.toggle("pdf-body", dc.classList.contains("rh-pdf"));

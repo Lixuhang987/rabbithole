@@ -3,6 +3,10 @@
 Rabbithole is a branching reading canvas. Questions on documents produce child
 documents that readers can explore independently.
 
+Answers retain the complete quoted content and question at their beginning,
+including when folded. Folding hides the answer while keeping the reason for
+the branch readable.
+
 Generation goes through a local bridge to a configured coding-agent backend.
 Direct model endpoints and MCP-driven answering are outside the product's
 intended usage.

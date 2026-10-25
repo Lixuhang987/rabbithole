@@ -72,7 +72,12 @@ export function presetLabelForOrigin(origin) {
 }
 
 export function displayQuestionForOrigin(origin) {
-  return String(origin?.question || "").trim() || presetLabelForOrigin(origin);
+  return (
+    [origin?.instruction, origin?.question || origin?.web_root_question]
+      .map((text) => String(text || "").trim())
+      .filter(Boolean)
+      .join("\n\n") || presetLabelForOrigin(origin)
+  );
 }
 
 /*

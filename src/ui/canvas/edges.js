@@ -33,8 +33,8 @@ export function scheduleNodeEdges(node) {
   requestEdgeFrame();
 }
 
-// Effective on-canvas height follows the rendered card: collapsed cards are
-// head-only and short branches may be smaller than their saved height cap.
+// Effective height includes a folded card's full origin and may be smaller
+// than the saved height cap for a short expanded answer.
 export function effH(n) {
   const el = canvasCard(n);
   return el ? el.offsetHeight || (n.collapsed ? 36 : n.size.h) : n.size.h;

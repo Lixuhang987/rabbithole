@@ -1,4 +1,8 @@
 {
+  "ask-origin.test.mjs": {
+    "ms": 4000,
+    "browsers": []
+  },
   "auto-tidy.test.mjs": {
     "ms": 16000,
     "browsers": []

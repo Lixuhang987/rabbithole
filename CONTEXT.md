@@ -13,3 +13,7 @@ The backend conversation associated with an article node. An Ask on that article
 branches from this conversation, and its answer owns the resulting conversation.
 These conversations are used exclusively by Rabbithole.
 _Avoid_: Current thread, latest thread
+
+**Quoted content**:
+The source passage selected from an article node when making an Ask. It is
+distinct from the question the reader asks about that passage.

@@ -39,6 +39,8 @@ try {
   await page.locator('.shimmer-text').filter({ hasText: 'Searching the web' }).first().waitFor();
   await page.evaluate(() => window.__bridgeStub.finishSearch());
   await page.locator('.card.root', { hasText: 'Found Example.' }).waitFor();
+  assert.equal(await page.locator('.card.root .origin-question').innerText(), 'Search current sources',
+    'a root Ask answer shows its complete original prompt');
   await page.waitForFunction(async () => {
     const hole = await window.__rabbitholeTest.readStoredHole(); return hole?.nodes.find((node) => node.id === hole.root_id)?.extensions.backend_conversation;
   });
