@@ -3,6 +3,13 @@
 Rabbithole is a branching reading canvas. Questions on documents produce child
 documents that readers can explore independently.
 
+Canvas organization keeps branches visually distinct and prevents document
+cards from obscuring other branches' connector lines. Organized layouts show
+successive relationship depths in successive columns. Each parent is vertically
+centered over the space reserved for its child branches, which accounts for
+their descendant documents rather than requiring equal sibling spacing.
+Readers can freely drag cards; organizing the canvas repairs resulting overlaps.
+
 Generation goes through a local bridge to a configured coding-agent backend.
 Direct model endpoints and MCP-driven answering are outside the product's
 intended usage.

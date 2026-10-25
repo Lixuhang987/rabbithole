@@ -176,6 +176,7 @@ export function initCanvasView(hooks) {
         const id = target instanceof HTMLElement ? target.dataset.nodeId : undefined;
         if (id && nodes[id]) scheduleNodeEdges(nodes[id]);
         else scheduleEdges();
+        r.canvasMaintenance?.layoutChanged();
       }
     });
   const cardMenu = document.getElementById("cardmenu");

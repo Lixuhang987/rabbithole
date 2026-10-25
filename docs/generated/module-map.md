@@ -10,6 +10,8 @@ This inventory is derived from the source tree.
 - `src/core/attachments.js`
 - `src/core/base-url.js`
 - `src/core/blocks.js`
+- `src/core/branch-layout.js`
+- `src/core/branch-routing.js`
 - `src/core/clock.js`
 - `src/core/concurrency.js`
 - `src/core/contracts/artifact.d.ts`
@@ -106,10 +108,14 @@ This inventory is derived from the source tree.
 - `src/ui/branch-surfaces.js`
 - `src/ui/canvas-settings.js`
 - `src/ui/canvas/attention.js`
+- `src/ui/canvas/auto-layout.js`
 - `src/ui/canvas/auto-tidy-policy.js`
 - `src/ui/canvas/auto-tidy.js`
+- `src/ui/canvas/branch-arrangement.js`
+- `src/ui/canvas/branch-geometry.js`
 - `src/ui/canvas/camera.js`
 - `src/ui/canvas/card-composer.js`
+- `src/ui/canvas/card-measure.js`
 - `src/ui/canvas/card.js`
 - `src/ui/canvas/document.js`
 - `src/ui/canvas/edges.js`
@@ -119,6 +125,7 @@ This inventory is derived from the source tree.
 - `src/ui/canvas/inline-note.js`
 - `src/ui/canvas/menu.js`
 - `src/ui/canvas/note-convert.js`
+- `src/ui/canvas/organized-edges.js`
 - `src/ui/canvas/pins.js`
 - `src/ui/canvas/runtime.js`
 - `src/ui/canvas/shared.js`

@@ -8,6 +8,9 @@ Rabbithole organizes documents and questions into a branching reading canvas.
 A document on the reading canvas, used as the source of a selection Ask or a
 whole-article follow-up, or produced as the answer to an Ask.
 
+**Branch**:
+A document on the reading canvas together with all of its descendant documents.
+
 **Node conversation**:
 The backend conversation associated with an article node. An Ask on that article
 branches from this conversation, and its answer owns the resulting conversation.

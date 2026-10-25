@@ -1,5 +1,7 @@
 import { childrenOf, currentNodeId, edgesSvg, isVisible, mode, nodes, readerMain, SVGNS, view } from "../core.js";
 import { transitionMarkGroups } from "../text-marks.js";
+import { effH, firstMarkRect, sourceMark } from "./card-measure.js";
+import { organizedEdge } from "./organized-edges.js";
 import { r } from "./runtime.js";
 import { canvasBody, canvasCard, isFollowup } from "./shared.js";
 export function requestEdgeFrame() {
@@ -33,12 +35,7 @@ export function scheduleNodeEdges(node) {
   requestEdgeFrame();
 }
 
-// Effective on-canvas height follows the rendered card: collapsed cards are
-// head-only and short branches may be smaller than their saved height cap.
-export function effH(n) {
-  const el = canvasCard(n);
-  return el ? el.offsetHeight || (n.collapsed ? 36 : n.size.h) : n.size.h;
-}
+export { effH };
 
 export function edgeMeasure(n, cache) {
   let measured = cache[n.id];
@@ -80,9 +77,9 @@ export function edgeStart(p, child, side, measureCache) {
   const graphCard = canvasCard(p),
     graphBody = canvasBody(p);
   if (!p.collapsed && graphCard && graphBody) {
-    const mark = graphBody.querySelector('mark[data-child="' + child.id + '"]');
+    const mark = sourceMark(p, child);
     if (mark) {
-      const mr = mark.getBoundingClientRect();
+      const mr = firstMarkRect(mark);
       if (mr.height > 0) {
         const er = measured.elRect || (measured.elRect = graphCard.getBoundingClientRect());
         const br = measured.bodyRect || (measured.bodyRect = graphBody.getBoundingClientRect());
@@ -212,24 +209,26 @@ export function drawEdgeSubset(ids, positionNodeIds) {
 }
 
 export function renderEdge(parent, child, measureCache) {
+  const organized = organizedEdge(parent, child, measureCache, edgeStart, edgeEnd);
   const sides = edgeSides(parent, child, measureCache);
-  const start = edgeStart(parent, child, sides[0], measureCache);
+  const start = organized?.start || edgeStart(parent, child, sides[0], measureCache);
   const end = edgeEnd(child, sides[1], measureCache);
   const horiz = sides[0] === "left" || sides[0] === "right";
   const reach = Math.max(40, (horiz ? Math.abs(end.x - start.x) : Math.abs(end.y - start.y)) / 2);
   const d =
+    organized?.d ||
     "M " +
-    start.x +
-    " " +
-    start.y +
-    " C " +
-    ctrlPt(start, sides[0], reach) +
-    " " +
-    ctrlPt(end, sides[1], reach) +
-    " " +
-    end.x +
-    " " +
-    end.y;
+      start.x +
+      " " +
+      start.y +
+      " C " +
+      ctrlPt(start, sides[0], reach) +
+      " " +
+      ctrlPt(end, sides[1], reach) +
+      " " +
+      end.x +
+      " " +
+      end.y;
   const geom = { d: d, cx: String(start.x), cy: String(start.y), anchored: !!start.anchored };
   const els = ensureEdgeEls(child.id);
   const path = els[0],

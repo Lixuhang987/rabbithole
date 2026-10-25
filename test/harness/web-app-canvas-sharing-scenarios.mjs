@@ -2250,8 +2250,8 @@ async function verifyStandaloneNotesAndEditing() {
     const beforeTidy = await restoredStandaloneAsk.evaluate((card) => ({ left: card.style.left, top: card.style.top }));
     await page.click("#t-tidy");
     await page.waitForTimeout(320);
-    assert.deepEqual(await restoredStandaloneAsk.evaluate((card) => ({ left: card.style.left, top: card.style.top })), beforeTidy,
-      "Tidy must leave parentless asks in place just as it leaves standalone notes");
+    assert.notDeepEqual(await restoredStandaloneAsk.evaluate((card) => ({ left: card.style.left, top: card.style.top })), beforeTidy,
+      "Tidy must include parentless asks in the independent-root layout");
 
     await page.waitForTimeout(300);
     point = await findCanvasBackground(page);
