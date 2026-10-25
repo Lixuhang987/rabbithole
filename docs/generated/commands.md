@@ -21,6 +21,7 @@
 | `npm run check:ui` | `biome check src/ui` |
 | `npm run check:ui-architecture` | `node scripts/check-ui-architecture.mjs` |
 | `npm run check:vision-live` | `node scripts/vision-live-check.mjs` |
+| `npm run dev` | `node scripts/dev.mjs` |
 | `npm run eval` | `node test/evals/run-eval.mjs` |
 | `npm run format:ui` | `biome check --write --unsafe src/ui` |
 | `npm run generate:design-doc` | `node scripts/generate-design-doc.mjs` |

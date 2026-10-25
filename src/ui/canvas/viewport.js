@@ -80,7 +80,10 @@ export function onViewportWheel(e) {
     zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.01));
     return;
   }
-  if (!r.wheelKind || e.timeStamp - r.wheelTs > 180) {
+  if (r.activeCardGestures.size) {
+    r.wheelCard = null;
+    r.wheelKind = "pan";
+  } else if (!r.wheelKind || e.timeStamp - r.wheelTs > 180) {
     r.wheelCard = (e.target.closest && e.target.closest(".card, .pinned-window")) || null;
     r.wheelKind = r.wheelCard ? "card" : "pan";
   }

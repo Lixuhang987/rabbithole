@@ -17,6 +17,7 @@ If reader's understanding is only partially correct, clearly explain:
 
 The goal is not to cover the entire field in one answer. It is to help reader understand the current problem and leave clear entry points for deeper study in subsequent branches.
 **The reader need not understand every sentence immediately; unfamiliar concepts and the questions they raise are valuable entry points for further exploration.**
+**Emphasize real production practice, since it is the most valuable entry points**
 `
 
 const ANSWERING_INSTRUCTIONS_V1 = [

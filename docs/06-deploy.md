@@ -5,6 +5,11 @@ bridge. Serving the app does not start the bridge: live document use and Codex
 generation require a running bridge on the browser
 user's computer. A bridge on a remote site server cannot reach a visitor's CLI.
 
+For local development, run `npm run dev` and open `http://localhost:3000`.
+Frontend edits trigger a temporary build and a full page reload; failed builds
+keep the last successful page available. The bridge runs separately. NGINX is
+not needed for local use. See [local operation](deploy/local-dev.md).
+
 Build `web/dist/` with `npm run build`; `npm run build:publish` produces the site
 plus public assets in `publish/`. Serve complete output with an entry-page fallback
 and JavaScript MIME types for `.js`/`.mjs`. Revalidate mutable assets; hashed chunks
@@ -37,5 +42,4 @@ directory exposes the same documents across allowed origins. Documents live unde
 `~/.rabbithole/`); keep that directory persistent across service restarts.
 Native Codex history must remain reachable for saved generated articles to fork.
 
-See the [local NGINX runbook](deploy/local-nginx.md) for this installation and
-[generated commands](generated/commands.md) for executable checks.
+See [generated commands](generated/commands.md) for executable checks.

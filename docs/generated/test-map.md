@@ -62,6 +62,7 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/integration/bridge-process-restart.test.mjs` — CLI bridge process restart, fresh source loading, pairing and native fork history.
 - `test/integration/codex-cache-proxy.test.mjs` — private Codex cache affinity transport, streaming and lifecycle.
 - `test/integration/codex-ego-browser.test.mjs` — the Codex ego-browser skill's executable MCP adapter and reference/image round trips.
+- `test/integration/dev-server.test.mjs` — local frontend development serves complete builds and reloads after source edits and build recovery.
 - `test/integration/generation-lifecycle.test.mjs` — generation lifecycle capability contracts.
 - `test/integration/image-experience.test.mjs` — image experience capability contracts.
 - `test/integration/mermaid-rendering.test.mjs` — mermaid rendering capability contracts.
@@ -74,7 +75,7 @@ Each description is harvested from the test file's `@protects` declaration.
 ## e2e
 
 - `test/e2e/auto-tidy.test.mjs` — auto-tidy live canvas behavior, settings, and frozen exclusion.
-- `test/e2e/canvas-edge-scroll.test.mjs` — canvas edge scroll and anchored Command-wheel zoom capability contracts.
+- `test/e2e/canvas-edge-scroll.test.mjs` — canvas edge scroll, wheel panning during card drags, and anchored Command-wheel zoom capability contracts.
 - `test/e2e/enter-composition.test.mjs` — enter composition capability contracts.
 - `test/e2e/reactions.test.mjs` — selection reaction composition, wash-only rendering, deletion, and frozen behavior.
 - `test/e2e/reducer-browser-parity.test.mjs` — reducer browser parity capability contracts.

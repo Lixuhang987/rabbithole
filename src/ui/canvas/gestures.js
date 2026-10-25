@@ -122,13 +122,13 @@ export function enableCardGesture(node, handle, opts) {
       grabY = w.y - anchor.y;
       lastX = e.clientX;
       lastY = e.clientY;
+      r.activeCardGestures.add(place);
       scroller = createEdgeScroller(visibleCanvasRect, function (dx, dy) {
         cancelViewAnimation(); // an in-flight glide would fight the drag
         setViewAdjusted(true);
         view.x += dx;
         view.y += dy;
         applyTransform();
-        place();
       });
       return true;
     },
@@ -139,6 +139,9 @@ export function enableCardGesture(node, handle, opts) {
       if (scroller) scroller.update(lastX, lastY);
     },
     function () {
+      r.activeCardGestures.delete(place);
+      r.wheelKind = null;
+      r.wheelCard = null;
       if (scroller) scroller.stop();
       scroller = null;
       drawEdges();

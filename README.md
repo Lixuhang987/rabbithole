@@ -36,11 +36,19 @@ reference migration.
 
 ```bash
 npm install
-npm run build
+npm run dev
+```
+
+Open `http://localhost:3000`. Frontend edits rebuild and reload the page; build
+errors leave the last successful version available. In another terminal, start
+the bridge if it is not already managed as a background service:
+
+```bash
 node bin/rabbithole.js bridge --no-open
 ```
 
-Serve `web/dist/` with a static server and an entry-page fallback.
+The development server uses temporary build output; `npm run build` still creates
+production assets. See [local operation](docs/deploy/local-dev.md) for this installation.
 
 - [Architecture](docs/02-architecture.md)
 - [Data and trust](docs/03-data-and-trust.md)

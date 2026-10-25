@@ -18,6 +18,7 @@ export const r = {
   filmCameraHandle: null,
   cardResizeObserver: null,
   activePointerGestures: new Set(),
+  activeCardGestures: new Set(),
   suppressClickUntil: 0,
   cardMenuController: null,
   cardMenuNode: null,

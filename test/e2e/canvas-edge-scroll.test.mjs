@@ -1,4 +1,4 @@
-/** @protects canvas edge scroll and anchored Command-wheel zoom capability contracts. */
+/** @protects canvas edge scroll, wheel panning during card drags, and anchored Command-wheel zoom capability contracts. */
 import assert from "node:assert/strict";
 import { routeProvider, seedConfiguredBridge } from "../support/provider-mock.mjs";
 import { bootWebApp } from "../support/web-app-harness.mjs";
@@ -8,7 +8,7 @@ const { browser, baseUrl } = app;
 
 try {
   await verifyEdgeScrollCarriesTheCard();
-  console.log("canvas edge-scroll and Command-wheel zoom verification passed");
+  console.log("canvas edge-scroll, drag-wheel panning, and Command-wheel zoom verification passed");
 } finally {
   await app.close();
 }
@@ -27,6 +27,7 @@ async function verifyEdgeScrollCarriesTheCard() {
     await page.waitForFunction(() => document.body.classList.contains("mode-canvas"));
     await settleCamera(page);
     await verifyCommandWheelZoom(page);
+    await verifyWheelWhileDragging(page);
 
     const head = page.locator(".card.root .card-head").first();
     const start = await head.boundingBox();
@@ -96,6 +97,65 @@ async function verifyEdgeScrollCarriesTheCard() {
     assert.equal((await readCanvasState(page)).viewX, dropped.viewX, "releasing the drag must stop the scroll");
   } finally {
     await context.close();
+  }
+}
+
+async function verifyWheelWhileDragging(page) {
+  const head = page.locator(".card.root .card-head").first();
+  for (const shift of [false, true]) {
+    // Measure the existing empty-canvas behavior with the same browser input.
+    await page.mouse.move(980, 400);
+    await page.waitForTimeout(200);
+    if (shift) await page.keyboard.down("Shift");
+    const baseline = await readCanvasState(page);
+    await page.mouse.wheel(24, 60);
+    await page.waitForTimeout(100);
+    const panned = await readCanvasState(page);
+    const dx = panned.viewX - baseline.viewX;
+    const dy = panned.viewY - baseline.viewY;
+    assert.ok(dx || dy, "the empty-canvas wheel must pan the view");
+    await page.mouse.wheel(-24, -60);
+    if (shift) await page.keyboard.up("Shift");
+    await page.waitForTimeout(200);
+
+    const box = await head.boundingBox();
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    // Start with a card-owned wheel sequence: dragging must take over even
+    // without waiting for that sequence's idle timeout.
+    await page.mouse.wheel(0, 1);
+    await page.waitForTimeout(50);
+    await page.mouse.down();
+    await page.mouse.move(x + 8, y + 8);
+    const held = await head.boundingBox();
+    const before = await readCanvasState(page);
+    if (shift) await page.keyboard.down("Shift");
+    await page.mouse.wheel(24, 60);
+    await page.waitForTimeout(100);
+    const after = await readCanvasState(page);
+    assert.equal(after.viewX - before.viewX, dx, `${shift ? "Shift + wheel" : "wheel"} must pan horizontally during a drag just as on empty canvas`);
+    assert.equal(after.viewY - before.viewY, dy, `${shift ? "Shift + wheel" : "wheel"} must pan vertically during a drag just as on empty canvas`);
+    const moved = await head.boundingBox();
+    assert.ok(Math.abs(moved.x - held.x) < 0.01 && Math.abs(moved.y - held.y) < 0.01, "the grabbed card must stay under the stationary cursor while wheel panning");
+    if (shift) await page.keyboard.up("Shift");
+
+    const grabX = (x + 8 - after.viewX) / after.scale - after.nodeX;
+    const grabY = (y + 8 - after.viewY) / after.scale - after.nodeY;
+    await page.keyboard.down("Meta");
+    await page.mouse.wheel(0, -20);
+    await waitForScale(page, after.scale, "in");
+    const zoomed = await readCanvasState(page);
+    assert.ok(Math.abs(zoomed.viewX + (zoomed.nodeX + grabX) * zoomed.scale - (x + 8)) < 0.01, "zoom during a drag must preserve the horizontal grab point");
+    assert.ok(Math.abs(zoomed.viewY + (zoomed.nodeY + grabY) * zoomed.scale - (y + 8)) < 0.01, "zoom during a drag must preserve the vertical grab point");
+    await page.mouse.wheel(0, 20);
+    await waitForScale(page, after.scale, "restore");
+    await page.keyboard.up("Meta");
+    await page.mouse.up();
+    const released = await readCanvasState(page);
+    await page.mouse.wheel(0, 60);
+    await page.waitForTimeout(100);
+    assert.deepEqual(await readCanvasState(page), released, "releasing a card must restore card wheel ownership immediately");
   }
 }
 

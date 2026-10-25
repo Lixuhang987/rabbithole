@@ -17,12 +17,25 @@ on disk, and Codex owns native answer history. Read
 
 ```bash
 npm install
-npm run build
+npm run dev
+```
+
+Open `http://localhost:3000`; frontend edits rebuild and reload the page. In a
+second terminal, start the bridge unless its background service is already running:
+
+```bash
 node bin/rabbithole.js bridge --no-open
+```
+
+Before handing off source changes:
+
+```bash
+npm run build
 npm test
 ```
 
-Serve `web/dist/` separately. Bridge pairing data lives under `~/.rabbithole/`
+Local setup is documented in [Local operation](docs/deploy/local-dev.md).
+Bridge pairing data lives under `~/.rabbithole/`
 (`RABBITHOLE_DIR` overrides); Codex retains native history in its configured home.
 
 ## Conventions

@@ -14,8 +14,11 @@ import { checkStylesheets, cssFilesUnder, formatCssIntegrityFailure } from "./sc
 const require = createRequire(import.meta.url);
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const parsed = parseOutdir(process.argv.slice(2));
+const devDirectory = process.argv.find((arg) => arg.startsWith("--dev-dir="))?.slice("--dev-dir=".length);
+const dev = Boolean(devDirectory);
 const outdir = parsed.outdir;
-const absOutdir = path.resolve(rootDir, outdir);
+const absOutdir = dev ? path.resolve(devDirectory, "dist") : path.resolve(rootDir, outdir);
+const webDist = dev ? path.resolve(devDirectory, "web") : path.join(rootDir, "web/dist");
 // Rabbithole's hosted link relay; RABBITHOLE_PROXY_URL overrides it, and an
 // empty value ships the app with no default relay.
 const proxyConfig = readProxyConfig(process.env.RABBITHOLE_PROXY_URL ?? DEFAULT_FETCH_PROXY_URL);
@@ -42,12 +45,12 @@ await Promise.all([
   buildKatexCss().then((source) => fs.writeFile(path.join(absOutdir, "katex.css"), source, "utf8")),
 ]);
 
-if (!parsed.explicit) {
+if (dev || !parsed.explicit) {
   await buildWebApp(absOutdir);
 }
 
 const builtCssFiles = await cssFilesUnder(absOutdir);
-if (!parsed.explicit) builtCssFiles.push(...await cssFilesUnder(path.join(rootDir, "web/dist")));
+if (dev || !parsed.explicit) builtCssFiles.push(...await cssFilesUnder(webDist));
 await requireCssIntegrity(builtCssFiles);
 
 async function requireCssIntegrity(files) {
@@ -66,8 +69,8 @@ async function buildUiBundle(entry, outfile, globalName) {
     format: "iife",
     globalName,
     target: "es2018",
-    minify: true,
-    sourcemap: false,
+    minify: !dev,
+    sourcemap: dev ? "inline" : false,
     tsconfigRaw: {},
     loader: { ".css": "text" },
     legalComments: "none",
@@ -78,7 +81,7 @@ async function buildUiBundle(entry, outfile, globalName) {
   // compression pass that keeps committed live/frozen artifacts inside their
   // byte budgets without changing the browser target or runtime boundaries.
   const bundled = await fs.readFile(outputPath, "utf8");
-  const compressed = await minifyJavaScript(bundled, {
+  const compressed = dev ? { code: bundled } : await minifyJavaScript(bundled, {
     ecma: 2018,
     compress: true,
     mangle: true,
@@ -96,7 +99,7 @@ function buildCss(entry, outfile) {
     entryPoints: [path.join(rootDir, "src/design", entry)],
     outfile,
     bundle: true,
-    minify: true,
+    minify: !dev,
     loader: { ".css": "css" },
     legalComments: "none",
     logLevel: "silent",
@@ -145,7 +148,6 @@ async function replaceAsync(source, regex, replacer) {
 }
 
 async function buildWebApp(assetDir) {
-  const webDist = path.join(rootDir, "web/dist");
   await fs.rm(webDist, { recursive: true, force: true });
   await fs.mkdir(webDist, { recursive: true });
 
@@ -159,8 +161,8 @@ async function buildWebApp(assetDir) {
     target: "es2022",
     entryNames: "[name]",
     chunkNames: "chunks/[name]-[hash]",
-    minify: true,
-    sourcemap: false,
+    minify: !dev,
+    sourcemap: dev ? "inline" : false,
     // PDF.js imports `canvas` only inside its Node path. Native optional
     // dependencies are installed on some operating systems and omitted on
     // others, so resolving the package normally changes otherwise-identical

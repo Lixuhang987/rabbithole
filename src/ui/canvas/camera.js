@@ -28,6 +28,9 @@ export function applyTransform() {
   r.lifecycle.hooks.closeDockedNotePopover({ restoreFocus: false, commit: true });
   world.style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.scale + ")";
   zoomLabel.textContent = Math.round(view.scale * 100) + "%";
+  // A held card follows the pointer even when only the camera moves (wheel,
+  // zoom, or edge scrolling), without waiting for another pointermove.
+  for (const place of r.activeCardGestures) place();
   // A transform moves every on-canvas anchor rect without firing anything a
   // resize or mutation observer can see. Announce the view change so open
   // anchored surfaces (the selection ask/note popover) follow their anchors.

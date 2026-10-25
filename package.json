@@ -11,6 +11,7 @@
     "url": "git+https://github.com/shlokkhemani/rabbithole.git"
   },
   "scripts": {
+    "dev": "node scripts/dev.mjs",
     "build": "node build.mjs",
     "build:docs": "node scripts/build-docs.mjs",
     "build:publish": "node scripts/build-publish.mjs",
