@@ -4,6 +4,7 @@ import { childrenOf, currentNodeId, mode, nodes, rootId, shouldReduceMotion } fr
 import { EASE_OUT_MOTION_CSS } from "../easing.js";
 import { autoTidyEnabled, autoTidyGraceSeconds, onPreferenceChange } from "../preferences.js";
 import { isSettingsSheetOpen } from "../settings-sheet.js";
+import { createAutoLayout } from "./auto-layout.js";
 import { computeRibs, decideAutoTidyFolds, retimeRibs } from "./auto-tidy-policy.js";
 import { setBranchCollapsed, windowBranch } from "./fold.js";
 import { nodePin } from "./pins.js";
@@ -23,6 +24,12 @@ export function createAutoTidy(options) {
   let disposed = false;
   const glides = new Map();
   const autoFoldProvenance = new Map();
+  const autoLayout = createAutoLayout({
+    clock,
+    anchorId: () => warmId,
+    canRun: () => !paused() && !r.activePointerGestures.size && !isSettingsSheetOpen(),
+    beforeLayout: () => Array.from(glides.keys()).forEach(finishGlide),
+  });
 
   function nowForWarmth() {
     return pausedAt || clock.now();
@@ -163,6 +170,7 @@ export function createAutoTidy(options) {
     const next = autoTidyEnabled();
     if (next === enabled) return;
     enabled = next;
+    autoLayout.setEnabled(enabled);
     if (!enabled) {
       stop();
       return;
@@ -204,12 +212,15 @@ export function createAutoTidy(options) {
   syncEnabled();
 
   return {
+    layoutChanged: autoLayout.changed,
+    layoutEnabled: () => enabled,
     branchExpanded: branchExpanded,
     modeChanged: modeChanged,
     dispose: function () {
       if (disposed) return;
       disposed = true;
       stop();
+      autoLayout.dispose();
       stopAttention();
       stopPreferences();
       document.removeEventListener("visibilitychange", syncPause);

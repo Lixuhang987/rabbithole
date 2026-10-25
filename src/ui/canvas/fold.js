@@ -158,7 +158,8 @@ export function compactCollapsedBranch(node, branch) {
 
 export function toggleCollapse(node) {
   if (node._ephemeral) return;
-  const restored = node.collapsed ? restoreCollapseStacksFor([node], false) : [];
+  const organized = r.canvasMaintenance?.layoutEnabled();
+  const restored = node.collapsed && !organized ? restoreCollapseStacksFor([node], false) : [];
   if (!applyCollapsedState(node, !node.collapsed)) return;
   if (!node.collapsed) r.canvasMaintenance?.branchExpanded(node.id);
   renderVisibility();
@@ -170,11 +171,12 @@ export function toggleCollapse(node) {
 export function setBranchCollapsed(node, collapsed) {
   if (!node || node._ephemeral) return;
   const branch = windowBranch(node);
-  restoreCollapseStacksFor(branch, false);
+  const organized = r.canvasMaintenance?.layoutEnabled();
+  if (!organized) restoreCollapseStacksFor(branch, false);
   const changed = branch.filter(function (current) {
     return applyCollapsedState(current, collapsed);
   });
-  if (collapsed) compactCollapsedBranch(node, branch);
+  if (collapsed && !organized) compactCollapsedBranch(node, branch);
   branch.forEach(layoutNode);
   if (changed.length || collapsed) r.lifecycle.hooks.persistNodesBulk(branch);
   if (!collapsed) r.canvasMaintenance?.branchExpanded(node.id);
@@ -195,7 +197,8 @@ export function setChildrenCollapsed(node, collapsed) {
     });
   }
   collect(node);
-  const restored = collapsed ? [] : restoreCollapseStacksFor(descendants, false);
+  const restored =
+    collapsed || r.canvasMaintenance?.layoutEnabled() ? [] : restoreCollapseStacksFor(descendants, false);
   const changed = descendants.filter(function (current) {
     return applyCollapsedState(current, collapsed);
   });

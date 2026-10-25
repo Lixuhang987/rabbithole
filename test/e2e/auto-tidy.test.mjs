@@ -121,8 +121,14 @@ try {
   const beta = page.locator('.card:not(.root)', { hasText: "Beta branch answer." });
   await beta.waitFor();
   const betaId = await beta.getAttribute("data-id");
+  // Canvas cards live in the transformed world layer; Playwright's viewport
+  // hit-test does not understand that transform, so use the real click event
+  // while retaining the card's product handler and focus/engagement effects.
+  async function engageBeta() {
+    await beta.locator(".card-title").click({ force: true });
+  }
 
-  await beta.locator(".card-title").click();
+  await engageBeta();
   // One real-clock smoke covers the browser interval integration. The
   // exemption matrix below advances the injected clock without wall time.
   await page.waitForFunction(
@@ -139,17 +145,17 @@ try {
   const deltaStored = await waitForStoredNode(page, deltaId, (node) => node.collapsed === true);
   assert.equal(!!deltaStored.extensions.attention?.seen_at, true, "a consumed card wheel marks its card seen");
   const storedFold = await waitForStoredNode(page, alphaId, (node) => node.collapsed === true);
-  assert.equal(storedFold.extensions.canvas.collapse_stack.version, 1, "auto-tidy persists the standard branch stack");
+  assert.equal(storedFold.collapsed, true, "auto-tidy persists folded cards using the shared layered layout");
 
   await assertCompleteOrigin(alpha, alphaQuote, alphaQuestion);
-  const stackGeometry = await page.evaluate(([parentId, childId]) => {
+  const layoutGeometry = await page.evaluate(([parentId, childId]) => {
     const parent = document.querySelector('.card[data-id="' + parentId + '"]');
     const child = document.querySelector('.card[data-id="' + childId + '"]');
     const body = parent.querySelector(".card-body");
-    return { gap: parseFloat(child.style.top) - parseFloat(parent.style.top) - parent.offsetHeight,
+    return { layered: parseFloat(child.style.left) > parseFloat(parent.style.left) + parent.offsetWidth,
       scrollable: body.scrollHeight > body.clientHeight + 1 };
   }, [alphaId, await alphaDescendant.getAttribute("data-id")]);
-  assert.deepEqual(stackGeometry, { gap: 12, scrollable: false }, "long folded origins grow and keep the stack gap");
+  assert.deepEqual(layoutGeometry, { layered: true, scrollable: false }, "folded origins keep their text while descendants use a depth column");
 
   await toggleBranch(alpha);
   await page.waitForSelector('.card[data-id="' + alphaId + '"]:not(.collapsed)');
@@ -173,7 +179,7 @@ try {
 
   await toggleBranch(alpha);
   await page.waitForSelector('.card[data-id="' + alphaId + '"]:not(.collapsed)');
-  await beta.locator(".card-title").click();
+  await engageBeta();
   await alpha.evaluate((card) => card.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
   await advanceAutoTidyClock(page, 11_000);
   assert.equal(await alpha.evaluate((card) => card.classList.contains("collapsed")), false, "hover defers a due fold");
@@ -184,14 +190,14 @@ try {
   await toggleBranch(alpha);
   await alpha.locator(".card-more").evaluate((button) => button.click());
   await page.locator("#cm-pin").evaluate((button) => button.click());
-  await beta.locator(".card-title").click();
+  await engageBeta();
   await advanceAutoTidyClock(page, 11_000);
   assert.equal(await alpha.evaluate((card) => card.classList.contains("collapsed")), false, "a pinned card exempts its branch");
 
   await page.locator('.pinned-window-card[data-id="' + alphaId + '"] .pinned-pin').evaluate((button) => button.click());
   await alpha.locator(".nc-handle").evaluate((button) => button.click());
   await setComposerDraft(alpha, "Unsent draft protects this branch");
-  await beta.locator(".card-title").click();
+  await engageBeta();
   await advanceAutoTidyClock(page, 11_000);
   assert.equal(await alpha.evaluate((card) => card.classList.contains("collapsed")), false, "an unsent card-composer draft exempts its branch");
 
@@ -200,7 +206,7 @@ try {
   await page.locator("[data-tidy-enabled]").uncheck();
   await page.locator("[data-settings-close]").click();
   await setComposerDraft(alpha, "");
-  await beta.locator(".card-title").click();
+  await engageBeta();
   await advanceAutoTidyClock(page, 11_000);
   assert.equal(await alpha.evaluate((card) => card.classList.contains("collapsed")), false, "turning the mode off stops future folds");
 

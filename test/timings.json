@@ -3,6 +3,10 @@
     "ms": 16000,
     "browsers": []
   },
+  "branch-layout.test.mjs": {
+    "ms": 9000,
+    "browsers": []
+  },
   "canvas-edge-scroll.test.mjs": {
     "ms": 2500,
     "browsers": []

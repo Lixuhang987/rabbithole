@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 date: 2026-10-25
 ---
 
@@ -30,16 +30,18 @@ Document cards must not obscure other branches' connector lines. See
   to organized results, not arbitrary hand-arranged positions.
 
 Card placement and connector routing must be designed together. Nonoverlapping
-card rectangles alone do not guarantee unobstructed connections. Earlier
-alternatives are assessed in [Branch layout research](../research/branch-layout.md).
+card rectangles alone do not guarantee unobstructed connections.
 
-## Final interview questions
+## Confirmed interaction decisions
 
-The following recommendations are pending confirmation, not accepted behavior.
+The reader accepted these interaction rules, including the source-order
+exception required for strictly noncrossing connectors.
 
 1. Reflow triggers: when Auto-tidy is enabled, reflow after graph changes,
    folding, expansion, or settled size changes; avoid reflow for each streamed
    token. With it disabled, preserve free positioning until explicit Tidy.
+   Automatic reflow keeps unaffected root trees in place as obstacles; an
+   explicit Tidy is the operation that globally realigns every depth column.
 2. Folding: retain descendant cards as title bars rather than hiding the tree.
    When automatic organization is active, expansion recomputes layout instead
    of restoring stale pre-fold coordinates. Keep existing fold eligibility and
@@ -48,10 +50,16 @@ The following recommendations are pending confirmation, not accepted behavior.
    the affected tree, but preserves the engaged card's screen position and zoom.
    Explicit Tidy frames the organized canvas. Manual positions may be replaced
    by the next automatic reflow while Auto-tidy is enabled.
-4. Sibling order: retain stable creation order and contiguous descendant groups;
-   do not reorder by document size, title, or source-text anchor position.
+4. Sibling order: order anchored child branches by their source quotation's
+   vertical document position. This takes precedence over creation order when
+   the two conflict. Retain stable order for equal or absent anchors and keep
+   descendant groups contiguous; do not reorder by size or title.
 5. Connectors: use reserved inter-column channels with rounded orthogonal paths,
-   retaining true parent/child endpoints, source quotation anchors, and arrows.
+   retaining true parent/child endpoints, source quotation anchors, and arrows;
+   a monotone source fan-in preserves ordered ports before entering each
+   orthogonal channel.
+   Organized connectors must not cross one another or pass through unrelated
+   document cards. Connections may meet at the same genuine source anchor.
 6. Other surfaces: explicit Tidy includes independent notes and other root trees
    as separate vertical blocks. Automatic reflow treats unrelated manually
    placed cards as obstacles. Docked notes remain part of their parent surface;
@@ -59,5 +67,5 @@ The following recommendations are pending confirmation, not accepted behavior.
    retain screen positions while their canvas proxies participate in layout;
    floating window overlays are outside the canvas-line clearance guarantee.
 
-The layout direction is chosen; implementation waits for the remaining
-interaction decisions and confirmation of shared understanding.
+Implementation and verification are tracked in
+[the implementation plan](../plans/centered-branch-layout.md).

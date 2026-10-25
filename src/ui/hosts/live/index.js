@@ -32,6 +32,8 @@ function createCanvasMaintenance(clock) {
     throw error;
   }
   return {
+    layoutChanged: autoTidy.layoutChanged,
+    layoutEnabled: autoTidy.layoutEnabled,
     engageCard: attention.engageCard,
     branchExpanded: autoTidy.branchExpanded,
     cardScrolled: attention.cardScrolled,
