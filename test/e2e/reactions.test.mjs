@@ -13,7 +13,7 @@ try {
   const providerBodies = [];
   await routeProvider(page, {
     onProviderCall: (body) => providerBodies.push(body),
-    streams: [["TITLE: Fourth preset\n", "Digit four used the configured custom question."]],
+    streams: [["# Fourth preset\n", "Digit four used the configured custom question."]],
   });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await createDocument(page, [

@@ -216,7 +216,7 @@ process.stdin.on("data", (chunk) => {
       const search = process.env.FAKE_CODEX_WEB_SEARCH !== "disabled" && text.includes("SEARCH");
       const branch = text.includes("SEARCH branch");
       const answer = text.includes("ECHO_LARGE") ? text : text.includes("SEARCH")
-        ? `${branch ? "TITLE: Search branch" : "# Search answer"}\nFound online citeturn0search0. Missing citeturn0search1.`
+        ? `${branch ? "# Search branch" : "# Search answer"}\nFound online citeturn0search0. Missing citeturn0search1.`
         : "OK";
       if (search) {
         const item = { type: "agentMessage", id: `commentary-${turnId}`, phase: "commentary", text: "I will search now." };

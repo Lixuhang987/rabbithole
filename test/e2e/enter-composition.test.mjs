@@ -26,7 +26,7 @@ try {
 }
 
 async function verifyEnterCompositionAndNewlines() {
-  const start = await openTestPage([["TITLE: Composer Enter\n", "Composer Enter completed."]]);
+  const start = await openTestPage([["# Composer Enter\n", "Composer Enter completed."]]);
   try {
     await verifyStartComposer(start.page, () => start.providerCalls);
     assert.equal(start.providerCalls, 1, "plain Enter should submit the start composer exactly once");
@@ -35,13 +35,13 @@ async function verifyEnterCompositionAndNewlines() {
   }
 
   const documentPage = await openTestPage([
-    ["TITLE: Selection Enter\n", "Selection Enter completed."],
-    ["TITLE: Reader Enter\n", "Reader Enter completed."],
-    ["TITLE: Reader Lens\n", "Reader lens completed."],
-    ["TITLE: Styled Card Ask\n", "Styled card ask completed."],
-    ["TITLE: Card Enter\n", "Card Enter completed."],
-    ["TITLE: Card Lens\n", "Card lens completed."],
-    ["TITLE: Standalone Enter\n", "Standalone composer ask completed."],
+    ["# Selection Enter\n", "Selection Enter completed."],
+    ["# Reader Enter\n", "Reader Enter completed."],
+    ["# Reader Lens\n", "Reader lens completed."],
+    ["# Styled Card Ask\n", "Styled card ask completed."],
+    ["# Card Enter\n", "Card Enter completed."],
+    ["# Card Lens\n", "Card lens completed."],
+    ["# Standalone Enter\n", "Standalone composer ask completed."],
   ]);
   try {
     await createDocument(documentPage.page, "# Enter handling\n\nEuler identity lets us test selection and follow-up inputs.");

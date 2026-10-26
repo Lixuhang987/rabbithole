@@ -26,11 +26,11 @@ try {
   });
   await routeProvider(page, {
     streams: [
-      ["TITLE: Alpha branch\n", "Alpha branch answer."],
-      ["TITLE: Alpha descendant\n", "Alpha descendant answer."],
-      ["TITLE: Gamma branch\n", "Gamma branch answer."],
-      ["TITLE: Delta branch\n", longScrollAnswer],
-      ["TITLE: Beta branch\n", "Beta branch answer."],
+      ["# Alpha branch\n", "Alpha branch answer."],
+      ["# Alpha descendant\n", "Alpha descendant answer."],
+      ["# Gamma branch\n", "Gamma branch answer."],
+      ["# Delta branch\n", longScrollAnswer],
+      ["# Beta branch\n", "Beta branch answer."],
     ],
   });
   await page.goto(app.baseUrl, { waitUntil: "networkidle" });
@@ -294,8 +294,8 @@ async function verifyEnableMidSession(app) {
     const page = await context.newPage();
     await routeProvider(page, {
       streams: [
-        ["TITLE: Read while off\n", "First answer read before enabling."],
-        ["TITLE: Warm while off\n", "Second answer becomes the warm spine."],
+        ["# Read while off\n", "First answer read before enabling."],
+        ["# Warm while off\n", "Second answer becomes the warm spine."],
       ],
     });
     await page.goto(app.baseUrl, { waitUntil: "networkidle" });

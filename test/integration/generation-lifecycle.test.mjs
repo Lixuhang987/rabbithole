@@ -7,10 +7,9 @@ import { Run } from "../../src/core/hole/run.js";
 import { renderMarkdownToHtml } from "../../src/core/markdown.js";
 import { createHoleState, reduceHoleEvent } from "../../src/core/hole/reduce.js";
 import { ProviderError, normalizeProviderError } from "../../src/web/provider/errors.js";
-import { adaptBranchGeneration, adaptTextGeneration } from "../../src/web/provider/generation-events.js";
+import { adaptTextGeneration } from "../../src/web/provider/generation-events.js";
 import { BridgeProvider, streamBridgeEvents } from "../../src/web/provider/bridge-provider.js";
 import { sse } from "../support/provider-mock.mjs";
-import { TitleSentinelParser } from "../../src/web/provider/title-sentinel.js";
 import { DirectRabbitholeHost, createHoleFromMarkdown, createPendingHoleFromQuestion, generationDocEvents } from "../../src/web/transport/direct-host.js";
 
 const previousDir = process.env.RABBITHOLE_DIR;
@@ -62,26 +61,6 @@ try {
   await assert.rejects(() => collect(streamBridgeEvents({ url: "http://bridge", body: conversationBody })), (/** @type {any} */ error) => error.code === "agent_signed_out");
 } finally { globalThis.fetch = originalFetch; }
 console.log("ok generation lifecycle: native SSE fragmentation, CRLF, terminal metadata and errors");
-
-function parseTitle(chunks, fallbackTitle = "Fallback") {
-  const parser = new TitleSentinelParser({ fallbackTitle });
-  let text = "";
-  for (const chunk of chunks) text += parser.push(chunk);
-  text += parser.finish();
-  return { title: parser.title, text };
-}
-const sentinelStream = "TITLE: Fragmented title\n\n# Body\nExact bytes.";
-for (let offset = 0; offset <= sentinelStream.length; offset += 1) {
-  assert.deepEqual(parseTitle([sentinelStream.slice(0, offset), sentinelStream.slice(offset)]), {
-    title: "Fragmented title", text: "# Body\nExact bytes.",
-  }, `title sentinel split offset ${offset}`);
-}
-assert.deepEqual(parseTitle(["TITLE: Start\nbody"]), { title: "Start", text: "body" });
-assert.deepEqual(parseTitle(["TITLE: End"]), { title: "End", text: "" });
-assert.deepEqual(parseTitle(["plain body"]), { title: "Fallback", text: "plain body\n" });
-assert.deepEqual(parseTitle(["TITLE:"]), { title: "Fallback", text: "TITLE:\n" });
-assert.deepEqual(parseTitle(["TITLE: partial"]), { title: "partial", text: "" });
-console.log("ok generation lifecycle: title sentinel full fragmentation sweep and terminal edge cases");
 
 const existing = new ProviderError("rate", { status: 429, code: "rate_limit" });
 assert.strictEqual(normalizeProviderError(existing), existing);
@@ -164,10 +143,6 @@ assert.equal(abortedEvent, false, "abort routes to no product failure or node er
 console.log("ok generation lifecycle: local network failures have a dedicated recover-and-retry hook");
 
 async function* fixtureChunks(parts) { yield* parts; }
-const rawBranch = "TITLE: Adapter title\n\nParagraph one.\nParagraph two.";
-const branchEvents = await collect(adaptBranchGeneration(fixtureChunks(["TITLE: Ad", "apter title\n\nPara", "graph one.\nParagraph two."])));
-assert.deepEqual(branchEvents.filter((event) => event.type === "title"), [{ type: "title", title: "Adapter title" }]);
-assert.equal(branchEvents.filter((event) => event.type === "text").map((event) => event.delta).join(""), rawBranch.slice(rawBranch.indexOf("\n\n") + 2));
 const rawAuthor = "# Heading\r\n\r\nByte-exact body ☃";
 for (const events of [
   await collect(adaptTextGeneration(fixtureChunks(["# Head", "ing\r\n", "\r\nByte-exact body ☃"]))),
@@ -182,14 +157,14 @@ const bridgeProvider = new BridgeProvider({ backend: "codex", model: "test", bas
 try {
   globalThis.fetch = async (_url, options) => {
     const input = JSON.parse(options.body).input;
-    return responseFromChunks(chunksOf(sse([input.kind === "ask" ? "TITLE: Branch\nBranch body." : "# Root\nRoot body."]), [12]));
+    return responseFromChunks(chunksOf(sse([input.kind === "ask" ? "# Branch\nBranch body." : "# Root\nRoot body."]), [12]));
   };
   const authored = await collect(bridgeProvider.authorDocument({ markdown: "Source" }, new AbortController().signal, { nodeId: "root" }));
   assert.equal(authored.filter((event) => event.type === "text").map((event) => event.delta).join(""), "# Root\nRoot body.");
   const explained = await collect(bridgeProvider.authorExplainer({ question: "Why?", nodeId: "root" }, new AbortController().signal));
   assert.equal(explained.at(-1).type, "conversation");
   const branch = await collect(bridgeProvider.answerBranch({ parent_markdown: "Source", question: "Why?", node_id: "child" }, new AbortController().signal));
-  assert.equal(branch.find((event) => event.type === "title").title, "Branch");
+  assert.equal(branch.filter((event) => event.type === "text").map((event) => event.delta).join(""), "# Branch\nBranch body.");
 } finally { globalThis.fetch = originalFetch; }
 
 const run = new Run({ id: "run-a", initialMarkdown: "Start ", fallbackTitle: "Fallback" });
@@ -358,8 +333,10 @@ try {
   globalThis.fetch = async (_url, options) => {
     const request = JSON.parse(options.body);
     rootQuestionRequests.push(request);
-    const text = request.input.kind === "ask" ? "TITLE: Follow-up\nA deeper answer." : "# Gravity\nObjects attract each other.";
-    return responseFromChunks(chunksOf(sse([text]), [10]));
+    const text = request.input.kind === "ask"
+      ? (request.input.question === "How?" ? "\nIntroductory context.\n\n# Answer heading\nA deeper answer." : "# Follow-up\nA deeper answer.")
+      : "# Gravity\nObjects attract each other.";
+    return responseFromChunks(chunksOf(sse([text.slice(0, 3), text.slice(3, 12), text.slice(12)]), [10]));
   };
   await rootQuestionHost.runRootAnswer(rootQuestionHost.state.root_id, originalQuestion, new AbortController());
   const answeredRoot = rootQuestionHost.state.nodes.get(rootQuestionHost.state.root_id);
@@ -374,14 +351,28 @@ try {
   assert.ok(rootQuestionEvents.filter((event) => event.type === "node_progress").every((event) => event.markdown.startsWith("> **Original question**\n")));
   assert.equal(answeredRoot.origin.web_root_question, originalQuestion);
   const restored = new DirectRabbitholeHost({
-    hole: rootQuestionSaves.at(-1), store: { saveHole: async () => {} }, provider: bridgeProvider,
+    hole: rootQuestionSaves.at(-1), store: { saveHole: async (hole) => rootQuestionSaves.push(structuredClone(hole)) }, provider: bridgeProvider,
   });
+  restored.onEvent = (event) => rootQuestionEvents.push(event);
   try {
     let parentId = restored.state.root_id;
     for (const id of ["first-followup", "deeper-followup"]) {
-      restored.dispatch({ type: "branch_request", node_id: id, parent_id: parentId, origin: { question: "Why?" } });
+      const question = id === "first-followup" ? "Why?" : "How?";
+      const expectedTitle = id === "first-followup" ? "Follow-up" : "Answer heading";
+      restored.dispatch({ type: "branch_request", node_id: id, parent_id: parentId, question });
       await restored.runAnswer(id, new AbortController());
       assert.ok(rootQuestionRequests.at(-1).sourceSession, "follow-ups inherit native history after reload");
+      assert.equal(restored.state.nodes.get(id).title, expectedTitle, "the answer title replaces the question fallback");
+      assert.equal(rootQuestionEvents.filter((event) => event.type === "node_answered").at(-1).title, expectedTitle);
+      const saved = rootQuestionSaves.at(-1);
+      assert.equal(saved.nodes.find((node) => node.id === id).title, expectedTitle);
+      assert.equal(saved.nodes.find((node) => node.id === id).markdown, question === "How?"
+        ? "\nIntroductory context.\n\n# Answer heading\nA deeper answer."
+        : "# Follow-up\nA deeper answer.", "title derivation preserves the complete response");
+      const reloaded = new DirectRabbitholeHost({ hole: saved, store: { saveHole: async () => {} } });
+      try {
+        assert.equal(reloaded.state.nodes.get(id).title, expectedTitle);
+      } finally { await reloaded.dispose(); }
       parentId = id;
     }
   } finally { await restored.dispose(); }

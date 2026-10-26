@@ -196,7 +196,6 @@ This inventory is derived from the source tree.
 - `src/web/provider/generation-events.js`
 - `src/web/provider/model-descriptor.js`
 - `src/web/provider/network.js`
-- `src/web/provider/title-sentinel.js`
 - `src/web/settings/bridge-connection.js`
 - `src/web/settings/bridge-pairing.js`
 - `src/web/settings/model-settings.js`

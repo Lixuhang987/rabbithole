@@ -6,11 +6,11 @@ import { Run } from "../../core/hole/run.js";
 import { holeStateToHole } from "../../core/hole/reduce.js";
 import { buildNodeAnsweredEvent } from "../../core/hole-host.js";
 import { ProviderError, normalizeProviderError } from "../provider/errors.js";
-import { fallbackTitleForNode } from "../provider/title-sentinel.js";
 import { DirectHostBase } from "./direct-host-base.js";
 import {
   blobToDataUrl,
   branchAnsweredFields,
+  fallbackTitleForNode,
   generationDocEvents,
   isAuthError,
   rawOrigin,
@@ -205,7 +205,6 @@ export class DirectHostGeneration extends DirectHostBase {
     const context = this.buildBranchContext(node);
     if (!withoutAttachment) await this.attachBranchImage(node, context);
     const fallbackTitle = fallbackTitleForNode(node);
-    context.fallbackTitle = fallbackTitle;
     const association = this.state.nodes.get(context.parent_id)?.extensions?.[BACKEND_CONVERSATION];
     context.conversation = normalizeBackendConversation(association);
     if (association != null && !context.conversation) throw new ProviderError("The source article has an invalid session reference.", { code: "conversation_invalid" });
@@ -216,6 +215,9 @@ export class DirectHostGeneration extends DirectHostBase {
       nodeId,
       progressFields: { base_url: node.base_url, base_url_source: node.base_url_source },
       answeredFields: () => branchAnsweredFields(this.state.nodes.get(nodeId)),
+      beforeComplete: (activeRun) => {
+        activeRun.accept({ type: "title", title: titleFromMarkdown(activeRun.snapshot().markdown) || fallbackTitle });
+      },
     })) {
       if (controller.signal.aborted || this.disposed || !this.isLivePending(nodeId)) return;
       this.dispatch(docEvent);

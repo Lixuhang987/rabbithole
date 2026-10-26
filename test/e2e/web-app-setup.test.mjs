@@ -48,12 +48,12 @@ try {
   let requests = await page.evaluate(() => window.__bridgeStub.requests.filter((request) => request.kind === 'generate'));
   assert.equal(requests[0].body.backend, 'codex'); assert.equal(requests[0].body.input.kind, 'explain');
   assert.equal(requests[0].body.input.question, 'Search current sources');
-  await page.evaluate(() => window.__bridgeStub.queueGeneration({ text: 'TITLE: Whole follow-up\n\nWhole follow-up completed.' }));
+  await page.evaluate(() => window.__bridgeStub.queueGeneration({ text: '# Whole follow-up\n\nWhole follow-up completed.' }));
   await page.locator('.card.root .nc-handle').evaluate((button) => button.click());
   await page.fill('.card.root .nc-inner textarea', 'Whole article question');
   await page.locator('.card.root .nc-inner [data-commit="ask"]').click();
   await page.locator('.card:not(.root)', { hasText: 'Whole follow-up completed.' }).waitFor();
-  await page.evaluate(() => window.__bridgeStub.queueGeneration({ text: 'TITLE: Selection follow-up\n\nSelection follow-up completed.' }));
+  await page.evaluate(() => window.__bridgeStub.queueGeneration({ text: '# Selection follow-up\n\nSelection follow-up completed.' }));
   await selectVisibleText(page, { text: 'Found', rootSelector: '.card.root .doc-content' });
   await page.fill('#ask-text', 'Selected article question'); await page.locator('#ask [data-commit="ask"]').click();
   await page.locator('.card:not(.root)', { hasText: 'Selection follow-up completed.' }).waitFor();

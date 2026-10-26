@@ -57,6 +57,12 @@ export function branchAnsweredFields(node) {
 }
 
 export function defaultRunId() { return randomId("generation"); }
+export function fallbackTitleForNode(node) {
+  const origin = node?.origin || {};
+  if (origin.lens) return origin.lens;
+  return truncate(origin.question || node?.title || "Untitled", 72) || "Untitled";
+}
+
 export function titleFromMarkdown(markdown) {
   const match = /^#\s+(.+)$/m.exec(String(markdown || ""));
   return match ? truncate(match[1].trim(), 80) : "";

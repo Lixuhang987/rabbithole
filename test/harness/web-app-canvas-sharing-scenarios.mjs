@@ -456,7 +456,7 @@ async function verifyMobileSelectionSurface(browserEngine, engineName) {
   try {
     const canvasPage = await context.newPage();
     await routeProvider(canvasPage, {
-      streams: [["TITLE: Mobile custom branch\n", "Mobile custom question completed."]],
+      streams: [["# Mobile custom branch\n", "Mobile custom question completed."]],
       providerDelayMs: 220,
     });
     await canvasPage.goto(baseUrl, { waitUntil: "networkidle" });
@@ -536,7 +536,7 @@ async function verifyMobileSelectionSurface(browserEngine, engineName) {
 
     const readerPage = await context.newPage();
     await routeProvider(readerPage, {
-      streams: [["TITLE: Mobile lens branch\n", "Mobile lens action completed."]],
+      streams: [["# Mobile lens branch\n", "Mobile lens action completed."]],
       providerDelayMs: 220,
     });
     await readerPage.goto(baseUrl, { waitUntil: "networkidle" });
@@ -580,10 +580,10 @@ async function verifyAnchoredNotes() {
   try {
     await routeProvider(page, {
       streams: [
-        ["TITLE: Command ask\n", "Command ask completed."],
-        ["TITLE: Blank ask\n", "Blank ask completed."],
-        ["TITLE: Lens ask\n", "Lens ask completed."],
-        ["TITLE: Button ask\n", "Button ask completed."],
+        ["# Command ask\n", "Command ask completed."],
+        ["# Blank ask\n", "Blank ask completed."],
+        ["# Lens ask\n", "Lens ask completed."],
+        ["# Button ask\n", "Button ask completed."],
       ],
       providerDelayMs: 500,
     });
@@ -1658,7 +1658,7 @@ async function verifyStandaloneNotesAndEditing() {
     onProviderCall: () => { providerCalls += 1; },
     providerDelayMs: 220,
     streams: [[
-      "TITLE: Standalone canvas ask\n",
+      "# Standalone canvas ask\n",
       "The standalone two-intent composer reached the existing provider path.",
     ]],
   });
@@ -2401,7 +2401,7 @@ async function verifyStandaloneImagePaste() {
   await routeProvider(page, {
     onProviderCall: (body) => providerBodies.push(body),
     providerDelayMs: 350,
-    streams: [["TITLE: Pasted image answer\n", "The pasted image reached the provider."]],
+    streams: [["# Pasted image answer\n", "The pasted image reached the provider."]],
   });
   try {
     await page.goto(baseUrl, { waitUntil: "networkidle" });
@@ -2562,10 +2562,10 @@ async function verifyNoteToAskConversion() {
     providerDelayMs: 260,
     onProviderCall: (body) => providerBodies.push(body),
     streams: [
-      ["TITLE: Anchored conversion\n", "The anchored note became this streamed answer."],
-      ["TITLE: Follow-up conversion\n", "The follow-up note became this streamed answer."],
-      ["TITLE: Standalone conversion\n", "The standalone note borrowed the root context."],
-      ["TITLE: Image conversion\n", "The converted note delivered its pasted image."],
+      ["# Anchored conversion\n", "The anchored note became this streamed answer."],
+      ["# Follow-up conversion\n", "The follow-up note became this streamed answer."],
+      ["# Standalone conversion\n", "The standalone note borrowed the root context."],
+      ["# Image conversion\n", "The converted note delivered its pasted image."],
     ],
   });
   await page.route(PROVIDER_URL, (route) => {
@@ -2912,9 +2912,9 @@ async function verifyLogicalMarkGrouping() {
   await routeProvider(page, {
     onProviderCall: () => { providerCalls += 1; },
     streams: [
-      ["TITLE: Grouped mark branch\n", "The answer reached from every fragment of the grouped mark."],
-      ["TITLE: Overlapping mark branch\n", "The nested answer proves overlapping mark discovery."],
-      ["TITLE: Unrelated mark branch\n", "A separate answer used to prove hover isolation."],
+      ["# Grouped mark branch\n", "The answer reached from every fragment of the grouped mark."],
+      ["# Overlapping mark branch\n", "The nested answer proves overlapping mark discovery."],
+      ["# Unrelated mark branch\n", "A separate answer used to prove hover isolation."],
     ],
   });
   try {
@@ -3156,9 +3156,9 @@ async function verifyCardMenu() {
   const page = await context.newPage();
   await routeProvider(page, {
     streams: [
-      ["TITLE: Alpha branch\n", "Alpha branch markdown body."],
-      ["TITLE: Beta branch\n", "Beta branch markdown body."],
-      ["TITLE: Alpha descendant\n", "The descendant stays tidy under its parent."],
+      ["# Alpha branch\n", "Alpha branch markdown body."],
+      ["# Beta branch\n", "Beta branch markdown body."],
+      ["# Alpha descendant\n", "The descendant stays tidy under its parent."],
     ],
   });
   try {
@@ -3481,16 +3481,16 @@ async function verifyCanvasBranching() {
     onProviderCall: () => { providerCalls += 1; },
     streams: [
       [
-        "TITLE: Card follow-up\n",
+        "# Card follow-up\n",
         "Card drawer keyboard submission created this follow-up child.",
       ],
       [
-        "TITLE: Euler branch\n",
+        "# Euler branch\n",
         "Euler identity connects rotation, growth, and zero in one compact statement.\n\n",
         "```show\n<style>.flow{display:grid;gap:8px}.box{border:1px solid var(--border);padding:8px;border-radius:6px}</style><div class='flow'><div class='box'>rotation</div><div class='box'>cancellation</div></div>\n```\n",
       ],
       [
-        "TITLE: Deeper link\n",
+        "# Deeper link\n",
         "Second branch explains the geometric view: multiplication by $e^{i\\theta}$ rotates a point on the complex plane.",
       ],
     ],
