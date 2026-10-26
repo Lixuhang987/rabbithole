@@ -77,16 +77,19 @@ root request cache identity. See [implementation plan](fork-cache-affinity.md).
 ## Answer title follow-up
 
 An Ask streams ordinary Markdown through bridge provider → Run → host completion
-→ store. On completion, derive the article title from its first Markdown H1,
-including when preceded by blank lines or an introduction. Preserve the entire
-body; answers without H1 retain the existing question/lens fallback. Delete the
-special title-line parser and branch adapter. Stored node contracts stay unchanged.
+→ store, retaining the existing question/lens title fallback. The browser derives
+the card title from the first rendered top-level H1 in its document
+body. This applies to existing documents and frozen snapshots without rewriting
+node titles. Expanded and folded cards share this rendering; only documents
+without a body H1 use the stored title.
+Special title-line parsing remains removed. Stored node contracts stay unchanged.
 
-The existing original-question/reload scenario in
-`test/integration/generation-lifecycle.test.mjs` will cover fragmented H1 replies,
-completion events, preserved Markdown, persisted titles and reload. Update existing
-browser/native fixtures and live evals to use Markdown headings. New independent
-cases: 0. Existing saved titles are not rewritten.
+Reuse `test/e2e/folded-hover-preview.test.mjs` for fold/unfold labels, plain heading
+text, stored-title preservation, reload and frozen rendering. Reuse the existing
+original-question/reload scenario in `test/integration/generation-lifecycle.test.mjs`
+for complete body and title-field persistence. First observe the wrong stored-title
+write, remove completion-time derivation, then synchronize the tab label on body
+render and folding. Regenerate browser bundles/docs. New independent cases: 0.
 
 ## Verification record
 

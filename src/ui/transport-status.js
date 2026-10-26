@@ -343,10 +343,6 @@ function handleServer(msg) {
       cancelQueuedStreamRender(node.id);
       delete node._noteConversionRollback;
       if (hasStreamSurface(node)) refreshNodeHtml(node);
-      if (node.titleEl) {
-        node.titleEl.textContent = node.title;
-        node.titleEl.title = node.title;
-      }
       if (node.bodyEl) {
         fillBody(node);
         scheduleEdges();

@@ -5,6 +5,7 @@ import { isCommandEnter } from "../input-intent.js";
 import { buildOriginContext } from "../origin-provenance.js";
 import { applyChildHighlights } from "../text-marks.js";
 import { autoGrowEl, cardButton } from "./card-composer.js";
+import { syncCardTitle } from "./card-title.js";
 import { r } from "./runtime.js";
 
 export function fillBody(node) {
@@ -22,6 +23,7 @@ export function fillBody(node) {
   applyChildHighlights(dc, node);
   // The marks exist now, so the margin column that points at them can be built.
   r.lifecycle.hooks.renderDockedNotes(node);
+  syncCardTitle(node);
 }
 
 export function noteSurface(node, surface) {
@@ -33,6 +35,7 @@ export function noteSurface(node, surface) {
 export function replaceNoteSurface(node, surface, current) {
   const dc = noteSurface(node, surface);
   current.replaceWith(dc);
+  syncCardTitle(node);
   return dc;
 }
 

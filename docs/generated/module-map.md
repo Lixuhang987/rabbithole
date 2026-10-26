@@ -111,6 +111,7 @@ This inventory is derived from the source tree.
 - `src/ui/canvas/camera.js`
 - `src/ui/canvas/card-composer.js`
 - `src/ui/canvas/card-measure.js`
+- `src/ui/canvas/card-title.js`
 - `src/ui/canvas/card.js`
 - `src/ui/canvas/document.js`
 - `src/ui/canvas/edges.js`

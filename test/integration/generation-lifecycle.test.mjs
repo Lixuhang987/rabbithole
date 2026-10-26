@@ -358,11 +358,11 @@ try {
     let parentId = restored.state.root_id;
     for (const id of ["first-followup", "deeper-followup"]) {
       const question = id === "first-followup" ? "Why?" : "How?";
-      const expectedTitle = id === "first-followup" ? "Follow-up" : "Answer heading";
+      const expectedTitle = question;
       restored.dispatch({ type: "branch_request", node_id: id, parent_id: parentId, question });
       await restored.runAnswer(id, new AbortController());
       assert.ok(rootQuestionRequests.at(-1).sourceSession, "follow-ups inherit native history after reload");
-      assert.equal(restored.state.nodes.get(id).title, expectedTitle, "the answer title replaces the question fallback");
+      assert.equal(restored.state.nodes.get(id).title, expectedTitle, "generation preserves the question title field");
       assert.equal(rootQuestionEvents.filter((event) => event.type === "node_answered").at(-1).title, expectedTitle);
       const saved = rootQuestionSaves.at(-1);
       assert.equal(saved.nodes.find((node) => node.id === id).title, expectedTitle);

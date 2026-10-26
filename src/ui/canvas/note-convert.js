@@ -7,6 +7,7 @@ import { closed, frozen, nodes, postBrowserEvent, readerMain, rootId, uuid } fro
 import { refreshNodeHtml } from "../renderer.js";
 import { setNoteMarks, setPendingMarks } from "../text-marks.js";
 import { updateCardComposer } from "./card-composer.js";
+import { syncCardTitle } from "./card-title.js";
 import { fillBody } from "./document.js";
 import { scheduleEdges } from "./edges.js";
 import { layoutNode } from "./gestures.js";
@@ -45,8 +46,7 @@ export function startTitleEditing(node, titleEl) {
       node.title = next;
       r.lifecycle.hooks.persistNode(node);
     }
-    titleEl.textContent = node.title || "…";
-    titleEl.title = node.title || "";
+    syncCardTitle(node);
     if (document.activeElement === titleEl) titleEl.blur();
   }
   function onKeyDown(e) {

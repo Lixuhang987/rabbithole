@@ -1,6 +1,7 @@
 import { isDockedNote } from "../../core/hole/ask.js";
 import { nodeOrder } from "../../core/layout.js";
 import { childrenOf, isVisible, nodes, rootId } from "../core.js";
+import { syncCardTitle } from "./card-title.js";
 import { drawEdges, effH } from "./edges.js";
 import { layoutNode } from "./gestures.js";
 import { placedChildren, syncCollapseButton } from "./menu.js";
@@ -10,6 +11,7 @@ import { canvasCard, persistCanvasExtension, syncNodePinPresentation } from "./s
 export function applyCollapsedState(node, collapsed) {
   if (node.collapsed === collapsed) return false;
   node.collapsed = collapsed;
+  syncCardTitle(node);
   if (node.el) node.el.classList.toggle("collapsed", collapsed);
   if (node.collapseBtn) syncCollapseButton(node, node.collapseBtn);
   if (!collapsed && node.el) layoutNode(node);

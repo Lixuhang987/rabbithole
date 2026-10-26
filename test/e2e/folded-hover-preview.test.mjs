@@ -11,9 +11,10 @@ try {
   const page = await context.newPage();
   const quote = "A passage to preview in full.";
   const prompt = "Explain the passage.\nKeep the complete question.";
+  const heading = "A deliberately long answer title that must remain compact when folded";
   const answer = "## Preview answer\n\n" + Array.from({ length: 70 }, (_, i) =>
     `Paragraph ${i + 1} of the complete answer with **formatted content**.`).join("\n\n");
-  await routeProvider(page, { streams: [["# A deliberately long answer title that must remain compact when folded\n\n", answer]] });
+  await routeProvider(page, { streams: [["Introduction.\n\n```md\n# Code example\n```\n\n# A deliberately long **answer title** that must remain compact when folded ###\n\n", answer]] });
   await page.goto(app.baseUrl, { waitUntil: "networkidle" });
   await page.evaluate((markdown) => window.__rabbitholeTest.createDocument(markdown), "# Hover fixture\n\n" + quote);
   await selectVisibleText(page, { text: quote, rootSelector: ".card.root .doc-content" });
@@ -33,7 +34,13 @@ try {
   const id = await card.getAttribute("data-id");
   await page.waitForFunction(async (id) => (await window.__rabbitholeTest.readStoredHole()).nodes
     .some((node) => node.id === id && node.status === "answered"), id);
+  const storedTitle = (await page.evaluate(() => window.__rabbitholeTest.readStoredHole())).nodes
+    .find((node) => node.id === id).title;
+  assert.equal(storedTitle, prompt, "generation retains the question title field");
+  assert.equal(await card.locator(".card-title").textContent(), heading, "expanded cards derive the same document heading");
   await card.locator(".card-collapse").evaluate((button) => button.click());
+  assert.equal(await card.locator(".card-title").textContent(), heading, "folded labels derive from the document heading");
+  assert.equal(await card.locator(".card-title").getAttribute("title"), heading);
   assert.equal(await card.locator(".card-body").isVisible(), false);
   assert.equal(await card.locator(".card-title").evaluate((el) => getComputedStyle(el).textOverflow), "ellipsis");
   const preview = page.locator(".folded-preview");
@@ -51,7 +58,7 @@ try {
   assert.equal(await preview.locator(".origin-selection").textContent(), quote);
   assert.equal(await preview.locator(".origin-question").textContent(), prompt);
   assert.match(await preview.locator(".doc-content").textContent(), /Paragraph 70/);
-  assert.equal(await preview.locator(".doc-content strong").first().textContent(), "formatted content");
+  assert.equal(await preview.locator(".doc-content p strong").first().textContent(), "formatted content");
   assert.equal(await preview.locator(".origin-attachment-strip img").count(), 1);
   await page.waitForFunction(() => document.querySelector(".folded-preview")?.classList.contains("clipped"));
   const geometry = await preview.evaluate((el) => {
@@ -129,6 +136,18 @@ try {
   await card.locator(".card-collapse").click();
   await preview.waitFor({ state: "detached" });
   assert.equal(await card.locator(".card-body").isVisible(), true, "original unfold control remains available through the preview");
+  assert.equal(await card.locator(".card-title").textContent(), heading, "unfold keeps the same document heading");
+  await card.locator(".card-collapse").evaluate((button) => button.click());
+  await page.waitForFunction(async (id) => (await window.__rabbitholeTest.readStoredHole()).nodes
+    .find((node) => node.id === id)?.collapsed === true, id);
+  await page.reload({ waitUntil: "networkidle" });
+  assert.equal(await card.locator(".card-title").textContent(), heading, "reopened folded tabs derive existing document headings");
+  assert.equal((await page.evaluate(() => window.__rabbitholeTest.readStoredHole())).nodes
+    .find((node) => node.id === id).title, storedTitle, "folding preserves the stored title");
+  const frozen = await context.newPage();
+  await frozen.setContent(await page.evaluate(() => window.__rabbitholeTest.exportSnapshot()), { waitUntil: "load" });
+  assert.equal(await frozen.locator(`.card[data-id="${id}"] .card-title`).textContent(), heading,
+    "frozen tabs derive headings without modifying the portable title field");
   await context.close();
   console.log("ok folded preview: full origin, body, attachment, clipping, enlarged text, anchor, Tab and pins");
 } finally {

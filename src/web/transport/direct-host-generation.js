@@ -215,9 +215,6 @@ export class DirectHostGeneration extends DirectHostBase {
       nodeId,
       progressFields: { base_url: node.base_url, base_url_source: node.base_url_source },
       answeredFields: () => branchAnsweredFields(this.state.nodes.get(nodeId)),
-      beforeComplete: (activeRun) => {
-        activeRun.accept({ type: "title", title: titleFromMarkdown(activeRun.snapshot().markdown) || fallbackTitle });
-      },
     })) {
       if (controller.signal.aborted || this.disposed || !this.isLivePending(nodeId)) return;
       this.dispatch(docEvent);
