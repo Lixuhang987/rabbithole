@@ -32,7 +32,7 @@ This section is generated from `src/design/tokens.css`. Edit the stylesheet, the
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --text-xxs: 9px; --text-xxs-plus: 9.5px; --text-xs: 10px; --text-xs-plus: 10.5px;
   --text-sm: 11px; --text-sm-plus: 11.5px; --text-ui: 12px; --text-ui-plus: 12.5px;
-  --text-body: 13px; --text-base: 14px; --text-lg: 16px; --text-title: 17px;
+  --text-body: 13px; --text-base: 14px; --text-lg: 16px; --text-title: 17px; --text-preview: 18px;
   --weight-regular: 400; --weight-medium: 500; --weight-semibold: 600; --weight-strong: 650; --weight-bold: 700;
   --leading-ui: 1.4; --leading-body: 1.55; --leading-doc: 1.72;
 
@@ -57,6 +57,7 @@ This section is generated from `src/design/tokens.css`. Edit the stylesheet, the
   /* Layout */
   --reader-column: 680px; --reader-branch-rail: clamp(252px, 24vw, 320px); --rail-width: 224px;
   --surface-width-panel: 340px;
+  --folded-preview-width: 720px; --folded-preview-fade: 64px;
   --surface-edge: 14px; --surface-gap: 14px;
 
   /* Surface metrics */
@@ -280,6 +281,18 @@ These interaction rules apply wherever the corresponding surface is present.
   empty.
 - Position the bar with the common anchoring engine.
 - Failure copy explains what happened and how the user can recover.
+
+### 4.6 Folded document previews
+
+- Folded cards expose a compact, truncated title. A delayed pointer hover shows
+  a centered document excerpt independent of canvas zoom, with enlarged text.
+- This is a passive, pointer-only surface: it neither captures focus nor keeps
+  itself open. Only the source tab owns hover; leaving it closes the excerpt.
+- The excerpt is inert, with no scrim or internal scroll. It clips at 80vh with
+  a bottom fade when necessary. Plain Tab while previewing opens the document
+  through Expand document; normal keyboard navigation otherwise stays intact.
+- Detailed scope and content follow the
+  [folded preview contract](proposals/folded-card-hover-preview.md).
 
 ## 5. Optical corrections
 

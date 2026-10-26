@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { routeProvider, seedConfiguredBridge } from "../support/provider-mock.mjs";
 import { bootWebApp } from "../support/web-app-harness.mjs";
-import { assertSelectionPopoverUsable, selectVisibleText } from "../support/visible-selection.mjs";
+import { assertSelectionPopoverUsable, panCanvasBy, selectVisibleText } from "../support/visible-selection.mjs";
 
 const app = await bootWebApp();
 const alphaQuote = "Alpha anchor " + "完整引用内容需要保留。".repeat(24) + "引用结束。";
@@ -121,11 +121,10 @@ try {
   const beta = page.locator('.card:not(.root)', { hasText: "Beta branch answer." });
   await beta.waitFor();
   const betaId = await beta.getAttribute("data-id");
-  // Canvas cards live in the transformed world layer; Playwright's viewport
-  // hit-test does not understand that transform, so use the real click event
-  // while retaining the card's product handler and focus/engagement effects.
+  // Real keyboard focus engages the card even when the transformed canvas has
+  // put its header outside the viewport; forced clicks can hit another card.
   async function engageBeta() {
-    await beta.locator(".card-title").click({ force: true });
+    await beta.locator(".card-more").focus();
   }
 
   await engageBeta();
@@ -155,7 +154,7 @@ try {
     return { layered: parseFloat(child.style.left) > parseFloat(parent.style.left) + parent.offsetWidth,
       scrollable: body.scrollHeight > body.clientHeight + 1 };
   }, [alphaId, await alphaDescendant.getAttribute("data-id")]);
-  assert.deepEqual(layoutGeometry, { layered: true, scrollable: false }, "folded origins keep their text while descendants use a depth column");
+  assert.deepEqual(layoutGeometry, { layered: true, scrollable: false }, "compact folded headers keep descendants in a depth column");
 
   await toggleBranch(alpha);
   await page.waitForSelector('.card[data-id="' + alphaId + '"]:not(.collapsed)');
@@ -399,6 +398,40 @@ function installAutoTidyClock() {
 }
 
 async function assertCompleteOrigin(surface, quote, question) {
+  if (await surface.evaluate((element) => element.classList.contains("collapsed"))) {
+    assert.equal(await surface.locator(".card-body").isVisible(), false, "folded cards expose only their compact header");
+    const page = surface.page();
+    const viewport = page.viewportSize();
+    // Auto layout debounces for 400ms after a fold; wait for stable geometry
+    // as well as the camera before moving a real pointer to its new header.
+    await surface.evaluate((card) => new Promise((resolve) => {
+      let previous = "", stableSince = performance.now();
+      function sample(now) {
+        const rect = card.getBoundingClientRect();
+        const next = [rect.x, rect.y, rect.width, rect.height].join(":");
+        if (next !== previous) { previous = next; stableSince = now; }
+        if (now - stableSince >= 500) resolve();
+        else requestAnimationFrame(sample);
+      }
+      requestAnimationFrame(sample);
+    }));
+    await page.evaluate(() => window.__rabbitholeTest?.waitForCanvasViewSettled?.());
+    const box = await surface.locator(".card-head").boundingBox();
+    await panCanvasBy(page, { x: viewport.width / 2 - box.x - box.width / 2,
+      y: viewport.height / 2 - box.y - box.height / 2 });
+    await page.evaluate(() => window.__rabbitholeTest?.waitForCanvasViewSettled?.());
+    await page.mouse.move(2, 2);
+    const titleBox = await surface.locator(".card-title").boundingBox();
+    await page.mouse.move(titleBox.x + 15, titleBox.y + titleBox.height / 2);
+    const preview = page.locator(".folded-preview");
+    await preview.waitFor();
+    assert.equal(await preview.locator(".origin-selection").textContent(), quote);
+    assert.equal(await preview.locator(".origin-question").textContent(), question);
+    assert.equal(await preview.locator(".doc-content").count(), 1, "hover includes the answer body as well as its origin");
+    await page.mouse.move(2, 2);
+    await preview.waitFor({ state: "detached" });
+    return;
+  }
   assert.equal(await surface.locator(".origin-selection").innerText(), quote);
   assert.equal(await surface.locator(".origin-question").innerText(), question);
   assert.equal(await surface.locator(".origin-selection").isVisible(), true);

@@ -69,6 +69,7 @@ Each description is harvested from the test file's `@protects` declaration.
 - `test/e2e/branch-layout.test.mjs` — source-ordered centered canvas organization, clear connectors, and saved/frozen layout.
 - `test/e2e/canvas-edge-scroll.test.mjs` — canvas edge scroll, wheel panning during card drags, and anchored Command-wheel zoom capability contracts.
 - `test/e2e/enter-composition.test.mjs` — enter composition capability contracts.
+- `test/e2e/folded-hover-preview.test.mjs` — compact folds, inert full-document hover excerpts and Tab reader expansion.
 - `test/e2e/reactions.test.mjs` — selection reaction composition, wash-only rendering, deletion, and frozen behavior.
 - `test/e2e/reducer-browser-parity.test.mjs` — reducer browser parity capability contracts.
 - `test/e2e/selection-popover.test.mjs` — selection popover capability contracts.
