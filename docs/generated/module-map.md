@@ -116,6 +116,7 @@ This inventory is derived from the source tree.
 - `src/ui/canvas/document.js`
 - `src/ui/canvas/edges.js`
 - `src/ui/canvas/fold.js`
+- `src/ui/canvas/folded-preview.js`
 - `src/ui/canvas/gestures.js`
 - `src/ui/canvas/index.js`
 - `src/ui/canvas/inline-note.js`

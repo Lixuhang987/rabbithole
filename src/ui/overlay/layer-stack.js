@@ -1,6 +1,10 @@
 const layers = [];
 const consumedPointers = new Set();
 
+export function hasOpenLayer() {
+  return layers.length > 0;
+}
+
 function onConsumedPointerEnd(event) {
   if (!consumedPointers.has(event.pointerId)) return;
   consumedPointers.delete(event.pointerId);

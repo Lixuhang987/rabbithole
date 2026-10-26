@@ -407,10 +407,20 @@ span.pinned-pin { cursor: default; }
 .card.collapsed .card-body, .card.collapsed .card-resize, .card.collapsed .card-composer { display: none; }
 .card.collapsed { height: auto !important; min-height: 0 !important; max-height: none !important; overflow: hidden; }
 .card.collapsed .card-head { border-radius: var(--radius-card); border-bottom: none; }
-/* A fold keeps its complete Ask origin; only the answer and composer close. */
-:is(.card, .pinned-origin-card).collapsed .card-body.has-origin { display: block; flex: none; overflow: visible; }
-:is(.card, .pinned-origin-card).collapsed .card-body.has-origin > :not(.origin-context) { display: none; }
-:is(.card, .pinned-origin-card).collapsed .origin-context { margin-bottom: 0; }
+/* Hover excerpts are independent of the transformed world and never hit-test. */
+.folded-preview { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: var(--layer-feedback); width: var(--folded-preview-width); max-width: 90vw; max-height: 80vh;
+  box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
+  color: var(--fg); background: var(--card-bg); border: var(--border-default);
+  border-radius: var(--radius-popover); box-shadow: var(--shadow-popover); user-select: none; }
+.folded-preview, .folded-preview * { pointer-events: none !important; }
+.folded-preview-clip { position: relative; min-height: 0; overflow: clip; }
+.folded-preview-content { display: flow-root; padding: var(--space-10); overflow-wrap: anywhere; }
+.folded-preview .doc-content, .folded-preview .origin-context { font-size: var(--text-preview); }
+.folded-preview.clipped .folded-preview-clip::after { content: ""; position: absolute; inset: auto 0 0;
+  height: var(--folded-preview-fade); background: linear-gradient(transparent, var(--card-bg)); }
+.folded-preview-hint { flex: none; padding: var(--space-3) var(--space-10); border-top: var(--border-default);
+  color: var(--fg-dim); font-family: var(--font-ui); font-size: var(--text-ui); line-height: var(--leading-ui); }
 /* Landing flash when ⌘K jumps the canvas to a card. */
 .card.flash::after { opacity: 1; }
 

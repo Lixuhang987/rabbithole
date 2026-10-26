@@ -5,6 +5,10 @@ date: 2026-10-25
 
 # Complete Ask origin display
 
+The folded-card presentation below is replaced by the
+[hover preview design](folded-card-hover-preview.md). Document-opening origin
+content remains unchanged.
+
 Automatic and manual folds preserve the complete quoted content and question.
 Folded cards keep their width, wrap text without line or height limits, and grow
 vertically without an internal scrollbar. The answer title remains in the header.

@@ -15,6 +15,10 @@
     "ms": 5000,
     "browsers": []
   },
+  "folded-hover-preview.test.mjs": {
+    "ms": 10000,
+    "browsers": []
+  },
   "reactions.test.mjs": {
     "ms": 1800,
     "browsers": []
