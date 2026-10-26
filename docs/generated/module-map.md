@@ -11,7 +11,6 @@ This inventory is derived from the source tree.
 - `src/core/base-url.js`
 - `src/core/blocks.js`
 - `src/core/branch-layout.js`
-- `src/core/branch-routing.js`
 - `src/core/clock.js`
 - `src/core/concurrency.js`
 - `src/core/contracts/artifact.d.ts`
@@ -121,7 +120,6 @@ This inventory is derived from the source tree.
 - `src/ui/canvas/inline-note.js`
 - `src/ui/canvas/menu.js`
 - `src/ui/canvas/note-convert.js`
-- `src/ui/canvas/organized-edges.js`
 - `src/ui/canvas/pins.js`
 - `src/ui/canvas/runtime.js`
 - `src/ui/canvas/shared.js`

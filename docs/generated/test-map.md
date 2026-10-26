@@ -50,7 +50,7 @@ Each description is harvested from the test file's `@protects` declaration.
 ## integration
 
 - `test/integration/backend-persistence.test.mjs` — fresh-browser document, attachment and native-conversation reopening after bridge restart.
-- `test/integration/branch-layout.test.mjs` — centered variable-size document branches and ordered connector channels.
+- `test/integration/branch-layout.test.mjs` — independently centered depth columns, direct-child cluster spacing, and folding.
 - `test/integration/bridge-failure-modes.test.mjs` — native bridge search failures, cancellation, concurrency and backend availability.
 - `test/integration/bridge-http.test.mjs` — native bridge requests, independent article sessions, persistence and isolation.
 - `test/integration/bridge-long-answer.test.mjs` — long subscribed answers complete while cancellation remains explicit.
@@ -66,7 +66,7 @@ Each description is harvested from the test file's `@protects` declaration.
 ## e2e
 
 - `test/e2e/auto-tidy.test.mjs` — auto-tidy live canvas behavior, settings, and frozen exclusion.
-- `test/e2e/branch-layout.test.mjs` — source-ordered centered canvas organization, clear connectors, and saved/frozen layout.
+- `test/e2e/branch-layout.test.mjs` — source-ordered child clusters, shared-center cubic connections, hover, and saved/frozen layout.
 - `test/e2e/canvas-edge-scroll.test.mjs` — canvas edge scroll, wheel panning during card drags, and anchored Command-wheel zoom capability contracts.
 - `test/e2e/enter-composition.test.mjs` — enter composition capability contracts.
 - `test/e2e/reactions.test.mjs` — selection reaction composition, wash-only rendering, deletion, and frozen behavior.

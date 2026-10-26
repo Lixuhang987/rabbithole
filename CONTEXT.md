@@ -11,6 +11,10 @@ whole-article follow-up, or produced as the answer to an Ask.
 **Branch**:
 A document on the reading canvas together with all of its descendant documents.
 
+**Child cluster**:
+The direct child documents of one parent document, treated as a visual group
+on the reading canvas. A child's descendants belong to their own child clusters.
+
 **Node conversation**:
 The backend conversation associated with an article node. An Ask on that article
 branches from this conversation, and its answer owns the resulting conversation.

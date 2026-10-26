@@ -317,7 +317,7 @@ export function setNodeFontScale(node, value) {
     surfaces[i].style.fontSize = fontPx(base, surfaceFontScale(node, surfaces[i].dataset.surface)) + "px";
   }
   coreHooks.persistNode(node);
-  // Reflowed text moves the inline marks edges anchor to.
+  // Reflow can change card heights and docked-note positions.
   coreHooks.scheduleEdges();
   return node.font_scale;
 }

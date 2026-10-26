@@ -15,18 +15,22 @@ export async function readCanvasGeometry(page) {
       }))
       .sort((a, b) => a.id.localeCompare(b.id));
     const edges = [...document.querySelectorAll("#edges path[data-child]")].map((path) => {
-      const length = path.getTotalLength();
-      const count = Math.max(2, Math.ceil(length / 3));
-      return { id: path.dataset.child, d: path.getAttribute("d"), points: Array.from({ length: count + 1 }, (_, i) => {
-        const point = path.getPointAtLength(length * i / count);
-        return { x: point.x, y: point.y };
-      }) };
+      const start = path.getPointAtLength(0);
+      const end = path.getPointAtLength(path.getTotalLength());
+      return { id: path.dataset.child, d: path.getAttribute("d"),
+        start: { x: start.x, y: start.y }, end: { x: end.x, y: end.y },
+        highlighted: path.classList.contains("edge-hl") };
     });
-    return { cards, edges, view: { x: matrix.m41, y: matrix.m42, scale: matrix.a } };
+    const ports = [...document.querySelectorAll("#edges circle")].map((dot) => ({
+      parentId: dot.dataset.parent, side: dot.dataset.side,
+      x: Number(dot.getAttribute("cx")), y: Number(dot.getAttribute("cy")),
+      highlighted: dot.classList.contains("edge-hl"),
+    }));
+    return { cards, edges, ports, view: { x: matrix.m41, y: matrix.m42, scale: matrix.a } };
   });
 }
 
-export function assertClearCanvas(geometry, nodes) {
+export function assertCanvasConnections(geometry, nodes) {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   for (let i = 0; i < geometry.cards.length; i++) {
     const a = geometry.cards[i];
@@ -35,29 +39,31 @@ export function assertClearCanvas(geometry, nodes) {
         `organized cards overlap: ${a.id} and ${b.id}`);
     }
   }
+  const cards = new Map(geometry.cards.map((card) => [card.id, card]));
+  const expectedEdges = geometry.cards.filter((card) => cards.has(byId.get(card.id)?.parent_id)).map((card) => card.id).sort();
+  assert.deepEqual(geometry.edges.map((edge) => edge.id).sort(), expectedEdges,
+    "every visible parent-child relation has exactly one curve");
+  const occupied = new Map();
   for (const edge of geometry.edges) {
-    const parentId = byId.get(edge.id)?.parent_id;
-    for (const card of geometry.cards) {
-      if (card.id === parentId || card.id === edge.id) continue;
-      assert(!edge.points.some((p) => p.x > card.x + 0.5 && p.x < card.x + card.w - 0.5
-        && p.y > card.y + 0.5 && p.y < card.y + card.h - 0.5),
-      `connector ${edge.id} passes through unrelated card ${card.id}`);
+    const parent = cards.get(byId.get(edge.id)?.parent_id), child = cards.get(edge.id);
+    assert(parent && child, "each connector belongs to two canvas cards");
+    const right = child.x + child.w / 2 >= parent.x + parent.w / 2;
+    const start = { x: parent.x + (right ? parent.w : 0), y: parent.y + parent.h / 2 };
+    const end = { x: child.x + (right ? 0 : child.w), y: child.y + child.h / 2 };
+    for (const axis of ["x", "y"]) {
+      assert(Math.abs(edge.start[axis] - start[axis]) < 0.1, `connector ${edge.id} starts at the parent side center`);
+      assert(Math.abs(edge.end[axis] - end[axis]) < 0.1, `connector ${edge.id} ends at the child side center`);
     }
+    assert.match(edge.d, /^M [-\d.]+ [-\d.]+ C [-\d.]+ [-\d.]+ [-\d.]+ [-\d.]+ [-\d.]+ [-\d.]+$/,
+      "each connection is one cubic Bezier curve");
+    occupied.set(parent.id + ":" + (right ? "right" : "left"), start);
   }
-  for (let i = 0; i < geometry.edges.length; i++) {
-    const a = geometry.edges[i];
-    for (const b of geometry.edges.slice(i + 1)) {
-      for (let ai = 1; ai < a.points.length; ai++) {
-        for (let bi = 1; bi < b.points.length; bi++) {
-          assert(!properIntersection(a.points[ai - 1], a.points[ai], b.points[bi - 1], b.points[bi]),
-            `connectors cross: ${a.id} and ${b.id}`);
-        }
-      }
-    }
+  assert.equal(geometry.ports.length, occupied.size, "one shared dot exists per occupied parent side");
+  for (const dot of geometry.ports) {
+    const start = occupied.get(dot.parentId + ":" + dot.side);
+    assert(start, "each dot belongs to an occupied parent side");
+    assert(Math.abs(dot.x - start.x) < 0.1 && Math.abs(dot.y - start.y) < 0.1,
+      "shared dot remains on the parent side center");
+    occupied.delete(dot.parentId + ":" + dot.side);
   }
-}
-
-function properIntersection(a, b, c, d) {
-  const cross = (p, q, r) => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
-  return cross(a, b, c) * cross(a, b, d) < -1e-8 && cross(c, d, a) * cross(c, d, b) < -1e-8;
 }

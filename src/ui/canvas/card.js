@@ -7,7 +7,7 @@ import { openNode } from "../reader.js";
 import { cancelViewAnimation } from "./camera.js";
 import { buildCardComposer, cardButton, closeCardDrawer, updateCardComposer } from "./card-composer.js";
 import { fillBody } from "./document.js";
-import { focusOrigin, scheduleNodeEdges } from "./edges.js";
+import { focusOrigin } from "./edges.js";
 import { branchAllCollapsed, setBranchCollapsed, toggleCollapse } from "./fold.js";
 import { enableDrag, enableResize, layoutNode, onCardControl } from "./gestures.js";
 import { startNoteEditing } from "./inline-note.js";
@@ -132,11 +132,11 @@ export function createNodeEl(node, enter) {
     closeCardMenu({ restoreFocus: false });
     setBranchCollapsed(node, !branchAllCollapsed(node));
   });
-  // Scrolling a card moves the inline marks its children's edges start from.
+  // Scrolling moves docked notes; connector ports stay at the card center.
   body.addEventListener(
     "scroll",
     function () {
-      scheduleNodeEdges(node);
+      r.lifecycle.hooks.positionDockedNotes(body);
     },
     { passive: true },
   );
@@ -149,7 +149,7 @@ export function createNodeEl(node, enter) {
       e.stopPropagation();
       startNoteEditing(node, dc, null, { left: e.clientX, top: e.clientY });
     });
-  // Hovering a card lights up its edge and the exact text it branched from.
+  // Hovering a card emphasizes its incoming edge, source text and child cluster.
   el.addEventListener("mouseenter", function () {
     focusOrigin(node, true);
   });

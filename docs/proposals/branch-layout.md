@@ -1,71 +1,51 @@
 ---
 status: accepted
-date: 2026-10-25
+date: 2026-10-26
 ---
 
-# Branch organization and clear connector lines
+# Branch organization and shared parent ports
 
-## Confirmed goal
+## Goal
 
-Readers need branches to remain visually distinct when the canvas is organized.
-Document cards must not obscure other branches' connector lines. See
-[Product](../../PRODUCT.md) for the durable product constraint.
+Readers must recognize which parent owns each group of documents in a depth
+column. See [Product](../../PRODUCT.md) and **Child cluster** in
+[Context](../../CONTEXT.md).
 
-## Confirmed layout decisions
+## Confirmed behavior
 
-- Automatic organization and explicit Tidy use the same spatial rules.
-- Relationship depth determines the horizontal column. All direct children
-  appear one column to the right, including whole-article follow-ups. Terminal
-  leaves at different depths remain in different columns.
-- Reserve each subtree the larger of its own rendered card height and the sum
-  of its children's reserved heights plus sibling gaps. Center the parent and
-  its child group within that reserved area. Two tree passes are sufficient;
-  contour packing and pairwise collision optimization are not required.
-- The parent is centered over its child branches' combined reserved space.
-  Direct children need not have equal distances from their parent.
-- Each branch retains a continuous reserved region, including descendants.
-  Fixed depth columns may still be tall when a parent has many leaf children;
-  leaf wrapping or extra visual layers are outside this chosen layout.
-- Manual dragging remains free. The unobstructed-connection guarantee applies
-  to organized results, not arbitrary hand-arranged positions.
+- Keep independently centered depth columns. A cluster consists only of one
+  parent's direct children; do not reserve recursive subtree regions or align
+  every parent to its own child cluster's midpoint.
+- Pack siblings with a 30-unit gap, separate different child clusters by 90,
+  and keep a fixed 70-unit gap between depth columns. Use the same canvas-unit
+  gaps for expanded and folded cards. Keep independent root trees separate.
+- Preserve quotation/source order, with stable creation order for equal or
+  absent anchors. Whole-article follow-ups use the next depth column too.
+- Each parent has at most one shared center port per side. Compare horizontal
+  card centers: right-side children connect parent-right to child-left;
+  left-side children connect parent-left to child-right. A horizontal tie uses
+  parent-right. Never use top or bottom ports. Organized children are rightward.
+- Draw one full cubic Bezier curve per child, sharing only the parent endpoint,
+  without a common trunk. Draw one dot per occupied parent side; remove the
+  quotation-anchored dot color distinction. Keep the existing neutral stroke
+  and hover accent; do not add arrowheads or relation labels.
+- Hovering a card highlights its incoming connection and the matching source
+  quotation, and also its direct children's outgoing connections. Hovering a
+  quotation highlights only its corresponding connection. Removing geometric
+  quotation anchoring does not remove source navigation or text highlighting.
+  Quotation hover takes precedence over the containing card's cluster emphasis.
+- Scrolling source text does not move connector ports. Fold, resize, drag and
+  pin changes still update endpoints using the canvas card or canvas proxy.
+- Remove orthogonal routing, bend lanes, channel reservations and inferred
+  routing-mode detection. Preserve card-overlap prevention during automatic
+  organization and initial child placement.
+- Connector clearance is no longer a hard guarantee. Large size differences
+  or arbitrary free positioning may produce crossings or paths through cards.
+  Tidy improves grouping and readability without routing around obstacles.
+- Automatic organization and explicit Tidy use the same cluster rules. Keep
+  existing trigger, camera anchoring, folding and independent-tree behavior.
+  Live documents and newly exported frozen snapshots share the visual rules;
+  existing frozen exports remain unchanged. No portable data change is needed.
 
-Card placement and connector routing must be designed together. Nonoverlapping
-card rectangles alone do not guarantee unobstructed connections.
-
-## Confirmed interaction decisions
-
-The reader accepted these interaction rules, including the source-order
-exception required for strictly noncrossing connectors.
-
-1. Reflow triggers: when Auto-tidy is enabled, reflow after graph changes,
-   folding, expansion, or settled size changes; avoid reflow for each streamed
-   token. With it disabled, preserve free positioning until explicit Tidy.
-   Automatic reflow keeps unaffected root trees in place as obstacles; an
-   explicit Tidy is the operation that globally realigns every depth column.
-2. Folding: retain descendant cards as title bars rather than hiding the tree.
-   When automatic organization is active, expansion recomputes layout instead
-   of restoring stale pre-fold coordinates. Keep existing fold eligibility and
-   exemptions for unread, active, pinned, drafting, or pending work.
-3. Movement and camera: automatic reflow may reposition sibling branches in
-   the affected tree, but preserves the engaged card's screen position and zoom.
-   Explicit Tidy frames the organized canvas. Manual positions may be replaced
-   by the next automatic reflow while Auto-tidy is enabled.
-4. Sibling order: order anchored child branches by their source quotation's
-   vertical document position. This takes precedence over creation order when
-   the two conflict. Retain stable order for equal or absent anchors and keep
-   descendant groups contiguous; do not reorder by size or title.
-5. Connectors: use reserved inter-column channels with rounded orthogonal paths,
-   retaining true parent/child endpoints, source quotation anchors, and arrows;
-   a monotone source fan-in preserves ordered ports before entering each
-   orthogonal channel.
-   Organized connectors must not cross one another or pass through unrelated
-   document cards. Connections may meet at the same genuine source anchor.
-6. Other surfaces: explicit Tidy includes independent notes and other root trees
-   as separate vertical blocks. Automatic reflow treats unrelated manually
-   placed cards as obstacles. Docked notes remain part of their parent surface;
-   their visible footprint must be considered for clearance. Pinned windows
-   retain screen positions while their canvas proxies participate in layout;
-   floating window overlays are outside the canvas-line clearance guarantee.
-
-Implementation and verification are tracked in
-[the implementation plan](../plans/centered-branch-layout.md).
+This replaces the previous quotation-anchored orthogonal routing design.
+Implementation and verification: [Shared parent connections](../plans/shared-parent-connections.md).

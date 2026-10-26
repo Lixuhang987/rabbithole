@@ -1,5 +1,8 @@
 # Centered branch layout implementation
 
+Historical plan. Connector routing and cluster spacing are superseded by
+[Shared parent connections](shared-parent-connections.md).
+
 Approved behavior: [Branch layout](../proposals/branch-layout.md). Review base:
 `5a568c07d64503ce7a310da633e61dfe02d29449`. Worktree and task branch:
 `.worktree/codex/centered-branch-layout`, `codex/centered-branch-layout`.

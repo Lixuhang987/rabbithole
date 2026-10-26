@@ -95,7 +95,14 @@ export function initDockedNotes() {
         syncPartnerHighlight(e, false);
       });
       // Scroll does not bubble, so reposition note dots on the way down.
-      scope.listen(surface, "scroll", scheduleEdges, true);
+      scope.listen(
+        surface,
+        "scroll",
+        function () {
+          positionDockedNotes(surface);
+        },
+        true,
+      );
     });
     // Reader line breaks can change with the viewport. Repaint the empty note
     // overlays and move their dots after that reflow; neither pass can affect

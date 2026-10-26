@@ -1,7 +1,12 @@
 import { TREE_PARENT_GAP, TREE_STACK_GAP, unionBounds } from "./layout.js";
 
-export const CHANNEL_PADDING = 18;
-export const CHANNEL_LANE = 12;
+const CLUSTER_GAP = 90;
+
+/** @param {BranchEntry[]} column @param {number} index */
+function gapBefore(column, index) {
+  if (!index) return 0;
+  return column[index - 1]?.parent_id === column[index]?.parent_id ? TREE_STACK_GAP : CLUSTER_GAP;
+}
 
 /** @typedef {{ id: string, parent_id: string | null, width: number, height: number }} BranchEntry */
 /** @typedef {BranchEntry & { children: Branch[] }} Branch */
@@ -29,8 +34,6 @@ export function layoutBranches(entries) {
 
   /** @type {number[]} */
   const widths = [];
-  /** @type {number[]} */
-  const lanes = [];
   /** @type {Map<string, Branch[][]>} */
   const treeColumns = new Map();
   for (const root of roots) {
@@ -45,7 +48,6 @@ export function layoutBranches(entries) {
       const depth = depths.get(branch.id) || 0;
       (byDepth[depth] ||= []).push(branch);
       widths[depth] = Math.max(widths[depth] || 0, branch.width);
-      lanes[depth] = Math.max(lanes[depth] || 0, branch.children.length);
       for (const child of branch.children) {
         depths.set(child.id, depth + 1);
         queue.push(child);
@@ -55,8 +57,8 @@ export function layoutBranches(entries) {
   }
 
   let columnX = 0;
-  const columns = widths.map((width, depth) => {
-    const gap = Math.max(TREE_PARENT_GAP, CHANNEL_PADDING * 2 + (lanes[depth] || 0) * CHANNEL_LANE);
+  const columns = widths.map((width) => {
+    const gap = TREE_PARENT_GAP;
     const column = { x: columnX, width, gap };
     columnX += width + gap;
     return column;
@@ -71,8 +73,7 @@ export function layoutBranches(entries) {
   for (const root of roots) {
     const byDepth = treeColumns.get(root.id) || [];
     const blockHeights = byDepth.map((column) =>
-      column.reduce((sum, branch) => sum + branch.height, 0)
-      + Math.max(0, column.length - 1) * TREE_STACK_GAP,
+      column.reduce((sum, branch, index) => sum + gapBefore(column, index) + branch.height, 0),
     );
     const centerY = blockHeights[1] != null
       ? blockHeights[1] / 2
@@ -84,12 +85,15 @@ export function layoutBranches(entries) {
       const blockHeight = blockHeights[depth];
       if (!column || blockHeight == null) continue;
       let y = centerY - blockHeight / 2;
-      for (const branch of column) {
+      for (let index = 0; index < column.length; index++) {
+        const branch = column[index];
+        if (!branch) continue;
+        y += gapBefore(column, index);
         const position = { x: columns[depth]?.x || 0, y };
         localPositions.set(branch.id, position);
         const bounds = { minX: position.x, minY: y, maxX: position.x + branch.width, maxY: y + branch.height };
         localBounds = unionBounds(localBounds, bounds);
-        y += branch.height + TREE_STACK_GAP;
+        y += branch.height;
       }
     }
 

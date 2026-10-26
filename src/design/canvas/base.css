@@ -310,7 +310,6 @@ body.mode-flight #viewport { display: block; }
 /* Hover wakes an edge gently — a lean toward the accent, not a costume change. */
 #edges path.edge-hl { stroke: color-mix(in srgb, var(--accent) 45%, var(--edge)); }
 #edges circle { fill: var(--edge); transition: fill var(--duration-legacy-220) ease; }
-#edges circle.anchored { fill: color-mix(in srgb, var(--accent) 65%, var(--edge)); }
 #edges circle.edge-hl { fill: color-mix(in srgb, var(--accent) 60%, var(--edge)); }
 /* overflow stays visible so the follow-up drawer can slide out below the card;
    the head carries its own top radius instead. */

@@ -7,12 +7,14 @@ Answers retain the complete quoted content and question at their beginning,
 including when folded. Folding hides the answer while keeping the reason for
 the branch readable.
 
-Canvas organization keeps branches visually distinct and prevents document
-cards from obscuring other branches' connector lines. Organized layouts show
-successive relationship depths in successive columns. Each parent is vertically
-centered over the space reserved for its child branches, which accounts for
-their descendant documents rather than requiring equal sibling spacing.
-Readers can freely drag cards; organizing the canvas repairs resulting overlaps.
+Canvas organization makes each document's direct children recognizable as a
+cluster, with larger gaps between clusters than within them. Organized layouts
+show successive relationship depths in successive independently centered
+columns. Connections fan out from shared side-center parent ports to side-center
+child ports using cubic Bezier curves. Readers can freely drag cards; organizing
+the canvas repairs card overlaps, without guaranteeing that connectors never
+cross or pass through unrelated cards. See
+[Branch organization](docs/proposals/branch-layout.md).
 
 Generation goes through a local bridge to a configured coding-agent backend.
 Direct model endpoints and MCP-driven answering are outside the product's

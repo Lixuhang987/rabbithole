@@ -37,6 +37,8 @@ export const r = {
   edgePositionNodeIds: {},
   edgeEls: {},
   edgeGeometry: {},
+  edgePorts: {},
+  edgeCardHover: {},
   edgeHl: {},
   wheelKind: null,
   wheelCard: null,

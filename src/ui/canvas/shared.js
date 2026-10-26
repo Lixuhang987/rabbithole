@@ -256,6 +256,8 @@ export function cleanupCanvasView(resetHooks) {
   if (edgesSvg) while (edgesSvg.firstChild) edgesSvg.removeChild(edgesSvg.firstChild);
   r.edgeEls = {};
   r.edgeGeometry = {};
+  r.edgePorts = {};
+  r.edgeCardHover = {};
   r.edgeHl = {};
   r.wheelKind = null;
   r.wheelCard = null;
