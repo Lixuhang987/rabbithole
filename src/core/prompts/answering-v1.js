@@ -25,8 +25,6 @@ const ANSWERING_INSTRUCTIONS_V1 = [
   "Your task is to build a knowledge framework that supports rigorous, in-depth study.",
   LEARN,
   "Write a markdown answer to the human's question using the source article or inherited conversation.",
-  "The first line of every answer MUST be exactly: TITLE: <short node title>",
-  "After that line, write the answer markdown.",
   "Keep titles short, concrete, and useful as canvas node labels.",
   "When external information is needed, use web search first. Use ego-browser only when web search is unavailable, fails, or cannot retrieve the required content. This order takes precedence over any browser-first preference in the ego-browser skill.",
 ].join("\n");

@@ -2,6 +2,7 @@ import katex from "katex";
 import { encodeBase64Utf8 } from "../../src/core/markdown.js";
 import { createMarkdownRenderer } from "../../src/core/markdown-renderer.js";
 import { BridgeProvider } from "../../src/web/provider/bridge-provider.js";
+import { titleFromMarkdown } from "../../src/web/transport/direct-host-values.js";
 
 const REQUIRED_ENV = ["EVAL_BASE_URL", "EVAL_BRIDGE_TOKEN", "EVAL_MODEL"];
 const missing = REQUIRED_ENV.filter((name) => !process.env[name]);
@@ -52,16 +53,14 @@ async function runAsk(ask) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 120000);
   let body = "";
-  let title = "";
   try {
-    for await (const event of provider.answerBranch({ ...ask.context, fallbackTitle: ask.name }, controller.signal)) {
-      if (event.type === "title") title = event.title;
+    for await (const event of provider.answerBranch(ask.context, controller.signal)) {
       if (event.type === "text") body += event.delta;
     }
   } finally {
     clearTimeout(timer);
   }
-  return { body, title };
+  return { body, title: titleFromMarkdown(body) };
 }
 
 function scoreAsk(ask, { body, title }) {
@@ -69,7 +68,6 @@ function scoreAsk(ask, { body, title }) {
   const checks = {};
 
   checks.title = Boolean(title);
-  checks.stripped = !/^TITLE:/m.test(body.trimStart());
   checks.length = withinWordBounds(body, ask.minWords || 20, ask.maxWords || 650);
   checks.no_html = noRawHtmlLeakage(html);
 
@@ -84,11 +82,10 @@ function scoreAsk(ask, { body, title }) {
 }
 
 function printScorecard(rows) {
-  const columns = ["title", "stripped", "length", "math", "show", "lens", "code", "no_html"];
+  const columns = ["title", "length", "math", "show", "lens", "code", "no_html"];
   const widths = {
     ask: Math.max(3, ...rows.map((row) => row.name.length)),
     title: 7,
-    stripped: 8,
     length: 6,
     math: 4,
     show: 4,

@@ -3,9 +3,11 @@
 Rabbithole is a branching reading canvas. Questions on documents produce child
 documents that readers can explore independently.
 
-Answers retain the complete quoted content and question at their beginning,
-including when folded. Folding hides the answer while keeping the reason for
-the branch readable.
+Answers retain the complete quoted content and question at their beginning.
+Folded cards show a truncated title. Hovering a folded card reveals an enlarged,
+display-only document preview centered in the browser viewport. Only hovering
+the source tab keeps it open. Long content is clipped with a bottom fade;
+pressing Tab while previewing opens the document for reading.
 
 Canvas organization makes each document's direct children recognizable as a
 cluster, with larger gaps between clusters than within them. Organized layouts

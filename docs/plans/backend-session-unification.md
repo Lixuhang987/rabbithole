@@ -74,6 +74,20 @@ obsolete tests and keep meaningful core assertions from mixed suites.
 Accepted follow-up: preserve independent native histories while sharing the
 root request cache identity. See [implementation plan](fork-cache-affinity.md).
 
+## Answer title follow-up
+
+An Ask streams ordinary Markdown through bridge provider → Run → host completion
+→ store. On completion, derive the article title from its first Markdown H1,
+including when preceded by blank lines or an introduction. Preserve the entire
+body; answers without H1 retain the existing question/lens fallback. Delete the
+special title-line parser and branch adapter. Stored node contracts stay unchanged.
+
+The existing original-question/reload scenario in
+`test/integration/generation-lifecycle.test.mjs` will cover fragmented H1 replies,
+completion events, preserved Markdown, persisted titles and reload. Update existing
+browser/native fixtures and live evals to use Markdown headings. New independent
+cases: 0. Existing saved titles are not rewritten.
+
 ## Verification record
 
 Record baseline, red/green results, final checks and review results here as work

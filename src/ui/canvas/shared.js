@@ -19,6 +19,7 @@ import { onPreferenceChange } from "../preferences.js";
 import { createAnchoredMenu } from "../primitives/anchored-menu.js";
 import { cancelViewAnimation, exposeFilmCameraHook, showPinnedOriginal, zoomAt, zoomTo } from "./camera.js";
 import { onWorldMouseOut, onWorldMouseOver, scheduleEdges, scheduleNodeEdges } from "./edges.js";
+import { createFoldedPreview } from "./folded-preview.js";
 import { layoutNode } from "./gestures.js";
 import { onCardMenuClick } from "./menu.js";
 import {
@@ -127,6 +128,8 @@ export function initCanvasView(hooks) {
   r.lifecycle.register(hooks);
   cleanupCanvasView(false);
   const canvasScope = r.lifecycle.beginInit();
+  const foldedPreview = createFoldedPreview();
+  canvasScope.addCleanup(foldedPreview.dispose);
   if (!frozen && typeof r.lifecycle.hooks.createCanvasMaintenance === "function") {
     r.canvasMaintenance = r.lifecycle.hooks.createCanvasMaintenance();
     canvasScope.addCleanup(function () {

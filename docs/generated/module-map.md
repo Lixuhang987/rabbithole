@@ -115,6 +115,7 @@ This inventory is derived from the source tree.
 - `src/ui/canvas/document.js`
 - `src/ui/canvas/edges.js`
 - `src/ui/canvas/fold.js`
+- `src/ui/canvas/folded-preview.js`
 - `src/ui/canvas/gestures.js`
 - `src/ui/canvas/index.js`
 - `src/ui/canvas/inline-note.js`
@@ -194,7 +195,6 @@ This inventory is derived from the source tree.
 - `src/web/provider/generation-events.js`
 - `src/web/provider/model-descriptor.js`
 - `src/web/provider/network.js`
-- `src/web/provider/title-sentinel.js`
 - `src/web/settings/bridge-connection.js`
 - `src/web/settings/bridge-pairing.js`
 - `src/web/settings/model-settings.js`

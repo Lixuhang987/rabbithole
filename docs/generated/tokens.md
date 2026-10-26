@@ -21,6 +21,7 @@ Values are read from `src/design/tokens.css`; repeated theme overrides remain vi
 | `--text-base` | `14px` |
 | `--text-lg` | `16px` |
 | `--text-title` | `17px` |
+| `--text-preview` | `18px` |
 | `--weight-regular` | `400` |
 | `--weight-medium` | `500` |
 | `--weight-semibold` | `600` |
@@ -60,6 +61,8 @@ Values are read from `src/design/tokens.css`; repeated theme overrides remain vi
 | `--reader-branch-rail` | `clamp(252px, 24vw, 320px)` |
 | `--rail-width` | `224px` |
 | `--surface-width-panel` | `340px` |
+| `--folded-preview-width` | `720px` |
+| `--folded-preview-fade` | `64px` |
 | `--surface-edge` | `14px` |
 | `--surface-gap` | `14px` |
 | `--panel-padding-block` | `12px` |

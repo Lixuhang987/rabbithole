@@ -12,11 +12,11 @@ try {
   await seedConfiguredBridge(context);
   const page = await context.newPage();
   await routeProvider(page, { streams: [
-    ["TITLE: Later source\n", "Second source answer."],
-    ["TITLE: Earlier source\n", "First source answer with a child."],
-    ["TITLE: Shared source\n", "Another answer from the same earlier quotation."],
-    ["TITLE: Deep child\n", Array.from({ length: 40 }, (_, i) => `Deep paragraph ${i}.`).join("\n\n")],
-    ["TITLE: Other cluster\n", "Child of the later source."],
+    ["# Later source\n", "Second source answer."],
+    ["# Earlier source\n", "First source answer with a child."],
+    ["# Shared source\n", "Another answer from the same earlier quotation."],
+    ["# Deep child\n", Array.from({ length: 40 }, (_, i) => `Deep paragraph ${i}.`).join("\n\n")],
+    ["# Other cluster\n", "Child of the later source."],
   ] });
   await page.goto(app.baseUrl, { waitUntil: "networkidle" });
   await page.evaluate((markdown) => window.__rabbitholeTest.createDocument(markdown),

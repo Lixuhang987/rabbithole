@@ -5,7 +5,7 @@
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --text-xxs: 9px; --text-xxs-plus: 9.5px; --text-xs: 10px; --text-xs-plus: 10.5px;
   --text-sm: 11px; --text-sm-plus: 11.5px; --text-ui: 12px; --text-ui-plus: 12.5px;
-  --text-body: 13px; --text-base: 14px; --text-lg: 16px; --text-title: 17px;
+  --text-body: 13px; --text-base: 14px; --text-lg: 16px; --text-title: 17px; --text-preview: 18px;
   --weight-regular: 400; --weight-medium: 500; --weight-semibold: 600; --weight-strong: 650; --weight-bold: 700;
   --leading-ui: 1.4; --leading-body: 1.55; --leading-doc: 1.72;
 
@@ -30,6 +30,7 @@
   /* Layout */
   --reader-column: 680px; --reader-branch-rail: clamp(252px, 24vw, 320px); --rail-width: 224px;
   --surface-width-panel: 340px;
+  --folded-preview-width: 720px; --folded-preview-fade: 64px;
   --surface-edge: 14px; --surface-gap: 14px;
 
   /* Surface metrics */

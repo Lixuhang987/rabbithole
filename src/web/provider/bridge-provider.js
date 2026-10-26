@@ -2,7 +2,7 @@ import { normalizeBackendConversation } from '../../core/conversation.js';
 import { selectedVisualSource } from '../../core/prompts/answering-v1.js';
 import { ProviderError, normalizeProviderError } from './errors.js';
 import { addressSpaceHint } from './network.js';
-import { adaptBranchGeneration, adaptTextGeneration } from './generation-events.js';
+import { adaptTextGeneration } from './generation-events.js';
 
 export function createProvider(settings) {
   return new BridgeProvider({ backend: settings.backend, model: settings.model, reasoning: settings.reasoning,
@@ -40,7 +40,7 @@ export class BridgeProvider {
       ...(block ? { visual_source: selectedVisualSource(context.parent_markdown || '', block) } : {}),
       ...(!sourceSession ? { article: { title: context.parent_title, markdown: context.parent_markdown } } : {}),
       ...(context.attachments?.length ? { attachments: context.attachments } : {}) };
-    yield* withNode(adaptBranchGeneration(this.generate(input, signal, sourceSession), { fallbackTitle: context.fallbackTitle }), context.node_id);
+    yield* withNode(adaptTextGeneration(this.generate(input, signal, sourceSession)), context.node_id);
   }
 }
 async function* withNode(events, nodeId) {
