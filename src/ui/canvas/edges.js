@@ -40,22 +40,31 @@ function edgeHeight(node, cache) {
   return (cache[node.id] ??= effH(node));
 }
 
-function isEdgeHighlighted(childId) {
-  const child = nodes[childId];
-  function cardHovered(id) {
-    // Quotation hover takes precedence over the containing card's fan-out.
-    return r.edgeCardHover[id] && !childrenOf(id).some((node) => r.edgeHl[node.id]);
-  }
-  return !!(r.edgeHl[childId] || cardHovered(childId) || (child?.parent_id && cardHovered(child.parent_id)));
+function activeCardHovers() {
+  const hovered = new Set(Object.keys(r.edgeCardHover));
+  // Quotation hover takes precedence over the containing card's fan-out.
+  for (const childId in r.edgeHl) hovered.delete(nodes[childId]?.parent_id);
+  return hovered;
 }
 
-function updatePortHighlight(port) {
-  port.el.classList.toggle("edge-hl", [...port.children].some(isEdgeHighlighted));
+function isEdgeHighlighted(childId, hovered) {
+  return !!(r.edgeHl[childId] || hovered.has(childId) || hovered.has(nodes[childId]?.parent_id));
+}
+
+function refreshPortHighlights(hovered) {
+  for (const key in r.edgePorts) {
+    const port = r.edgePorts[key];
+    port.el.classList.toggle(
+      "edge-hl",
+      [...port.children].some((childId) => isEdgeHighlighted(childId, hovered)),
+    );
+  }
 }
 
 function refreshEdgeHighlights() {
-  for (const childId in r.edgeEls) r.edgeEls[childId].classList.toggle("edge-hl", isEdgeHighlighted(childId));
-  for (const key in r.edgePorts) updatePortHighlight(r.edgePorts[key]);
+  const hovered = activeCardHovers();
+  for (const childId in r.edgeEls) r.edgeEls[childId].classList.toggle("edge-hl", isEdgeHighlighted(childId, hovered));
+  refreshPortHighlights(hovered);
 }
 
 function detachPort(childId) {
@@ -66,7 +75,7 @@ function detachPort(childId) {
   if (!port.children.size) {
     port.el.remove();
     delete r.edgePorts[key];
-  } else updatePortHighlight(port);
+  }
 }
 
 function removeEdge(childId) {
@@ -89,6 +98,7 @@ export function drawEdges() {
   const live = {};
   const visCache = Object.create(null);
   const measureCache = Object.create(null);
+  const hovered = activeCardHovers();
   function vis(node) {
     return isVisible(node, visCache);
   }
@@ -99,11 +109,12 @@ export function drawEdges() {
     if (!p || !p.el) continue;
     if (!vis(n) || !vis(p)) continue;
     live[n.id] = true;
-    renderEdge(p, n, measureCache);
+    renderEdge(p, n, measureCache, hovered);
   }
   for (const childId in r.edgeEls) {
     if (!live[childId]) removeEdge(childId);
   }
+  refreshPortHighlights(hovered);
   // Whatever moved the edges moved the marks: the margin dots ride along.
   r.lifecycle.hooks.positionDockedNotes();
 }
@@ -111,6 +122,7 @@ export function drawEdges() {
 export function drawEdgeSubset(ids, positionNodeIds) {
   const visCache = Object.create(null);
   const measureCache = Object.create(null);
+  const hovered = activeCardHovers();
   function vis(node) {
     return isVisible(node, visCache);
   }
@@ -121,8 +133,9 @@ export function drawEdgeSubset(ids, positionNodeIds) {
       removeEdge(childId);
       continue;
     }
-    renderEdge(parent, child, measureCache);
+    renderEdge(parent, child, measureCache, hovered);
   }
+  refreshPortHighlights(hovered);
   for (const nodeId in positionNodeIds) {
     const node = nodes[nodeId];
     if (node && node.bodyEl) r.lifecycle.hooks.positionDockedNotes(node.bodyEl);
@@ -130,7 +143,7 @@ export function drawEdgeSubset(ids, positionNodeIds) {
   }
 }
 
-function renderEdge(parent, child, measureCache) {
+function renderEdge(parent, child, measureCache, hovered) {
   const ph = edgeHeight(parent, measureCache),
     nh = edgeHeight(child, measureCache);
   const right = child.position.x + child.size.w / 2 >= parent.position.x + parent.size.w / 2;
@@ -150,7 +163,7 @@ function renderEdge(parent, child, measureCache) {
     r.edgeEls[child.id] = path;
   }
   if (!prev || prev.d !== d) path.setAttribute("d", d);
-  path.classList.toggle("edge-hl", isEdgeHighlighted(child.id));
+  path.classList.toggle("edge-hl", isEdgeHighlighted(child.id, hovered));
   let port = r.edgePorts[portKey];
   if (!port) {
     const dot = document.createElementNS(SVGNS, "circle");
@@ -163,7 +176,6 @@ function renderEdge(parent, child, measureCache) {
   port.children.add(child.id);
   port.el.setAttribute("cx", String(start.x));
   port.el.setAttribute("cy", String(start.y));
-  updatePortHighlight(port);
   r.edgeGeometry[child.id] = { d, portKey };
 }
 

@@ -180,10 +180,10 @@ try {
   await toggleBranch(alpha);
   await page.waitForSelector('.card[data-id="' + alphaId + '"]:not(.collapsed)');
   await engageBeta();
-  await alpha.evaluate((card) => card.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  await alpha.locator(".card-head").hover();
   await advanceAutoTidyClock(page, 11_000);
   assert.equal(await alpha.evaluate((card) => card.classList.contains("collapsed")), false, "hover defers a due fold");
-  await alpha.evaluate((card) => card.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body })));
+  await page.locator("#t-theme").hover();
   await advanceAutoTidyClock(page, 5_000);
   await page.waitForSelector('.card[data-id="' + alphaId + '"].collapsed');
 

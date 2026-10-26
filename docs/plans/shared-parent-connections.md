@@ -53,6 +53,8 @@ Update existing cases before implementation:
 - Adjust shared geometry helpers to preserve card-overlap assertions and expose
   supported connector geometry, retiring strict connector-clearance checks.
 - Reuse existing auto-tidy, edge-scroll and branching journeys for regressions.
+  Exercise the hover exemption with actual pointer entry/exit, so browser
+  hit testing and the synthetic clock describe the same interaction.
   Do not add negative tests for removed routing modes or arbitrary clearance.
 
 ## Execution and verification
@@ -63,3 +65,20 @@ simplified layout/renderer, then run focused integration/browser journeys.
 Regenerate `dist/` and generated docs; run `npm run build` and `npm test`.
 Pin the review to the base above and run Standards/Spec reviews in parallel.
 Fix actionable findings, rerun affected checks, and commit on the task branch.
+
+Verified results:
+
+- Clean baseline and final serial `npm test`: 73 passed, 0 failed each.
+- Focused layout, branching, source-scroll, notes and auto-tidy regressions:
+  7 passed, 0 failed. The final real-pointer auto-tidy case also passed alone.
+- A parallel test sweep exposed an intermittent synthetic-hover auto-tidy
+  timeout. Diagnostic probes did not establish a production defect; the
+  existing case now enters and leaves the card with the real pointer.
+- `npm run build`, `npm run build:docs`, `npm run check:docs`,
+  `npm run check:dist` and `git diff --check` passed.
+- Standards and Spec reviews against the fixed base have no unresolved
+  findings. The Standards performance observation was addressed by collecting
+  hover state once per batch and refreshing shared dots after the batch.
+- Browser DOM checks confirmed cubic paths, shared parent dots and cluster
+  spacing. Screenshot capture was unavailable; no screenshot acceptance is
+  claimed.
