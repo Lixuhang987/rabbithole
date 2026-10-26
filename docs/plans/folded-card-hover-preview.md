@@ -7,7 +7,8 @@ Baseline: `722d433`; no schema, portable-data or generation-contract changes.
 
 Source card header hover → 300ms delay → centered inert document excerpt.
 The original card alone owns hover. Pointer exit/action, mode changes and
-teardown close the excerpt. Plain Tab while visible calls `openNode(id)`, the
+teardown close the excerpt. The shared overlay stack suppresses previews while
+an interactive surface owns input. Plain Tab while visible calls `openNode(id)`, the
 existing Expand document entry, without changing the node's collapsed state.
 
 Use the existing `node.collapsed`, `node.bodyEl` and rendered origin/document

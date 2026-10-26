@@ -1,6 +1,7 @@
 import { mode, nodes } from "../core.js";
 import { isComposingText, isTypingTarget } from "../input-intent.js";
 import { createCleanupScope } from "../kit/scope.js";
+import { hasOpenLayer } from "../overlay/layer-stack.js";
 import { openNode } from "../reader.js";
 
 /** One display-only excerpt; the source header alone owns its hover lifetime. */
@@ -13,7 +14,7 @@ export function createFoldedPreview() {
   let mouseY = 0;
 
   function headerAt(target) {
-    if (mode !== "canvas" || document.hidden) return null;
+    if (mode !== "canvas" || document.hidden || hasOpenLayer()) return null;
     if (!(target instanceof Element) || target.closest("button, a, input, textarea, select, [contenteditable]"))
       return null;
     const head = target.closest(".card-head");
@@ -85,7 +86,7 @@ export function createFoldedPreview() {
         if (!stillHovered()) close();
       }),
       document.body,
-      { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] },
+      { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "hidden", "open"] },
     );
     measure();
   }

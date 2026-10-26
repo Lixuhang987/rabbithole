@@ -32,7 +32,8 @@ Expand document action as its header icon. Other keyboard navigation remains
 unchanged, including Shift+Tab and Tab while typing or before a preview appears.
 Original tab actions remain available;
 hovering action buttons, pointer-down, dragging, expanding or opening a menu
-cancels the preview.
+cancels the preview. Interactive overlays suppress previews, including when
+opened by keyboard, and retain ownership of Tab navigation.
 
 The preview is independent of canvas zoom, centered in the browser viewport,
 approximately 720px wide with a 90vw limit and an 80vh height limit. Text is

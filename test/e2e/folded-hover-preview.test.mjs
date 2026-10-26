@@ -101,6 +101,16 @@ try {
 
   await page.locator("#reader-restore").click();
   await hover();
+  await card.locator(".card-more").focus();
+  await page.keyboard.press("Enter");
+  await page.locator("#cardmenu.visible").waitFor();
+  await preview.waitFor({ state: "detached" });
+  await page.locator("#cm-textdown").focus();
+  await page.keyboard.press("Tab");
+  assert.equal(await page.locator("body").evaluate((el) => el.classList.contains("mode-canvas")), true,
+    "keyboard-opened menus keep their Tab navigation while a folded header is hovered");
+  await page.waitForSelector("#cardmenu.visible", { state: "hidden" });
+  await hover();
   await page.mouse.move(5, 5);
   await preview.waitFor({ state: "detached" });
   await hover();
