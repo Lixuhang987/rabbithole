@@ -1,6 +1,6 @@
 # Folded card hover preview implementation
 
-Implements the [accepted presentation](../proposals/folded-card-hover-preview.md).
+Implements the [presentation contract](../proposals/folded-card-hover-preview.md).
 Baseline: `722d433`; no schema, portable-data or generation-contract changes.
 
 ## Use case and boundaries
@@ -8,8 +8,8 @@ Baseline: `722d433`; no schema, portable-data or generation-contract changes.
 Source card header hover → 300ms delay → centered inert document excerpt.
 The original card alone owns hover. Pointer exit/action, mode changes and
 teardown close the excerpt. The shared overlay stack suppresses previews while
-an interactive surface owns input. Plain Tab while visible calls `openNode(id)`, the
-existing Expand document entry, without changing the node's collapsed state.
+an interactive surface owns input. Plain Tab while visible calls `openNode(id)`,
+the existing Expand document entry, without changing the node's collapsed state.
 
 Use the existing `node.collapsed`, `node.bodyEl` and rendered origin/document
 surfaces. Clone their presentation rather than mounting a second live document
@@ -42,3 +42,10 @@ Cards without an Ask origin retain the agreed title-only behavior.
   the baseline, fix findings, regenerate committed output and commit.
 
 No negative-only test is planned; assertions follow supported browsing flows.
+
+## Delivery verification
+
+Build, generated documentation and committed bundles are consistent. The final
+full suite passes 74 checks with zero failures, including performance budgets.
+Light and dark preview screenshots were inspected. Standards and Spec reviews
+have zero unresolved findings after the menu-keyboard ownership fix.

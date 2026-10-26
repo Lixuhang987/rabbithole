@@ -5,7 +5,7 @@ date: 2026-10-25
 
 # Complete Ask origin display
 
-The folded-card presentation below is replaced by the accepted
+The folded-card presentation below is replaced by the
 [hover preview design](folded-card-hover-preview.md). Document-opening origin
 content remains unchanged.
 

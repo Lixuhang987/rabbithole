@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: shipped
 date: 2026-10-26
 ---
 
@@ -13,8 +13,9 @@ viewport. This replaces displaying complete Ask origins inside folded cards,
 as described in [Complete Ask origin display](ask-origin-display.md).
 
 The preview shows quoted content, the full saved prompt, attachment thumbnails
-and the answer body in document order; a separate title is optional. Ordinary cards and reader mode
-continue to show the complete quote and prompt before the answer.
+and the answer body in document order; a separate title is optional. Ordinary
+cards and reader mode continue to show the complete quote and prompt before
+the answer.
 
 Automatic and manual folds, pinned folded cards and newly exported frozen
 snapshots share this behavior. Pinned cards' canvas placeholders do not trigger
@@ -30,9 +31,9 @@ It provides no scrolling, text selection, image activation or touch entry.
 While the preview is visible, plain Tab opens that document through the same
 Expand document action as its header icon. Other keyboard navigation remains
 unchanged, including Shift+Tab and Tab while typing or before a preview appears.
-Original tab actions remain available;
-hovering action buttons, pointer-down, dragging, expanding or opening a menu
-cancels the preview. Interactive overlays suppress previews, including when
+Original tab actions remain available; hovering action buttons, pointer-down,
+dragging, expanding or opening a menu cancels the preview. Interactive overlays
+suppress previews, including when
 opened by keyboard, and retain ownership of Tab navigation.
 
 The preview is independent of canvas zoom, centered in the browser viewport,
