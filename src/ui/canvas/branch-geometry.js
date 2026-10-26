@@ -10,15 +10,7 @@ export function layoutCards() {
   );
 }
 
-export function treeRootId(node) {
-  const seen = new Set();
-  while (node?.parent_id && nodes[node.parent_id] && !seen.has(node.id)) {
-    seen.add(node.id);
-    node = nodes[node.parent_id];
-  }
-  return node?.id;
-}
-
+// Parent-first entries serve both automatic change detection and organization.
 export function measureBranches() {
   const cards = layoutCards();
   const ids = new Set(cards.map((node) => node.id));

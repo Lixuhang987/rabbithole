@@ -65,7 +65,7 @@ Each description is harvested from the test file's `@protects` declaration.
 
 ## e2e
 
-- `test/e2e/auto-tidy.test.mjs` — auto-tidy live canvas behavior, settings, and frozen exclusion.
+- `test/e2e/auto-tidy.test.mjs` — auto-tidy live behavior, shared Tidy geometry, settings, and frozen exclusion.
 - `test/e2e/branch-layout.test.mjs` — source-ordered child clusters, shared-center cubic connections, hover, and saved/frozen layout.
 - `test/e2e/canvas-edge-scroll.test.mjs` — canvas edge scroll, wheel panning during card drags, and anchored Command-wheel zoom capability contracts.
 - `test/e2e/enter-composition.test.mjs` — enter composition capability contracts.

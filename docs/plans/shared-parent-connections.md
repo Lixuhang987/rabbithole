@@ -82,3 +82,19 @@ Verified results:
 - Browser DOM checks confirmed cubic paths, shared parent dots and cluster
   spacing. Screenshot capture was unavailable; no screenshot acceptance is
   claimed.
+
+## Follow-up: one organization flow
+
+Tidy and Auto-tidy already converge on `organizeCanvas()` and `layoutBranches()`;
+there is no remaining alternate connector router. Keep that boundary explicit:
+both organize measured/source-ordered entries, apply/persist positions, and use
+the ordinary edge frame scheduler. Only affected roots and camera policy differ.
+Retain the approved card collision handling, folding policy and free placement.
+
+Remove Tidy's duplicate collapse-stack sweep; the common organizer clears the
+stacks it replaces. Auto-layout derives root ownership from the same parent-first
+measurement entries rather than walking ancestors again for each card. Reuse
+`test/e2e/auto-tidy.test.mjs` to compare automatic and explicit card/curve geometry
+relative to the root after folding. Reuse branch-layout, folded-preview and
+edge-scroll journeys. Cumulative new-test count remains zero; do not add tests
+for removed routing modes. Rebuild bundles/docs and run the full suite.

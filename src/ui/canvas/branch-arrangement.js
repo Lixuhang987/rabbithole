@@ -4,12 +4,15 @@ import { nodes, view } from "../core.js";
 import { layoutCards, measureBranches } from "./branch-geometry.js";
 import { applyTransform, cancelViewAnimation } from "./camera.js";
 import { cardFootprint } from "./card-measure.js";
-import { drawEdges } from "./edges.js";
-import { clearCollapseStack } from "./fold.js";
+import { scheduleEdges } from "./edges.js";
+import { clearCollapseStack, discardAllCollapseStacks } from "./fold.js";
 import { layoutNode } from "./gestures.js";
 import { r } from "./runtime.js";
 
 export function organizeCanvas({ roots = null, anchorId = null } = {}) {
+  // A full organization replaces every saved fold restore point. Scoped
+  // organization retires only the stacks in the trees it actually replaces.
+  if (!roots) discardAllCollapseStacks();
   const layout = layoutBranches(measureBranches());
   const anchor = nodes[anchorId];
   const before = anchor ? { ...anchor.position } : null;
@@ -57,7 +60,7 @@ export function organizeCanvas({ roots = null, anchorId = null } = {}) {
       const position = layout.positions.get(id);
       const x = position.x + dx,
         y = position.y + dy;
-      clearCollapseStack(node);
+      if (roots) clearCollapseStack(node);
       if (Math.abs(node.position.x - x) < 0.001 && Math.abs(node.position.y - y) < 0.001) continue;
       node.position.x = x;
       node.position.y = y;
@@ -72,6 +75,6 @@ export function organizeCanvas({ roots = null, anchorId = null } = {}) {
     applyTransform();
   }
   if (moved.length) r.lifecycle.hooks.persistNodesBulk(moved);
-  drawEdges();
+  scheduleEdges();
   return moved;
 }

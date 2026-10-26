@@ -1,6 +1,6 @@
 import { holeStore, nodes } from "../core.js";
 import { organizeCanvas } from "./branch-arrangement.js";
-import { measureBranches, treeRootId } from "./branch-geometry.js";
+import { measureBranches } from "./branch-geometry.js";
 
 const SETTLE_MS = 400;
 
@@ -24,7 +24,9 @@ export function createAutoLayout({ clock, anchorId, canRun, beforeLayout = () =>
       const order = orders.get(entry.parent_id) || 0;
       orders.set(entry.parent_id, order + 1);
       const node = nodes[entry.id];
-      const root = treeRootId(node);
+      // Measurement visits parents first, including the same eligible-card
+      // boundary that the common organizer uses for its layout graph.
+      const root = next.get(entry.parent_id)?.root || entry.id;
       const signature = [entry.parent_id, entry.width, entry.height, order, node.status, node.collapsed].join(":");
       next.set(entry.id, { signature, root });
       if (snapshots.get(entry.id)?.signature !== signature) pendingRoots.add(root);

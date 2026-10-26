@@ -1,4 +1,4 @@
-/** @protects auto-tidy live canvas behavior, settings, and frozen exclusion. */
+/** @protects auto-tidy live behavior, shared Tidy geometry, settings, and frozen exclusion. */
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -6,6 +6,7 @@ import path from "node:path";
 import { routeProvider, seedConfiguredBridge } from "../support/provider-mock.mjs";
 import { bootWebApp } from "../support/web-app-harness.mjs";
 import { assertSelectionPopoverUsable, panCanvasBy, selectVisibleText } from "../support/visible-selection.mjs";
+import { assertCanvasConnections, readCanvasGeometry } from "../support/canvas-layout-geometry.mjs";
 
 const app = await bootWebApp();
 const alphaQuote = "Alpha anchor " + "完整引用内容需要保留。".repeat(24) + "引用结束。";
@@ -156,6 +157,17 @@ try {
   }, [alphaId, await alphaDescendant.getAttribute("data-id")]);
   assert.deepEqual(layoutGeometry, { layered: true, scrollable: false }, "compact folded headers keep descendants in a depth column");
 
+  const graph = (await page.evaluate(() => window.__rabbitholeTest.exportPortable())).hole.nodes;
+  const automatic = await readCanvasGeometry(page);
+  assertCanvasConnections(automatic, graph);
+  await page.locator("#t-tidy").click();
+  await page.evaluate(() => window.__rabbitholeTest.waitForCanvasViewSettled());
+  const explicit = await readCanvasGeometry(page);
+  assertCanvasConnections(explicit, graph);
+  const rootId = graph.find((node) => node.parent_id === null).id;
+  assert.deepEqual(relativeGeometry(explicit, rootId), relativeGeometry(automatic, rootId),
+    "automatic organization and Tidy use the same folded card placement and cubic connections");
+
   await toggleBranch(alpha);
   await page.waitForSelector('.card[data-id="' + alphaId + '"]:not(.collapsed)');
   assert.equal(
@@ -247,6 +259,17 @@ async function createDocument(page, markdown) {
     return id && id !== oldId;
   }, previous);
   await page.waitForSelector(".card.root .doc-content[data-node-id]");
+}
+
+function relativeGeometry(geometry, rootId) {
+  const root = geometry.cards.find((card) => card.id === rootId);
+  const relative = (value, origin) => Number((value - origin).toFixed(3));
+  return {
+    cards: geometry.cards.map((card) => ({ ...card, x: relative(card.x, root.x), y: relative(card.y, root.y) })),
+    curves: geometry.edges.map((edge) => ({ id: edge.id,
+      points: edge.d.match(/-?\d+(?:\.\d+)?/g).map((value, index) => relative(Number(value), index % 2 ? root.y : root.x)),
+    })).sort((a, b) => a.id.localeCompare(b.id)),
+  };
 }
 
 async function askFromSelection(page, text, question) {

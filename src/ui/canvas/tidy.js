@@ -21,15 +21,11 @@ import { animateView, applyTransform, diveTargetView } from "./camera.js";
 import { createNodeEl } from "./card.js";
 import { cardScreenRect, rectMostlyVisible } from "./card-composer.js";
 import { rebuildEdges } from "./edges.js";
-import { discardAllCollapseStacks, renderVisibility } from "./fold.js";
+import { renderVisibility } from "./fold.js";
 import { r } from "./runtime.js";
 import { frameAll } from "./viewport.js";
 
 export function tidy(source) {
-  // Tidy is an explicit replacement for the hand-arranged layout. Keep the
-  // current folded geometry as its input and retire any older restore point,
-  // so a later expansion cannot undo the layout the human just requested.
-  discardAllCollapseStacks();
   organizeCanvas();
   frameAll(true, source);
 }
